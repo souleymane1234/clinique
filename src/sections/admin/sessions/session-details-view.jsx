@@ -2,53 +2,53 @@ import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router-dom';
 
-import { useRouter } from 'src/routes/hooks';
-
+import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
+  Grid,
   Stack,
+  Table,
+  Alert,
+  Paper,
+  alpha,
   Button,
   Dialog,
+  Select,
   Divider,
   TableRow,
+  MenuItem,
   TextField,
   TableBody,
   TableCell,
   Container,
-  Typography,
-  IconButton,
   TableHead,
-  Table,
-  Grid,
-  Alert,
-  CircularProgress,
-  TableContainer,
   Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Typography,
+  InputLabel,
   DialogTitle,
+  FormControl,
   DialogContent,
   DialogActions,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
-  Tooltip,
+  TableContainer,
   LinearProgress,
-  Paper,
-  alpha,
+  CircularProgress,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
+
+import { useRouter } from 'src/routes/hooks';
+
 import { useNotification } from 'src/hooks/useNotification';
 
-import ConsumApi from 'src/services_workers/consum_api';
 import { fNumber } from 'src/utils/format-number';
+
+import { routesName } from 'src/constants/routes';
+import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { routesName } from 'src/constants/routes';
 
 // ----------------------------------------------------------------------
 
@@ -124,7 +124,6 @@ export default function SessionDetailsView() {
     if (sessionId) {
       loadSessionDetails();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const handleCloseSession = async () => {
@@ -421,13 +420,15 @@ export default function SessionDetailsView() {
                     size="medium"
                     icon={
                       <Iconify
-                        icon={
-                          session.status === 'OPEN' || session.status === 'ACTIVE'
-                            ? 'solar:check-circle-bold'
-                            : session.status === 'CLOSED' || session.status === 'FORCE_CLOSED'
-                            ? 'solar:close-circle-bold'
-                            : 'solar:clock-circle-bold'
-                        }
+                        icon={(() => {
+                          if (session.status === 'OPEN' || session.status === 'ACTIVE') {
+                            return 'solar:check-circle-bold';
+                          }
+                          if (session.status === 'CLOSED' || session.status === 'FORCE_CLOSED') {
+                            return 'solar:close-circle-bold';
+                          }
+                          return 'solar:clock-circle-bold';
+                        })()}
                         width={18}
                       />
                     }
@@ -487,13 +488,16 @@ export default function SessionDetailsView() {
                       <LinearProgress
                         variant="determinate"
                         value={(1 - (session.capacityRemaining || 0) / (session.capacityTotal || 1)) * 100}
-                        color={
-                          (1 - (session.capacityRemaining || 0) / (session.capacityTotal || 1)) * 100 > 80
-                            ? 'error'
-                            : (1 - (session.capacityRemaining || 0) / (session.capacityTotal || 1)) * 100 > 50
-                            ? 'warning'
-                            : 'success'
-                        }
+                        color={(() => {
+                          const percentage = (1 - (session.capacityRemaining || 0) / (session.capacityTotal || 1)) * 100;
+                          if (percentage > 80) {
+                            return 'error';
+                          }
+                          if (percentage > 50) {
+                            return 'warning';
+                          }
+                          return 'success';
+                        })()}
                         sx={{ height: 8, borderRadius: 1 }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

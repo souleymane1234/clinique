@@ -7,11 +7,11 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import Accordion from '@mui/material/Accordion';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
-import IconButton from '@mui/material/IconButton';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import CircularProgress from '@mui/material/CircularProgress';
 
@@ -215,7 +215,7 @@ export default function OrientationQuestionnaireFormView() {
   const handleRemoveOption = (sectionIndex, questionIndex, optionIndex) => {
     setFormData((prev) => {
       const newSections = [...prev.sections];
-      const options = newSections[sectionIndex].questions[questionIndex].options;
+      const {options} = newSections[sectionIndex].questions[questionIndex];
       if (options.length > 1) {
         newSections[sectionIndex].questions[questionIndex].options = options.filter(
           (_, index) => index !== optionIndex

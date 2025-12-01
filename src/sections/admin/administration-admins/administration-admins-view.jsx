@@ -7,10 +7,10 @@ import {
   Chip,
   Table,
   Stack,
+  Alert,
   Button,
   Dialog,
   Tooltip,
-  MenuItem,
   TableRow,
   Checkbox,
   TextField,
@@ -20,21 +20,14 @@ import {
   Container,
   Typography,
   IconButton,
-  InputLabel,
-  FormControl,
   DialogTitle,
   DialogContent,
   DialogActions,
   TableContainer,
-  TablePagination,
   CircularProgress,
-  Alert,
-  Tabs,
-  Tab,
 } from '@mui/material';
-import { RouterLink } from 'src/routes/components';
+
 import { useNotification } from 'src/hooks/useNotification';
-import { useRouter } from 'src/routes/hooks';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
@@ -44,13 +37,10 @@ import Scrollbar from 'src/components/scrollbar';
 // ----------------------------------------------------------------------
 
 export default function AdministrationAdminsView() {
-  const router = useRouter();
-  const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+  const { contextHolder, showApiResponse, showError } = useNotification();
 
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selected, setSelected] = useState([]);
 
   // Dialogs
@@ -513,7 +503,7 @@ export default function AdministrationAdminsView() {
 
       {/* Edit Admin Dialog */}
       <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, admin: null, loading: false })} maxWidth="sm" fullWidth>
-        <DialogTitle>Modifier l'administrateur</DialogTitle>
+        <DialogTitle>Modifier l&apos;administrateur</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -557,13 +547,13 @@ export default function AdministrationAdminsView() {
 
       {/* Delete Admin Dialog */}
       <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, admin: null, loading: false })} maxWidth="sm" fullWidth>
-        <DialogTitle>Supprimer l'administrateur</DialogTitle>
+        <DialogTitle>Supprimer l&apos;administrateur</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
             Cette action est irréversible. Impossible de supprimer le dernier admin actif.
           </Alert>
           <Typography>
-            Êtes-vous sûr de vouloir supprimer l'administrateur{' '}
+            Êtes-vous sûr de vouloir supprimer l&apos;administrateur{' '}
             <strong>{deleteDialog.admin?.firstName} {deleteDialog.admin?.lastName}</strong> ?
           </Typography>
         </DialogContent>
@@ -694,11 +684,11 @@ export default function AdministrationAdminsView() {
       {/* Status Dialog */}
       <Dialog open={statusDialog.open} onClose={() => setStatusDialog({ open: false, admin: null, loading: false })} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {statusDialog.admin?.isSuspended ? 'Activer' : 'Suspendre'} l'administrateur
+          {statusDialog.admin?.isSuspended ? 'Activer' : 'Suspendre'} l&apos;administrateur
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Êtes-vous sûr de vouloir {statusDialog.admin?.isSuspended ? 'activer' : 'suspendre'} l'administrateur{' '}
+            Êtes-vous sûr de vouloir {statusDialog.admin?.isSuspended ? 'activer' : 'suspendre'} l&apos;administrateur{' '}
             <strong>{statusDialog.admin?.firstName} {statusDialog.admin?.lastName}</strong> ?
           </Typography>
         </DialogContent>

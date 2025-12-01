@@ -246,11 +246,6 @@ export default function NewsFormView() {
     );
   }
 
-  const getButtonText = () => {
-    if (saving) return 'Enregistrement...';
-    if (isEdit) return 'Mettre à jour';
-    return 'Créer';
-  };
 
   return (
     <>

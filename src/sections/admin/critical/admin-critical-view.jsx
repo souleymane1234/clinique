@@ -1,39 +1,37 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 
+import { TabList , TabPanel, TabContext, LoadingButton } from '@mui/lab';
 import {
   Box,
   Tab,
   Card,
-  Alert,
   Grid,
+  Chip,
+  Alert,
   Stack,
+  alpha,
+  Table,
   Button,
   Dialog,
+  Divider,
+  Tooltip,
+  TableRow,
   TextField,
-  Typography,
   Container,
+  TableBody,
+  TableCell,
+  TableHead,
+  Typography,
+  AlertTitle,
+  IconButton,
   DialogTitle,
   DialogContent,
   DialogActions,
-  AlertTitle,
-  Divider,
-  Chip,
-  alpha,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
   TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Tooltip,
-  CircularProgress,
   TablePagination,
+  CircularProgress,
 } from '@mui/material';
-import { TabContext, TabList, TabPanel } from '@mui/lab';
-import { LoadingButton } from '@mui/lab';
 
 import { useNotification } from 'src/hooks/useNotification';
 
@@ -152,21 +150,33 @@ export default function AdminCriticalView() {
       if (stationsResult.success) {
         const allPompistes = [];
         const stationsData = Array.isArray(stationsResult.data) ? stationsResult.data : [];
-        for (const station of stationsData) {
+        
+        // Utiliser Promise.all pour éviter await dans une boucle
+        const stationDetailsPromises = stationsData.map(async (station) => {
           try {
             const stationDetailsResult = await ConsumApi.getStationById(station.id);
             if (stationDetailsResult.success && stationDetailsResult.data?.pompistes) {
               const stationPompistes = Array.isArray(stationDetailsResult.data.pompistes) 
                 ? stationDetailsResult.data.pompistes 
                 : [];
-              stationPompistes.forEach((pompiste) => {
-                allPompistes.push({ ...pompiste, stationId: station.id, stationName: station.name });
-              });
+              return stationPompistes.map((pompiste) => ({
+                ...pompiste,
+                stationId: station.id,
+                stationName: station.name,
+              }));
             }
+            return [];
           } catch (err) {
             console.error(`Error loading pompistes for station ${station.id}:`, err);
+            return [];
           }
-        }
+        });
+        
+        const results = await Promise.all(stationDetailsPromises);
+        results.forEach((stationPompistes) => {
+          allPompistes.push(...stationPompistes);
+        });
+        
         setPompistes(allPompistes);
       }
     } catch (error) {
@@ -185,7 +195,7 @@ export default function AdminCriticalView() {
     } else if (currentTab === 'pompistes') {
       loadPompistes();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Les fonctions load* sont stables et utilisent uniquement des setters
   }, [currentTab]);
 
   const handleBanUser = async (userId) => {
@@ -435,23 +445,30 @@ export default function AdminCriticalView() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loadingUsers ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
-                    <CircularProgress size={24} />
-                  </TableCell>
-                </TableRow>
-              ) : users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
-                    <Typography color="text.secondary">Aucun utilisateur trouvé</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users
-                  .slice(usersPage * usersRowsPerPage, usersPage * usersRowsPerPage + usersRowsPerPage)
-                  .map((user) => (
-                    <TableRow key={user.id} hover>
+              {(() => {
+                if (loadingUsers) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                        <CircularProgress size={24} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                if (users.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                        <Typography color="text.secondary">Aucun utilisateur trouvé</Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                return (
+                  users
+                    .slice(usersPage * usersRowsPerPage, usersPage * usersRowsPerPage + usersRowsPerPage)
+                    .map((user) => (
+                      <TableRow key={user.id} hover>
                       <TableCell>
                         <Typography variant="subtitle2" noWrap>
                           {user.firstName} {user.lastName}
@@ -520,8 +537,9 @@ export default function AdminCriticalView() {
                         </Stack>
                       </TableCell>
                     </TableRow>
-                  ))
-              )}
+                    ))
+                );
+              })()}
             </TableBody>
           </Table>
         </Scrollbar>
@@ -556,22 +574,29 @@ export default function AdminCriticalView() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loadingStations ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                    <CircularProgress size={24} />
-                  </TableCell>
-                </TableRow>
-              ) : stations.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                    <Typography color="text.secondary">Aucune station trouvée</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                stations
-                  .slice(stationsPage * stationsRowsPerPage, stationsPage * stationsRowsPerPage + stationsRowsPerPage)
-                  .map((station) => (
+              {(() => {
+                if (loadingStations) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                        <CircularProgress size={24} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                if (stations.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                        <Typography color="text.secondary">Aucune station trouvée</Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                return (
+                  stations
+                    .slice(stationsPage * stationsRowsPerPage, stationsPage * stationsRowsPerPage + stationsRowsPerPage)
+                    .map((station) => (
                     <TableRow key={station.id} hover>
                       <TableCell>
                         <Typography variant="subtitle2" noWrap>
@@ -620,8 +645,9 @@ export default function AdminCriticalView() {
                         </Stack>
                       </TableCell>
                     </TableRow>
-                  ))
-              )}
+                    ))
+                );
+              })()}
             </TableBody>
           </Table>
         </Scrollbar>
@@ -656,22 +682,29 @@ export default function AdminCriticalView() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loadingPompistes ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                    <CircularProgress size={24} />
-                  </TableCell>
-                </TableRow>
-              ) : pompistes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                    <Typography color="text.secondary">Aucun pompiste trouvé</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                pompistes
-                  .slice(pompistesPage * pompistesRowsPerPage, pompistesPage * pompistesRowsPerPage + pompistesRowsPerPage)
-                  .map((pompiste) => (
+              {(() => {
+                if (loadingPompistes) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                        <CircularProgress size={24} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                if (pompistes.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                        <Typography color="text.secondary">Aucun pompiste trouvé</Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                return (
+                  pompistes
+                    .slice(pompistesPage * pompistesRowsPerPage, pompistesPage * pompistesRowsPerPage + pompistesRowsPerPage)
+                    .map((pompiste) => (
                     <TableRow key={pompiste.id} hover>
                       <TableCell>
                         <Typography variant="subtitle2" noWrap>
@@ -718,8 +751,9 @@ export default function AdminCriticalView() {
                         </Stack>
                       </TableCell>
                     </TableRow>
-                  ))
-              )}
+                    ))
+                );
+              })()}
             </TableBody>
           </Table>
         </Scrollbar>

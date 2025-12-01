@@ -2,46 +2,44 @@ import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router-dom';
 
-import { useRouter } from 'src/routes/hooks';
-
+import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
+  Grid,
   Stack,
+  Table,
+  Alert,
+  alpha,
   Button,
   Dialog,
   Divider,
-  Tooltip,
   TableRow,
   TextField,
   TableBody,
   TableCell,
   Container,
-  Typography,
-  IconButton,
   TableHead,
-  Table,
-  Grid,
-  Alert,
-  CircularProgress,
-  TableContainer,
-  Paper,
   Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Typography,
   DialogTitle,
   DialogContent,
   DialogActions,
+  TableContainer,
   LinearProgress,
-  alpha,
+  CircularProgress,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
-import { RouterLink } from 'src/routes/components';
+
+import { useRouter } from 'src/routes/hooks';
+
 import { useNotification } from 'src/hooks/useNotification';
 
-import ConsumApi from 'src/services_workers/consum_api';
 import { fNumber } from 'src/utils/format-number';
+
+import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
@@ -88,6 +86,7 @@ export default function StationDetailsView() {
     firstName: '',
     lastName: '',
   });
+  console.log(loadingCapacity);
 
   const loadStationDetails = async () => {
     setLoading(true);
@@ -369,13 +368,16 @@ export default function StationDetailsView() {
                       <LinearProgress
                         variant="determinate"
                         value={(1 - (station.capacityRemaining || 0) / (station.capacityTotal || 1)) * 100}
-                        color={
-                          (1 - (station.capacityRemaining || 0) / (station.capacityTotal || 1)) * 100 > 80
-                            ? 'error'
-                            : (1 - (station.capacityRemaining || 0) / (station.capacityTotal || 1)) * 100 > 50
-                            ? 'warning'
-                            : 'success'
-                        }
+                        color={(() => {
+                          const percentage = (1 - (station.capacityRemaining || 0) / (station.capacityTotal || 1)) * 100;
+                          if (percentage > 80) {
+                            return 'error';
+                          }
+                          if (percentage > 50) {
+                            return 'warning';
+                          }
+                          return 'success';
+                        })()}
                         sx={{ height: 8, borderRadius: 1 }}
                       />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

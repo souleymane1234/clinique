@@ -2,43 +2,41 @@ import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router-dom';
 
-import { useRouter } from 'src/routes/hooks';
-
+import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
+  Grid,
   Stack,
+  Table,
+  Alert,
+  alpha,
   Button,
   Dialog,
+  Select,
   Divider,
   TableRow,
-  TextField,
+  MenuItem,
   TableBody,
   TableCell,
   Container,
-  Typography,
-  IconButton,
   TableHead,
-  Table,
-  Grid,
-  Alert,
-  CircularProgress,
-  TableContainer,
   Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Typography,
+  InputLabel,
   DialogTitle,
+  FormControl,
   DialogContent,
   DialogActions,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
-  Paper,
-  alpha,
+  TableContainer,
+  CircularProgress,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
+
+import { useRouter } from 'src/routes/hooks';
+
 import { useNotification } from 'src/hooks/useNotification';
 
 import ConsumApi from 'src/services_workers/consum_api';
@@ -160,8 +158,7 @@ export default function UserDetailsView() {
       loadPassages();
       loadVehicle();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, loadProfile, loadIncidents, loadPassages, loadVehicle]);
 
   const handleToggleStatus = async () => {
     if (!profile) return;
@@ -571,11 +568,16 @@ export default function UserDetailsView() {
                 Actualiser
               </Button>
             </Box>
-            {loadingVehicle ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : vehicle ? (
+            {(() => {
+              if (loadingVehicle) {
+                return (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                );
+              }
+              if (vehicle) {
+                return (
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <Box>
@@ -643,9 +645,10 @@ export default function UserDetailsView() {
                   </Box>
                 </Grid>
               </Grid>
-            ) : (
-              <Alert severity="info">Aucun véhicule associé à cet utilisateur</Alert>
-            )}
+                );
+              }
+              return <Alert severity="info">Aucun véhicule associé à cet utilisateur</Alert>;
+            })()}
           </Card>
 
           {/* Incidents */}
@@ -664,11 +667,16 @@ export default function UserDetailsView() {
                 </Box>
               </AccordionSummary>
               <AccordionDetails>
-                {loadingIncidents ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : incidents && incidents.incidents && incidents.incidents.length > 0 ? (
+                {(() => {
+                  if (loadingIncidents) {
+                    return (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                      </Box>
+                    );
+                  }
+                  if (incidents && incidents.incidents && incidents.incidents.length > 0) {
+                    return (
                   <TableContainer>
                     <Scrollbar>
                       <Table size="small">
@@ -697,9 +705,10 @@ export default function UserDetailsView() {
                       </Table>
                     </Scrollbar>
                   </TableContainer>
-                ) : (
-                  <Alert severity="info">Aucun incident enregistré</Alert>
-                )}
+                    );
+                  }
+                  return <Alert severity="info">Aucun incident enregistré</Alert>;
+                })()}
               </AccordionDetails>
             </Accordion>
           </Card>
@@ -716,11 +725,16 @@ export default function UserDetailsView() {
                 </Box>
               </AccordionSummary>
               <AccordionDetails>
-                {loadingPassages ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : passages && passages.passages && passages.passages.length > 0 ? (
+                {(() => {
+                  if (loadingPassages) {
+                    return (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                      </Box>
+                    );
+                  }
+                  if (passages && passages.passages && passages.passages.length > 0) {
+                    return (
                   <TableContainer>
                     <Scrollbar>
                       <Table size="small" sx={{ minWidth: 600 }}>
@@ -749,15 +763,18 @@ export default function UserDetailsView() {
                                 <Chip
                                   label={passage.status || '-'}
                                   size="small"
-                                  color={
-                                    passage.status === 'SERVED'
-                                      ? 'success'
-                                      : passage.status === 'REFUSED'
-                                        ? 'warning'
-                                        : passage.status === 'EXPIRED'
-                                          ? 'error'
-                                          : 'default'
-                                  }
+                                  color={(() => {
+                                    if (passage.status === 'SERVED') {
+                                      return 'success';
+                                    }
+                                    if (passage.status === 'REFUSED') {
+                                      return 'warning';
+                                    }
+                                    if (passage.status === 'EXPIRED') {
+                                      return 'error';
+                                    }
+                                    return 'default';
+                                  })()}
                                 />
                               </TableCell>
                               <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{passage.volume || '-'} L</TableCell>
@@ -766,10 +783,11 @@ export default function UserDetailsView() {
                         </TableBody>
                       </Table>
                     </Scrollbar>
-                  </TableContainer>
-                ) : (
-                  <Alert severity="info">Aucun passage enregistré</Alert>
-                )}
+                                  </TableContainer>
+                    );
+                  }
+                  return <Alert severity="info">Aucun passage enregistré</Alert>;
+                })()}
               </AccordionDetails>
             </Accordion>
           </Card>

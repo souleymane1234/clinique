@@ -2,9 +2,9 @@ import PropTypes from 'prop-types';
 import { lazy, Suspense } from 'react';
 import { Outlet, Navigate, useRoutes } from 'react-router-dom';
 
+import { routesName } from 'src/constants/routes';
 import DashboardLayout from 'src/layouts/dashboard';
 import { AdminStorage } from 'src/storages/admins_storage';
-import { routesName } from 'src/constants/routes';
 
 export const IndexPage = lazy(() => import('src/pages/app'));
 export const LoginPage = lazy(() => import('src/pages/login'));

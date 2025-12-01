@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 
+import { TabList, TabPanel, TabContext, LoadingButton } from '@mui/lab';
 import {
   Box,
   Tab,
   Card,
   Grid,
   Stack,
-  Button,
-  TextField,
-  Typography,
-  Container,
-  Divider,
-  FormControlLabel,
-  Switch,
   Alert,
+  Button,
+  Switch,
+  Divider,
+  TextField,
+  Container,
+  Typography,
+  FormControlLabel,
 } from '@mui/material';
-import { TabContext, TabList, TabPanel, LoadingButton } from '@mui/lab';
 
 import { useNotification } from 'src/hooks/useNotification';
 
@@ -348,7 +348,7 @@ export default function ConfigurationView() {
   const renderQRCodeValiditySection = () => (
     <Stack spacing={3}>
       <Alert severity="info">
-        Définissez la durée de validité d'un QR Code en minutes après sa génération.
+        Définissez la durée de validité d&apos;un QR Code en minutes après sa génération.
       </Alert>
 
       <Card sx={{ p: 3 }}>
@@ -556,7 +556,7 @@ export default function ConfigurationView() {
           <Box>
             <Typography variant="h4">Paramétrages Globaux</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Gérez les configurations système de l'application
+              Gérez les configurations système de l&apos;application
             </Typography>
           </Box>
 

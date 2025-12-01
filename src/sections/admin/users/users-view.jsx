@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useRouter } from 'src/routes/hooks';
 
+import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
   Table,
   Stack,
+  Alert,
   Button,
   Dialog,
-  Tooltip,
   Select,
+  Tooltip,
   MenuItem,
   TableRow,
   TextField,
@@ -28,17 +29,17 @@ import {
   DialogActions,
   TableContainer,
   TablePagination,
-  Alert,
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
-import { RouterLink } from 'src/routes/components';
+
+import { useRouter } from 'src/routes/hooks';
+
 import { useNotification } from 'src/hooks/useNotification';
 
+import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { routesName } from 'src/constants/routes';
 
 // ----------------------------------------------------------------------
 
@@ -102,8 +103,7 @@ export default function UsersView() {
     }, search ? 500 : 0); // Debounce de 500ms seulement pour la recherche textuelle
     
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, roleFilter, isSuspendedFilter]);
+  }, [search, roleFilter, isSuspendedFilter, loadUsers]);
 
   const handleSearch = () => {
     setPage(0);

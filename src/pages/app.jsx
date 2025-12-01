@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 
-import { useAdminStore } from 'src/store/useAdminStore';
 import { routesName } from 'src/constants/routes';
+import { useAdminStore } from 'src/store/useAdminStore';
 import navConfig from 'src/layouts/dashboard/config-navigation';
 
 // ----------------------------------------------------------------------

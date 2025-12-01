@@ -1,40 +1,38 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 
+import { TabList, TabPanel, TabContext, LoadingButton } from '@mui/lab';
 import {
   Box,
   Tab,
   Card,
-  Grid,
-  Stack,
   Chip,
+  Stack,
   Table,
+  Alert,
+  Paper,
   Button,
   Dialog,
-  TextField,
-  Typography,
-  Container,
-  Divider,
   Select,
+  Divider,
+  Tooltip,
   MenuItem,
-  FormControl,
-  InputLabel,
-  Alert,
+  TableRow,
+  TextField,
+  Container,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
-  TableRow,
-  Paper,
+  Typography,
+  InputLabel,
   IconButton,
-  Tooltip,
+  FormControl,
+  TableContainer,
 } from '@mui/material';
-import { TabContext, TabList, TabPanel, LoadingButton } from '@mui/lab';
 
 import { useNotification } from 'src/hooks/useNotification';
 
 import ConsumApi from 'src/services_workers/consum_api';
-import { fNumber } from 'src/utils/format-number';
 
 import Iconify from 'src/components/iconify';
 
@@ -199,8 +197,7 @@ export default function RolesPermissionsView() {
     }
   };
 
-  const renderPermissionsMatrixSection = () => {
-    return (
+  const renderPermissionsMatrixSection = () => (
       <Stack spacing={3}>
         <Alert severity="info">
           Visualisez la hiérarchie des rôles et leurs permissions respectives.
@@ -232,16 +229,13 @@ export default function RolesPermissionsView() {
         )}
       </Stack>
     );
-  };
 
   const renderPermissionsMatrixContent = () => {
     if (!permissionsMatrix || !hierarchy) {
       return null;
     }
 
-    const roles = Object.keys(permissionsMatrix).sort((a, b) => {
-      return (permissionsMatrix[b].level || 0) - (permissionsMatrix[a].level || 0);
-    });
+    const roles = Object.keys(permissionsMatrix).sort((a, b) => (permissionsMatrix[b].level || 0) - (permissionsMatrix[a].level || 0));
 
     return (
       <>
@@ -306,8 +300,7 @@ export default function RolesPermissionsView() {
     );
   };
 
-  const renderUsersSection = () => {
-    return (
+  const renderUsersSection = () => (
       <Stack spacing={3}>
         <Alert severity="info">
           Gérez tous les utilisateurs du système, leurs rôles et leurs permissions.
@@ -415,7 +408,6 @@ export default function RolesPermissionsView() {
         </Card>
       </Stack>
     );
-  };
 
   return (
     <>
@@ -512,7 +504,7 @@ export default function RolesPermissionsView() {
               </FormControl>
 
               <Alert severity="warning">
-                Attention: La modification du rôle peut affecter les permissions et l'accès de l'utilisateur.
+                Attention: La modification du rôle peut affecter les permissions et l&apos;accès de l&apos;utilisateur.
               </Alert>
 
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>

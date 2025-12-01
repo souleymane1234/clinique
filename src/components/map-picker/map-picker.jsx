@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Marker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import PropTypes from 'prop-types';
+import { useRef, useState, useEffect } from 'react';
+import { Marker, useMap, TileLayer, MapContainer, useMapEvents } from 'react-leaflet';
 
 import { Box, Typography } from '@mui/material';
 
@@ -23,6 +24,11 @@ function ChangeView({ center, zoom }) {
   }, [center, zoom, map]);
   return null;
 }
+
+ChangeView.propTypes = {
+  center: PropTypes.arrayOf(PropTypes.number),
+  zoom: PropTypes.number,
+};
 
 // Composant pour gérer les clics sur la carte
 function LocationMarker({ position, onPositionChange }) {
@@ -51,13 +57,19 @@ function LocationMarker({ position, onPositionChange }) {
     } else if (!position && markerPosition) {
       setMarkerPosition(null);
     }
-  }, [position]);
+  }, [position, markerPosition]);
 
   return markerPosition ? <Marker position={markerPosition} /> : null;
 }
 
+LocationMarker.propTypes = {
+  position: PropTypes.arrayOf(PropTypes.number),
+  onPositionChange: PropTypes.func,
+};
+
 export default function MapPicker({ latitude, longitude, onLocationChange, height = 400 }) {
   const [mapCenter, setMapCenter] = useState([14.7167, -17.4677]); // Dakar par défaut
+  const geolocationRequested = useRef(false);
 
   useEffect(() => {
     if (latitude && longitude) {
@@ -71,7 +83,8 @@ export default function MapPicker({ latitude, longitude, onLocationChange, heigh
 
   // Essayer de récupérer la position de l'utilisateur seulement une fois au chargement initial
   useEffect(() => {
-    if (!latitude && !longitude && navigator.geolocation) {
+    if (!geolocationRequested.current && !latitude && !longitude && navigator.geolocation) {
+      geolocationRequested.current = true;
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude: lat, longitude: lng } = position.coords;
@@ -85,8 +98,7 @@ export default function MapPicker({ latitude, longitude, onLocationChange, heigh
         }
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Exécuter seulement une fois au montage
 
   const handleLocationChange = (lat, lng) => {
     if (onLocationChange) {
@@ -138,3 +150,9 @@ export default function MapPicker({ latitude, longitude, onLocationChange, heigh
   );
 }
 
+MapPicker.propTypes = {
+  latitude: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  longitude: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onLocationChange: PropTypes.func,
+  height: PropTypes.number,
+};

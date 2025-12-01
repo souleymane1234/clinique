@@ -4,40 +4,29 @@ import { useState, useEffect, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
+import { LoadingButton } from '@mui/lab';
 import Divider from '@mui/material/Divider';
+import { alpha } from '@mui/material/styles';
 import Skeleton from '@mui/material/Skeleton';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
-import { LoadingButton } from '@mui/lab';
-
-import { RouterLink } from 'src/routes/components';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fNumber } from 'src/utils/format-number';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
-
-import AppCurrentVisits from 'src/sections/overview/app-current-visits';
-import AppWebsiteVisits from 'src/sections/overview/app-website-visits';
-import AppWidgetSummary from 'src/sections/overview/app-widget-summary';
-import AppConversionRates from 'src/sections/overview/app-conversion-rates';
 import Chart, { useChart } from 'src/components/chart';
-import { fNumber } from 'src/utils/format-number';
+
+import AppWidgetSummary from 'src/sections/overview/app-widget-summary';
 
 // ----------------------------------------------------------------------
 
 export default function AdminDashboardMainView() {
-  const theme = useTheme();
   const { contextHolder, showError } = useNotification();
 
-  // États pour les statistiques
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [totalSchools, setTotalSchools] = useState(0);
-  const [verifiedSchools, setVerifiedSchools] = useState(0);
-  const [paidSchools, setPaidSchools] = useState(0);
 
   // États pour les statistiques CarbuGo
   const [carbuGoStats, setCarbuGoStats] = useState({
@@ -50,19 +39,6 @@ export default function AdminDashboardMainView() {
   const [loadingCarbuGo, setLoadingCarbuGo] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  // Données pour les graphiques
-  const [dates, setDates] = useState([]);
-  const [topEcoles, setTopEcoles] = useState([]);
-  const [formationsParDomaine, setFormationsParDomaine] = useState([]);
-  const [newUserAtMoment, setNewUserAtMoment] = useState([]);
-  const [orientationTests, setOrientationTests] = useState([]);
-  const [boursesActives, setBoursesActives] = useState([]);
-
-  // États de chargement
-  const [isFetching, setFetching] = useState(true);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [loadingSchools, setLoadingSchools] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(true);
 
   // Cache pour éviter les requêtes répétées
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -107,40 +83,15 @@ export default function AdminDashboardMainView() {
     }
 
     try {
-      // Les anciennes APIs ont été supprimées, on utilise uniquement les statistiques CarbuGo
-      // Les données seront chargées via loadCarbuGoStats
-      
-      // Utiliser les données CarbuGo si disponibles
-      if (carbuGoStats.userGrowth) {
-        setTotalUsers(carbuGoStats.userGrowth.totalUsers || 0);
-      }
-
-      // Générer les données de graphiques temporels
-      setDates(
-        Array.from({ length: 30 }, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - (29 - i));
-          return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-        })
-      );
-
-      // Données simulées pour les graphiques temporels (si nécessaire)
-      setNewUserAtMoment(Array.from({ length: 30 }, () => Math.floor(Math.random() * 50)));
-      setOrientationTests(Array.from({ length: 30 }, () => Math.floor(Math.random() * 30)));
-      setBoursesActives(Array.from({ length: 30 }, () => Math.floor(Math.random() * 15)));
-
+      // Les données CarbuGo sont déjà chargées via loadCarbuGoStats
+      // Cette fonction sert uniquement à marquer les données comme chargées
       setDataLoaded(true);
     } catch (error) {
       console.error('Erreur lors du chargement du dashboard admin:', error);
-        showError('Erreur', 'Impossible de charger les statistiques. Veuillez réessayer.');
+      showError('Erreur', 'Impossible de charger les statistiques. Veuillez réessayer.');
       setDataLoaded(true);
-    } finally {
-      setFetching(false);
-      setLoadingUsers(false);
-      setLoadingSchools(false);
-      setLoadingStats(false);
     }
-  }, [showError, dataLoaded, carbuGoStats]);
+  }, [showError, dataLoaded]);
 
   useEffect(() => {
     loadCarbuGoStats();
@@ -148,10 +99,10 @@ export default function AdminDashboardMainView() {
 
   useEffect(() => {
     // Charger les données après que les stats CarbuGo soient disponibles
-    if (carbuGoStats.userGrowth) {
-    loadData();
+    if (carbuGoStats.userGrowth && !dataLoaded) {
+      loadData();
     }
-  }, [loadData, carbuGoStats.userGrowth]);
+  }, [loadData, carbuGoStats.userGrowth, dataLoaded]);
 
   // Préparer les options des graphiques de manière inconditionnelle pour respecter les règles des hooks
   const userGrowthChartOptions = carbuGoStats.userGrowth?.dailyGrowth && carbuGoStats.userGrowth.dailyGrowth.length > 0
@@ -246,7 +197,6 @@ export default function AdminDashboardMainView() {
             onClick={async () => {
               setDataLoaded(false);
               await loadCarbuGoStats(true);
-              loadData();
             }}
             loading={loadingCarbuGo && !isInitialLoading}
             disabled={loadingCarbuGo && isInitialLoading}

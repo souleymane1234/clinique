@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useRouter } from 'src/routes/hooks';
 
+import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
@@ -10,8 +10,8 @@ import {
   Stack,
   Button,
   Dialog,
-  Tooltip,
   Select,
+  Tooltip,
   MenuItem,
   TableRow,
   TextField,
@@ -28,17 +28,19 @@ import {
   DialogActions,
   TableContainer,
   TablePagination,
-  Alert,
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
+
+import { useRouter } from 'src/routes/hooks';
+
 import { useNotification } from 'src/hooks/useNotification';
 
-import ConsumApi from 'src/services_workers/consum_api';
 import { fNumber } from 'src/utils/format-number';
+
+import { routesName } from 'src/constants/routes';
+import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { routesName } from 'src/constants/routes';
 
 // ----------------------------------------------------------------------
 
@@ -142,15 +144,13 @@ export default function SessionsView() {
 
   useEffect(() => {
     loadSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, fuelTypeFilter, activeOnly]);
+  }, [statusFilter, fuelTypeFilter, activeOnly, loadSessions]);
 
   useEffect(() => {
     if (createDialog.open) {
       loadStations();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createDialog.open]);
+  }, [createDialog.open, loadStations]);
 
   const handleCreateSession = async () => {
     if (!createForm.stationId || !createForm.capacityTotal || !createForm.volumePerService || !createForm.radiusKm) {
@@ -221,16 +221,6 @@ export default function SessionsView() {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
 
   return (
     <>

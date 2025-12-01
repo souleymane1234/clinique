@@ -1,40 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 
+import { TabList, TabPanel, TabContext, LoadingButton } from '@mui/lab';
 import {
   Box,
   Tab,
   Card,
   Grid,
+  Chip,
   Stack,
-  Button,
-  TextField,
-  Typography,
-  Container,
-  Divider,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Alert,
   Paper,
   Table,
+  Select,
+  Divider,
+  MenuItem,
+  TableRow,
+  TextField,
+  Container,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
-  TableRow,
-  Chip,
+  Typography,
+  InputLabel,
+  FormControl,
+  TableContainer,
 } from '@mui/material';
-import { TabContext, TabList, TabPanel, LoadingButton } from '@mui/lab';
-import { fNumber, fPercent } from 'src/utils/format-number';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fNumber } from 'src/utils/format-number';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
-import Chart, { useChart } from 'src/components/chart';
 
 // ----------------------------------------------------------------------
 
@@ -245,54 +244,7 @@ export default function ReportsView() {
     }
   };
 
-  const renderDataTable = (data, columns) => {
-    if (!data || (Array.isArray(data) && data.length === 0)) {
-      return <Typography color="text.secondary">Aucune donnée disponible</Typography>;
-    }
 
-    const dataArray = Array.isArray(data) ? data : [data];
-
-    return (
-      <TableContainer component={Paper} variant="outlined">
-        <Table>
-          <TableHead>
-            <TableRow>
-              {columns.map((col) => (
-                <TableCell key={col.key} sx={{ fontWeight: 'bold' }}>
-                  {col.label}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {dataArray.map((row, index) => (
-              <TableRow key={index}>
-                {columns.map((col) => (
-                  <TableCell key={col.key}>
-                    {col.render ? col.render(row[col.key], row) : row[col.key] || '-'}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
-
-  const renderJsonData = (data) => {
-    if (!data) {
-      return <Typography color="text.secondary">Aucune donnée disponible</Typography>;
-    }
-
-    return (
-      <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      </Paper>
-    );
-  };
 
   const renderOccupationSection = () => {
     const sessions = activeFilesOccupation?.activeSessions || [];
@@ -301,7 +253,7 @@ export default function ReportsView() {
     return (
       <Stack spacing={3}>
         <Alert severity="info">
-          Consultez l'occupation des files actives en temps réel.
+          Consultez l&apos;occupation des files actives en temps réel.
         </Alert>
 
         <Card sx={{ p: 3 }}>
@@ -336,7 +288,7 @@ export default function ReportsView() {
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>Utilisateurs Total</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>En Service</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>En Attente</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>Taux d'Occupation</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>Taux d&apos;Occupation</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -378,7 +330,7 @@ export default function ReportsView() {
                 )}
               </Stack>
             ) : (
-              <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>
+              <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>
             )}
           </Stack>
         </Card>
@@ -444,7 +396,7 @@ export default function ReportsView() {
                 </Grid>
               </Grid>
             ) : (
-              <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>
+              <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>
             )}
           </Stack>
         </Card>
@@ -521,7 +473,7 @@ export default function ReportsView() {
               </Box>
             </Stack>
           ) : (
-            <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>
+            <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>
           )}
         </Stack>
       </Card>
@@ -575,7 +527,7 @@ export default function ReportsView() {
 
             {(() => {
               if (!mostActiveStations) {
-                return <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>;
+                return <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>;
               }
               if (stations.length === 0) {
                 return (
@@ -634,7 +586,7 @@ export default function ReportsView() {
     return (
       <Stack spacing={3}>
         <Alert severity="info">
-          Consultez les taux de refus et d'expiration par station.
+          Consultez les taux de refus et d&apos;expiration par station.
         </Alert>
 
         <Card sx={{ p: 3 }}>
@@ -654,7 +606,7 @@ export default function ReportsView() {
 
             {(() => {
               if (!refusalExpirationRates) {
-                return <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>;
+                return <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>;
               }
               if (rates.length === 0) {
                 return (
@@ -804,7 +756,7 @@ export default function ReportsView() {
               )}
             </Stack>
           ) : (
-            <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>
+            <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>
           )}
         </Stack>
       </Card>
@@ -818,7 +770,7 @@ export default function ReportsView() {
     return (
       <Stack spacing={3}>
         <Alert severity="info">
-          Consultez la croissance du nombre d'utilisateurs.
+          Consultez la croissance du nombre d&apos;utilisateurs.
         </Alert>
 
         <Card sx={{ p: 3 }}>
@@ -906,7 +858,7 @@ export default function ReportsView() {
                 )}
               </Stack>
             ) : (
-              <Typography color="text.secondary">Cliquez sur "Charger" pour afficher les données</Typography>
+              <Typography color="text.secondary">Cliquez sur &quot;Charger&quot; pour afficher les données</Typography>
             )}
           </Stack>
         </Card>

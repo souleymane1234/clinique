@@ -8,28 +8,26 @@ import {
   Chip,
   Table,
   Stack,
+  Alert,
   Button,
   Dialog,
+  Select,
+  Tooltip,
   MenuItem,
+  TableRow,
   TextField,
   TableBody,
   TableCell,
   TableHead,
-  TableRow,
   Container,
   Typography,
   IconButton,
-  FormControl,
   InputLabel,
-  Select,
+  FormControl,
   DialogTitle,
   DialogContent,
   DialogActions,
   TableContainer,
-  CircularProgress,
-  Alert,
-  Grid,
-  Tooltip,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
@@ -71,7 +69,7 @@ const STATUS_LABELS = {
 
 export default function FileActiveView() {
   const { sessionId: sessionIdFromRoute } = useParams();
-  const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+  const { contextHolder, showApiResponse, showError } = useNotification();
 
   const [sessionId, setSessionId] = useState(sessionIdFromRoute || '');
   const [fileActive, setFileActive] = useState(null);
@@ -230,7 +228,7 @@ export default function FileActiveView() {
                         <TableCell>Téléphone</TableCell>
                         <TableCell>Position</TableCell>
                         <TableCell>Statut</TableCell>
-                        <TableCell>Date d'entrée</TableCell>
+                        <TableCell>Date d&apos;entrée</TableCell>
                         <TableCell align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
@@ -307,7 +305,7 @@ export default function FileActiveView() {
 
           {fileActive === null && !loading && sessionId && (
             <Alert severity="info">
-              Aucune file active trouvée pour cette session. Vérifiez l'ID de session et réessayez.
+              Aucune file active trouvée pour cette session. Vérifiez l&apos;ID de session et réessayez.
             </Alert>
           )}
         </Stack>
