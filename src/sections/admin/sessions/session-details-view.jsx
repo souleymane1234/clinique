@@ -126,8 +126,12 @@ export default function SessionDetailsView() {
     }
   }, [sessionId]);
 
+  const openCloseDialog = () => {
+    setCloseDialog({ open: true, loading: false });
+  };
+
   const handleCloseSession = async () => {
-    setCloseDialog({ open: true, loading: true });
+    setCloseDialog((prev) => ({ ...prev, loading: true }));
     try {
       const result = await ConsumApi.closeSession(sessionId);
       const processed = showApiResponse(result, {
@@ -138,12 +142,13 @@ export default function SessionDetailsView() {
         showSuccess('Succès', 'La session a été fermée avec succès');
         setCloseDialog({ open: false, loading: false });
         loadSessionDetails();
+      } else {
+        setCloseDialog((prev) => ({ ...prev, loading: false }));
       }
     } catch (error) {
       console.error('Error closing session:', error);
       showError('Erreur', 'Impossible de fermer la session');
-    } finally {
-      setCloseDialog({ open: false, loading: false });
+      setCloseDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -740,7 +745,7 @@ export default function SessionDetailsView() {
                       variant="contained"
                       color="warning"
                       startIcon={<Iconify icon="solar:power-bold" />}
-                      onClick={handleCloseSession}
+                      onClick={openCloseDialog}
                       sx={{
                         minWidth: { xs: '100%', sm: 200 },
                         py: 1.5,
@@ -995,22 +1000,62 @@ export default function SessionDetailsView() {
       </Container>
 
       {/* Close Dialog */}
-      <Dialog open={closeDialog.open} onClose={() => setCloseDialog({ open: false, loading: false })} maxWidth="sm" fullWidth>
-        <DialogTitle>Fermer la session</DialogTitle>
+      <Dialog 
+        open={closeDialog.open} 
+        onClose={() => !closeDialog.loading && setCloseDialog({ open: false, loading: false })} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Iconify icon="solar:shield-warning-bold" width={24} sx={{ color: 'warning.main' }} />
+            Confirmer la fermeture
+          </Box>
+        </DialogTitle>
         <DialogContent>
-          <Typography>
-            Êtes-vous sûr de vouloir fermer cette session ?
-          </Typography>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Alert severity="warning" sx={{ mb: 1 }}>
+              Cette action est irréversible
+            </Alert>
+            <Typography>
+              Êtes-vous sûr de vouloir fermer cette session ?
+            </Typography>
+            {session && (
+              <Box sx={{ p: 2, bgcolor: 'background.neutral', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Session ID
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>
+                  {session.id.slice(0, 8)}...
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Type de carburant
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {session.fuelType}
+                </Typography>
+              </Box>
+            )}
+            <Typography variant="body2" color="text.secondary">
+              La session sera fermée et les utilisateurs ne pourront plus y accéder.
+            </Typography>
+          </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCloseDialog({ open: false, loading: false })}>Annuler</Button>
+          <Button 
+            onClick={() => setCloseDialog({ open: false, loading: false })} 
+            disabled={closeDialog.loading}
+          >
+            Annuler
+          </Button>
           <LoadingButton
             variant="contained"
             color="warning"
             onClick={handleCloseSession}
             loading={closeDialog.loading}
+            startIcon={<Iconify icon="solar:power-bold" />}
           >
-            Fermer
+            Confirmer la fermeture
           </LoadingButton>
         </DialogActions>
       </Dialog>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -69,7 +69,7 @@ export default function UsersView() {
   const [statusDialog, setStatusDialog] = useState({ open: false, user: null, loading: false });
   const [roleDialog, setRoleDialog] = useState({ open: false, user: null, newRole: '', loading: false });
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
       const filters = {};
@@ -94,7 +94,7 @@ export default function UsersView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, roleFilter, isSuspendedFilter]);
 
   // Charger les utilisateurs avec debounce pour éviter trop de requêtes
   useEffect(() => {
@@ -103,7 +103,7 @@ export default function UsersView() {
     }, search ? 500 : 0); // Debounce de 500ms seulement pour la recherche textuelle
     
     return () => clearTimeout(timer);
-  }, [search, roleFilter, isSuspendedFilter, loadUsers]);
+  }, [loadUsers]);
 
   const handleSearch = () => {
     setPage(0);

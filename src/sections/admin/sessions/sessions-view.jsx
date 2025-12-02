@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -91,7 +91,7 @@ export default function SessionsView() {
     status: 'PENDING',
   });
 
-  const loadStations = async () => {
+  const loadStations = useCallback(async () => {
     setLoadingStations(true);
     try {
       const result = await ConsumApi.getStations();
@@ -103,9 +103,9 @@ export default function SessionsView() {
     } finally {
       setLoadingStations(false);
     }
-  };
+  }, []);
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     setLoading(true);
     try {
       let result;
@@ -140,11 +140,11 @@ export default function SessionsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeOnly, statusFilter, fuelTypeFilter]);
 
   useEffect(() => {
     loadSessions();
-  }, [statusFilter, fuelTypeFilter, activeOnly, loadSessions]);
+  }, [loadSessions]);
 
   useEffect(() => {
     if (createDialog.open) {
