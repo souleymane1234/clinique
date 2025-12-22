@@ -8,7 +8,7 @@ export default function AdministrationAdminsPage() {
   return (
     <>
       <Helmet>
-        <title>Gestion des Administrateurs | CarbuGo</title>
+        <title>Gestion des Administrateurs | AnnourTravel</title>
       </Helmet>
 
       <AdministrationAdminsView />

@@ -376,7 +376,7 @@ export default function SessionDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails Session | CarbuGo </title>
+        <title> Détails Session | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

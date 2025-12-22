@@ -8,7 +8,7 @@ export default function ConfigurationPage() {
   return (
     <>
       <Helmet>
-        <title> Configuration Système | CarbuGo </title>
+        <title> Configuration Système | AnnourTravel </title>
       </Helmet>
 
       <ConfigurationView />

@@ -973,7 +973,7 @@ export default function AdminPremiumView() {
   return (
     <>
       <Helmet>
-        <title>Gestion Premium | CarbuGo</title>
+        <title>Gestion Premium | AnnourTravel</title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

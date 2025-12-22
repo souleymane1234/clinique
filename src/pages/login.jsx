@@ -8,7 +8,7 @@ export default function LoginPage() {
   return (
     <>
       <Helmet>
-        <title> Connexion | CarbuGo </title>
+        <title> Connexion | AnnourTravel </title>
       </Helmet>
 
       <LoginView />

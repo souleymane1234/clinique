@@ -168,7 +168,7 @@ export default function FileActiveView() {
   return (
     <>
       <Helmet>
-        <title>Gestion des Files Actives | CarbuGo</title>
+        <title>Gestion des Files Actives | AnnourTravel</title>
       </Helmet>
 
       {contextHolder}

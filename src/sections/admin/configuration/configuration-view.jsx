@@ -546,7 +546,7 @@ export default function ConfigurationView() {
   return (
     <>
       <Helmet>
-        <title> Configuration Système | CarbuGo </title>
+        <title> Configuration Système | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

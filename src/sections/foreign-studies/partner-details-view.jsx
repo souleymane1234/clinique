@@ -76,7 +76,7 @@ export default function PartnerDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails du partenaire | CarbuGo</title>
+        <title> Détails du partenaire | AnnourTravel</title>
       </Helmet>
 
       <Container>

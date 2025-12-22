@@ -14,35 +14,36 @@ export const Page404 = lazy(() => import('src/pages/page-not-found'));
 // Admin pages
 export const AdminDashboardMainView = lazy(() => import('src/sections/admin/admin-dashboard-main-view'));
 
-// Critical Administration pages
-export const AdminCriticalView = lazy(() => import('src/sections/admin/critical/admin-critical-view'));
+// Clients pages
+export const ClientsView = lazy(() => import('src/sections/clients/clients-view'));
+export const ClientDetailsView = lazy(() => import('src/sections/clients/client-details-view'));
+export const UnassignedClientsView = lazy(() => import('src/sections/clients/unassigned-clients-view'));
 
-// Administration Admins pages
-export const AdministrationAdminsView = lazy(() => import('src/sections/admin/administration-admins/administration-admins-view'));
+// Facturation pages
+export const FacturationMainView = lazy(() => import('src/sections/facturation/facturation-main-view'));
+export const FacturesView = lazy(() => import('src/sections/facturation/factures-view'));
+export const FactureDetailsView = lazy(() => import('src/sections/facturation/facture-details-view'));
+export const CreateFactureProformaPage = lazy(() => import('src/pages/create-facture-proforma'));
+export const FacturesByCategoryPage = lazy(() => import('src/pages/factures-by-category'));
+export const BonsDeSortieView = lazy(() => import('src/sections/facturation/bons-de-sortie-view'));
+export const BonDeSortieDetailsView = lazy(() => import('src/sections/facturation/bon-de-sortie-details-view'));
+export const BilanFinancierView = lazy(() => import('src/sections/facturation/bilan-financier-view'));
 
-// File Active pages
-export const FileActiveView = lazy(() => import('src/sections/admin/file-active/file-active-view'));
+// Commerciaux pages
+export const CommerciauxView = lazy(() => import('src/sections/commerciaux/commerciaux-view'));
+export const CommercialDetailsView = lazy(() => import('src/sections/commerciaux/commercial-details-view'));
+export const CreateCommercialPage = lazy(() => import('src/pages/create-commercial'));
+export const CommercialDashboardView = lazy(() => import('src/sections/commerciaux/commercial-dashboard-view'));
 
-// Configuration pages
-export const ConfigurationView = lazy(() => import('src/sections/admin/configuration/configuration-view'));
+// Statistics pages
+export const StatisticsGlobalPage = lazy(() => import('src/pages/statistics-global'));
+export const StatisticsClientsPage = lazy(() => import('src/pages/statistics-clients'));
+export const StatisticsFacturationPage = lazy(() => import('src/pages/statistics-facturation'));
 
-// Reports pages
-export const ReportsView = lazy(() => import('src/sections/admin/reports/reports-view'));
-
-// Roles & Permissions pages
-export const RolesPermissionsView = lazy(() => import('src/sections/admin/roles-permissions/roles-permissions-view'));
-
-// Stations pages
-export const StationsView = lazy(() => import('src/sections/admin/stations/stations-view'));
-export const StationDetailsView = lazy(() => import('src/sections/admin/stations/station-details-view'));
-
-// Users pages
-export const UsersView = lazy(() => import('src/sections/admin/users/users-view'));
-export const UserDetailsView = lazy(() => import('src/sections/admin/users/user-details-view'));
-
-// Sessions pages
-export const SessionsView = lazy(() => import('src/sections/admin/sessions/sessions-view'));
-export const SessionDetailsView = lazy(() => import('src/sections/admin/sessions/session-details-view'));
+// Site Administration pages
+export const SlidesListView = lazy(() => import('src/sections/site-admin/slides-list-view'));
+export const ServicesListView = lazy(() => import('src/sections/site-admin/services-list-view'));
+export const PartnerLogosListView = lazy(() => import('src/sections/site-admin/partner-logos-list-view'));
 
 // ----------------------------------------------------------------------
 
@@ -61,39 +62,38 @@ export default function Router() {
       children: [
         { element: <IndexPage />, index: true },
         
-        // Admin routes
+        // Admin routes - Tableau de bord uniquement
         { path: routesName.admin, element: <AdminDashboardMainView /> },
         
-        // Critical Administration routes (Super Admin only)
-        { path: routesName.adminCritical, element: <AdminCriticalView /> },
+        // Clients routes
+        { path: routesName.clients, element: <ClientsView /> },
+        { path: routesName.clientDetails, element: <ClientDetailsView /> },
+        { path: routesName.unassignedClients, element: <UnassignedClientsView /> },
         
-        // Administration Admins routes (Super Admin only)
-        { path: routesName.adminAdministrationAdmins, element: <AdministrationAdminsView /> },
+        // Facturation routes
+        { path: routesName.factures, element: <FacturationMainView /> },
+        { path: routesName.factureDetails, element: <FactureDetailsView /> },
+        { path: routesName.createFactureProforma, element: <CreateFactureProformaPage /> },
+        { path: routesName.facturesByCategory, element: <FacturesByCategoryPage /> },
+        { path: routesName.bonsDeSortie, element: <FacturationMainView /> },
+        { path: routesName.bonDeSortieDetails, element: <BonDeSortieDetailsView /> },
+        { path: routesName.bilanFinancier, element: <BilanFinancierView /> },
         
-        // File Active routes (Super Admin, Admin, Station, Pompiste)
-        { path: routesName.adminFileActive, element: <FileActiveView /> },
-        { path: routesName.adminFileActiveBySession, element: <FileActiveView /> },
+        // Commerciaux routes
+        { path: routesName.commerciaux, element: <CommerciauxView /> },
+        { path: routesName.commercialDetails, element: <CommercialDetailsView /> },
+        { path: routesName.createCommercial, element: <CreateCommercialPage /> },
+        { path: routesName.commercialDashboard, element: <CommercialDashboardView /> },
         
-        // Configuration routes (Super Admin only)
-        { path: routesName.adminConfiguration, element: <ConfigurationView /> },
+        // Statistics routes
+        { path: routesName.statisticsGlobal, element: <StatisticsGlobalPage /> },
+        { path: routesName.statisticsClients, element: <StatisticsClientsPage /> },
+        { path: routesName.statisticsFacturation, element: <StatisticsFacturationPage /> },
         
-        // Reports routes (Super Admin only)
-        { path: routesName.adminReports, element: <ReportsView /> },
-        
-        // Roles & Permissions routes (Super Admin only)
-        { path: routesName.adminRolesPermissions, element: <RolesPermissionsView /> },
-        
-        // Stations routes (Super Admin, Admin, Station)
-        { path: routesName.adminStations, element: <StationsView /> },
-        { path: routesName.adminStationDetails, element: <StationDetailsView /> },
-        
-        // Users routes (Super Admin, Admin)
-        { path: routesName.adminUsers, element: <UsersView /> },
-        { path: routesName.adminUserDetails, element: <UserDetailsView /> },
-        
-        // Sessions routes (Super Admin, Admin, Station)
-        { path: routesName.adminSessions, element: <SessionsView /> },
-        { path: routesName.adminSessionDetails, element: <SessionDetailsView /> },
+        // Site Administration routes
+        { path: routesName.siteAdminSlides, element: <SlidesListView /> },
+        { path: routesName.siteAdminServices, element: <ServicesListView /> },
+        { path: routesName.siteAdminPartnerLogos, element: <PartnerLogosListView /> },
       ],
     },
     {

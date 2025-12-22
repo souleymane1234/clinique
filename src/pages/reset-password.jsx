@@ -8,7 +8,7 @@ export default function LoginPage() {
   return (
     <>
       <Helmet>
-        <title> Mot de passe Oublié | BoozGame </title>
+        <title> Mot de passe Oublié | AnnourTravel </title>
       </Helmet>
 
       <ResetPasswordView />

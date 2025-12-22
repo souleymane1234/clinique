@@ -239,7 +239,7 @@ export default function UserDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails Utilisateur | CarbuGo </title>
+        <title> Détails Utilisateur | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

@@ -3,7 +3,9 @@ import axios from 'axios';
 import { AdminStorage } from 'src/storages/admins_storage';
 
 const api = axios.create({
-  headers: { 'Access-Control-Allow-Origin': '*' },
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 class ApiClient {

@@ -242,7 +242,7 @@ export default function StationDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails Station | CarbuGo </title>
+        <title> Détails Station | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

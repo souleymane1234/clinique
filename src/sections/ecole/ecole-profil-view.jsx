@@ -169,7 +169,7 @@ export default function EcoleProfilView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Profil École | CarbuGo </title>
+        <title> Profil École | AnnourTravel </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

@@ -6,44 +6,65 @@ import navConfig from 'src/layouts/dashboard/config-navigation';
 
 // ----------------------------------------------------------------------
 
+// Fonction pour normaliser le rôle
+const normalizeRole = (roleSource) => {
+  if (!roleSource) return '';
+  let adminRole = String(roleSource).trim().toUpperCase();
+  
+  // Gérer les cas spéciaux de normalisation
+  if (adminRole.includes('ADMINISTRATEUR') && adminRole.includes('SITE') && adminRole.includes('WEB')) {
+    adminRole = 'ADMIN_SITE_WEB';
+  }
+  return adminRole.replace(/\s+/g, '_');
+};
+
+// Fonction pour obtenir le premier onglet accessible selon le rôle
+const getFirstAccessibleRoute = (admin) => {
+  if (!admin) return routesName.clients;
+  
+  const roleSource = admin.role || admin.service || '';
+  const adminRole = normalizeRole(roleSource);
+  
+  // Parcourir la configuration de navigation (en excluant le tableau de bord)
+  const accessibleItems = navConfig
+    .filter((item) => item.title !== 'Tableau de bord')
+    .filter((item) => {
+      if (!item.protected) return true;
+      
+      const protectedRoles = item.protected.map(role => {
+        let normalized = String(role).trim().toUpperCase();
+        if (normalized.includes('ADMINISTRATEUR') && normalized.includes('SITE') && normalized.includes('WEB')) {
+          normalized = 'ADMIN_SITE_WEB';
+        }
+        return normalized.replace(/\s+/g, '_');
+      });
+      
+      return protectedRoles.includes(adminRole);
+    });
+  
+  // Retourner le premier onglet accessible
+  if (accessibleItems.length > 0) {
+    return accessibleItems[0].path;
+  }
+  
+  // Par défaut, retourner la page clients
+  return routesName.clients;
+};
+
 export default function AppPage() {
   const { admin } = useAdminStore();
-
-  // Trouver la première page disponible dans la navigation selon le rôle
-  const getFirstAvailablePage = () => {
-    if (!admin || !admin.role) {
-      return routesName.admin; // Par défaut, le dashboard admin
+  
+  // Vérifier le rôle de l'utilisateur et rediriger vers le bon dashboard
+  if (admin?.role) {
+    const role = String(admin.role).trim().toUpperCase();
+    
+    // Si c'est un commercial, rediriger vers le dashboard commercial
+    if (role === 'COMMERCIAL') {
+      return <Navigate to={routesName.commercialDashboard} replace />;
     }
-
-    // Filtrer les items de navigation selon le rôle de l'admin
-    const availableItems = navConfig.filter((item) => {
-      // Si l'item n'a pas de protection, il est accessible à tous
-      if (!item.protected) {
-        return true;
-      }
-      // Si l'item est protégé, vérifier si le rôle de l'admin est inclus
-      return item.protected.includes(admin.role);
-    });
-
-    // Retourner le chemin du premier item disponible
-    if (availableItems.length > 0) {
-      return availableItems[0].path;
-    }
-
-    // Fallback selon le rôle
-    if (admin.role === 'SUPERADMIN' || admin.role === 'ADMIN') {
-      return routesName.admin;
-    }
-    if (admin.role === 'STATION') {
-      return routesName.admin; // Peut être changé pour un dashboard spécifique station
-    }
-
-    // Fallback par défaut
-    return routesName.admin;
-  };
-
-  const firstPage = getFirstAvailablePage();
-
-  // Rediriger automatiquement vers la première page
-  return <Navigate to={firstPage} replace />;
+  }
+  
+  // Rediriger vers le premier onglet accessible (sans le tableau de bord)
+  const firstRoute = getFirstAccessibleRoute(admin);
+  return <Navigate to={firstRoute} replace />;
 }

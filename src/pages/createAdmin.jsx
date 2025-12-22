@@ -8,7 +8,7 @@ export default function CreateAdminPage() {
   return (
     <>
       <Helmet>
-        <title> Création Admin | BoozGame </title>
+        <title> Création Admin | AnnourTravel </title>
       </Helmet>
 
       <CreateAdminView />

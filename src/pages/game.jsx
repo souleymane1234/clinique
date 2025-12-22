@@ -8,7 +8,7 @@ export default function BlogPage() {
   return (
     <>
       <Helmet>
-        <title> Jeux | BoozGame </title>
+        <title> Jeux | AnnourTravel </title>
       </Helmet>
 
       <GameView />

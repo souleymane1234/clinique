@@ -8,7 +8,7 @@ export default function ReportsPage() {
   return (
     <>
       <Helmet>
-        <title> Rapports & Statistiques | CarbuGo </title>
+        <title> Rapports & Statistiques | AnnourTravel </title>
       </Helmet>
 
       <ReportsView />

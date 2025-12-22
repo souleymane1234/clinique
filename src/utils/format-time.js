@@ -35,6 +35,12 @@ export function fDateTime(date, newFormat) {
   return date ? format(new Date(date), fm, { locale: fr }) : '';
 }
 
+export function fTime(date, newFormat) {
+  const fm = newFormat || 'HH:mm';
+
+  return date ? format(new Date(date), fm, { locale: fr }) : '';
+}
+
 export function fTimestamp(date) {
   return date ? getTime(new Date(date)) : '';
 }

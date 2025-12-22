@@ -225,7 +225,7 @@ export default function SessionsView() {
   return (
     <>
       <Helmet>
-        <title> Sessions | CarbuGo </title>
+        <title> Sessions | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

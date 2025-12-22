@@ -15,8 +15,6 @@ import { useNotification } from 'src/hooks/useNotification';
 
 import { fNumber } from 'src/utils/format-number';
 
-import ConsumApi from 'src/services_workers/consum_api';
-
 import Iconify from 'src/components/iconify';
 import Chart, { useChart } from 'src/components/chart';
 
@@ -28,7 +26,7 @@ export default function AdminDashboardMainView() {
   const { contextHolder, showError } = useNotification();
 
 
-  // États pour les statistiques CarbuGo
+  // États pour les statistiques AnnourTravel
   const [carbuGoStats, setCarbuGoStats] = useState({
     userGrowth: null,
     mostActiveStations: null,
@@ -47,18 +45,21 @@ export default function AdminDashboardMainView() {
   const loadCarbuGoStats = useCallback(async (isRefresh = false) => {
     try {
       setLoadingCarbuGo(true);
-      const [userGrowthResult, stationsResult, occupationResult, serviceTimeResult] = await Promise.allSettled([
-        ConsumApi.getReportsUserGrowth(),
-        ConsumApi.getReportsMostActiveStations(5),
-        ConsumApi.getReportsActiveFilesOccupation(),
-        ConsumApi.getReportsAverageServiceTime(),
-      ]);
+      
+      // TODO: Réactiver ces appels API une fois les endpoints disponibles
+      // const [userGrowthResult, stationsResult, occupationResult, serviceTimeResult] = await Promise.allSettled([
+      //   ConsumApi.getReportsUserGrowth(),
+      //   ConsumApi.getReportsMostActiveStations(5),
+      //   ConsumApi.getReportsActiveFilesOccupation(),
+      //   ConsumApi.getReportsAverageServiceTime(),
+      // ]);
 
+      // Pour l'instant, on retourne null pour toutes les statistiques
       setCarbuGoStats({
-        userGrowth: userGrowthResult.status === 'fulfilled' && userGrowthResult.value.success ? userGrowthResult.value.data : null,
-        mostActiveStations: stationsResult.status === 'fulfilled' && stationsResult.value.success ? stationsResult.value.data : null,
-        activeFilesOccupation: occupationResult.status === 'fulfilled' && occupationResult.value.success ? occupationResult.value.data : null,
-        averageServiceTime: serviceTimeResult.status === 'fulfilled' && serviceTimeResult.value.success ? serviceTimeResult.value.data : null,
+        userGrowth: null,
+        mostActiveStations: null,
+        activeFilesOccupation: null,
+        averageServiceTime: null,
         litersDistribution: null,
       });
 

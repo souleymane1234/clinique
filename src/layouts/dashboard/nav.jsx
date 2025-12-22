@@ -4,10 +4,8 @@ import PropTypes from 'prop-types';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Drawer from '@mui/material/Drawer';
-import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
 import { alpha } from '@mui/material/styles';
-import Collapse from '@mui/material/Collapse';
 import Typography from '@mui/material/Typography';
 import ListItemButton from '@mui/material/ListItemButton';
 
@@ -16,9 +14,9 @@ import { useRouter, usePathname } from 'src/routes/hooks';
 
 import { useResponsive } from 'src/hooks/use-responsive';
 
-import Logo from 'src/assets/logo.png';
 import { apiUrlAsset } from 'src/constants/apiUrl';
 import { useAdminStore } from 'src/store/useAdminStore';
+import Logo from 'src/assets/logo-removebg-preview-3.png';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
@@ -72,16 +70,38 @@ export default function Nav({ openNav, onCloseNav }) {
 
   const renderMenu = (
     <Stack component="nav" spacing={0.5} sx={{ px: 2 }}>
-      {navConfig.map((item) => {
+      {navConfig
+        .filter((item) => item.title !== 'Tableau de bord') // Exclure le tableau de bord
+        .map((item) => {
         // Si l'item n'a pas de protection, on l'affiche pour tous
         if (!item.protected) {
           return <NavItem key={item.title} item={item} />;
         }
         // Si l'item est protégé, on vérifie si le rôle de l'admin est inclus
-        if (admin && admin.role) {
+        if (admin) {
+          // Récupérer le rôle depuis admin.role ou admin.service
+          const roleSource = admin.role || admin.service || '';
+          if (!roleSource) return null;
+          
           // Normaliser le rôle pour la comparaison (enlever les espaces, mettre en majuscules)
-          const adminRole = String(admin.role).trim().toUpperCase();
-          const protectedRoles = item.protected.map(role => String(role).trim().toUpperCase());
+          let adminRole = String(roleSource).trim().toUpperCase();
+          
+          // Gérer les cas spéciaux de normalisation
+          // "Administrateur site web" -> "ADMIN_SITE_WEB"
+          if (adminRole.includes('ADMINISTRATEUR') && adminRole.includes('SITE') && adminRole.includes('WEB')) {
+            adminRole = 'ADMIN_SITE_WEB';
+          }
+          // Remplacer les espaces et underscores pour normaliser
+          adminRole = adminRole.replace(/\s+/g, '_');
+          
+          const protectedRoles = item.protected.map(role => {
+            let normalized = String(role).trim().toUpperCase();
+            // Gérer les cas spéciaux
+            if (normalized.includes('ADMINISTRATEUR') && normalized.includes('SITE') && normalized.includes('WEB')) {
+              normalized = 'ADMIN_SITE_WEB';
+            }
+            return normalized.replace(/\s+/g, '_');
+          });
           
           // Debug: Afficher les informations pour l'item "Actions Critiques"
           if (item.title === 'Actions Critiques') {
@@ -105,34 +125,34 @@ export default function Nav({ openNav, onCloseNav }) {
     </Stack>
   );
 
-  const renderUpgrade = (
-    <Box sx={{ px: 2.5, pb: 3, mt: 10 }}>
-      <Stack alignItems="center" spacing={3} sx={{ pt: 5, borderRadius: 2, position: 'relative' }}>
-        <Box
-          component="img"
-          src="/assets/illustrations/illustration_avatar.png"
-          sx={{ width: 100, position: 'absolute', top: -50 }}
-        />
+  // const renderUpgrade = (
+  //   <Box sx={{ px: 2.5, pb: 3, mt: 10 }}>
+  //     <Stack alignItems="center" spacing={3} sx={{ pt: 5, borderRadius: 2, position: 'relative' }}>
+  //       <Box
+  //         component="img"
+  //         src="/assets/illustrations/illustration_avatar.png"
+  //         sx={{ width: 100, position: 'absolute', top: -50 }}
+  //       />
 
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="h6">Un problème ?</Typography>
+  //       <Box sx={{ textAlign: 'center' }}>
+  //         <Typography variant="h6">Un problème ?</Typography>
 
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-            Contactez le support technique
-          </Typography>
-        </Box>
+  //         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+  //           Contactez le support technique
+  //         </Typography>
+  //       </Box>
 
-        <Button
-          href="https://wa.me/+2250564250219"
-          target="_blank"
-          variant="contained"
-          color="inherit"
-        >
-          BoozTech
-        </Button>
-      </Stack>
-    </Box>
-  );
+  //       <Button
+  //         href="https://wa.me/+2250564250219"
+  //         target="_blank"
+  //         variant="contained"
+  //         color="inherit"
+  //       >
+  //         BoozTech
+  //       </Button>
+  //     </Stack>
+  //   </Box>
+  // );
 
   const renderContent = (
     <Scrollbar
@@ -155,7 +175,7 @@ export default function Nav({ openNav, onCloseNav }) {
 
       <Box sx={{ flexGrow: 1 }} />
 
-      {renderUpgrade}
+      {/* {renderUpgrade} */}
     </Scrollbar>
   );
 
@@ -204,6 +224,16 @@ Nav.propTypes = {
 // Fonction pour obtenir les éléments de sous-menu selon le titre
 function getSubMenuItems(title) {
   const subMenus = {
+    'Facturation': [
+      { title: 'Factures', path: '/facturation/factures', icon: 'eva:file-text-fill' },
+      { title: 'Factures Proforma', path: '/facturation/factures/categories', icon: 'eva:layers-fill' },
+      { title: 'Bons de sortie', path: '/facturation/bons-de-sortie', icon: 'eva:file-remove-fill' },
+      { title: 'Bilan financier', path: '/facturation/bilan', icon: 'eva:pie-chart-fill' },
+    ],
+    'Statistiques': [
+      { title: 'Statistiques Globales', path: '/statistics/global', icon: 'eva:bar-chart-2-fill' },
+      { title: 'Statistiques Clients', path: '/statistics/clients', icon: 'eva:people-fill' },
+    ],
     'Écoles': [
       { title: 'Liste des écoles', path: '/admin/schools', icon: 'eva:list-fill' },
       { title: 'Statistiques', path: '/admin/schools/stats', icon: 'eva:bar-chart-fill' },
@@ -233,6 +263,11 @@ function getSubMenuItems(title) {
     'Orientation': [
       { title: 'Questionnaires', path: '/admin/orientation/questionnaires', icon: 'eva:file-text-fill' },
       { title: 'Statistiques', path: '/admin/orientation/stats', icon: 'eva:bar-chart-fill' },
+    ],
+    'Administration du site': [
+      { title: 'Slides', path: '/admin/site/slides', icon: 'eva:image-fill' },
+      { title: 'Services', path: '/admin/site/services', icon: 'eva:settings-fill' },
+      { title: 'Logos partenaires', path: '/admin/site/partner-logos', icon: 'eva:people-fill' },
     ],
   };
   
@@ -301,7 +336,6 @@ function NavSubItem({ item, parentTitle }) {
 function NavItem({ item }) {
   const pathname = usePathname();
   const { childrenPath = [] } = item;
-  const [open, setOpen] = React.useState(false);
 
   // Vérifier si le pathname actuel correspond à l'un des chemins enfants
   const active = childrenPath.some(childPath => {
@@ -326,20 +360,12 @@ function NavItem({ item }) {
     return false;
   });
 
-  // Ouvrir automatiquement le menu si on est sur une page enfant
-  React.useEffect(() => {
-    if (active) {
-      setOpen(true);
-    }
-  }, [active]);
-
-  // Si l'item a des sous-menus définis, créer un menu déroulant
+  // Si l'item a des sous-menus définis, afficher directement les sous-menus avec tabulation
   const subMenuItems = getSubMenuItems(item.title);
   if (subMenuItems.length > 0 && childrenPath.length > 1) {
     return (
       <Box>
-        <ListItemButton
-          onClick={() => setOpen(!open)}
+        <Box
           sx={{
             minHeight: 44,
             borderRadius: 0.75,
@@ -347,13 +373,13 @@ function NavItem({ item }) {
             color: 'text.secondary',
             textTransform: 'capitalize',
             fontWeight: 'fontWeightMedium',
+            display: 'flex',
+            alignItems: 'center',
+            px: 2,
+            py: 1,
             ...(active && {
               color: 'primary.main',
               fontWeight: 'fontWeightSemiBold',
-              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              '&:hover': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16),
-              },
             }),
           }}
         >
@@ -361,19 +387,13 @@ function NavItem({ item }) {
             {item.icon}
           </Box>
           <Box component="span" sx={{ flexGrow: 1 }}>{item.title}</Box>
-          <Iconify 
-            icon={open ? 'eva:arrow-ios-upward-fill' : 'eva:arrow-ios-downward-fill'} 
-            sx={{ width: 16, height: 16 }}
-          />
-        </ListItemButton>
+        </Box>
         
-        <Collapse in={open} timeout="auto" unmountOnExit>
-          <Stack component="nav" spacing={0.5} sx={{ pl: 2 }}>
+        <Stack component="nav" spacing={0.5} sx={{ pl: 3 }}>
             {getSubMenuItems(item.title).map((subItem) => (
               <NavSubItem key={subItem.path} item={subItem} parentTitle={item.title} />
             ))}
           </Stack>
-        </Collapse>
       </Box>
     );
   }

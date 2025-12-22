@@ -6,4 +6,6 @@ export const RoleEnum = Object.freeze({
   SUPER_ADMIN: 'SUPERADMIN',
   ADMIN_PARTENAIRE: 'ADMIN_PARTENAIRE',
   ADMIN_SECOND_GESTION_PARTENAIRE: 'ADMIN_SECOND_GESTION_PARTENAIRE',
+  // Rôle pour l'administration du site web uniquement
+  ADMIN_SITE_WEB: 'ADMIN_SITE_WEB',
 });

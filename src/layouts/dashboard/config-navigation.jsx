@@ -1,4 +1,3 @@
-import { RoleEnum } from 'src/constants/role';
 import { routesName } from 'src/constants/routes';
 
 import SvgColor from 'src/components/svg-color';
@@ -14,77 +13,59 @@ const navConfig = [
     path: routesName.admin,
     childrenPath: [routesName.admin],
     icon: icon('ic_analytics'),
-    protected: [RoleEnum.SUPERADMIN, RoleEnum.ADMIN],
+    protected: ['ADMIN', 'COMMERCIAL', 'COMPTABLE'], // Administrateur, Commercial, Comptable
   },
   {
-    title: 'Administration Admins',
-    path: routesName.adminAdministrationAdmins,
-    childrenPath: [routesName.adminAdministrationAdmins],
+    title: 'Statistiques',
+    path: routesName.statisticsGlobal,
+    childrenPath: [
+      routesName.statisticsGlobal,
+      routesName.statisticsClients,
+    ],
+    icon: icon('ic_analytics'),
+    protected: ['ADMIN', 'COMPTABLE'], // Administrateur, Comptable
+  },
+  {
+    title: 'Clients',
+    path: routesName.clients,
+    childrenPath: [routesName.clients, routesName.clientDetails, routesName.unassignedClients],
     icon: icon('ic_user'),
-    protected: [RoleEnum.SUPERADMIN],
+    protected: ['ADMIN', 'COMMERCIAL'], // Administrateur, Commercial
+  },
+  {
+    title: 'Facturation',
+    path: routesName.factures,
+    childrenPath: [
+      routesName.factures,
+      routesName.factureDetails,
+      routesName.createFactureProforma,
+      routesName.facturesByCategory,
+      routesName.bonsDeSortie,
+      routesName.bonDeSortieDetails,
+      routesName.bilanFinancier,
+      routesName.bilanMensuel,
+      routesName.bilanAnnuel,
+    ],
+    icon: icon('ic_blog'),
+    protected: ['ADMIN', 'COMPTABLE'], // Administrateur, Comptable
   },
   {
     title: 'Utilisateurs',
-    path: routesName.adminUsers,
-    childrenPath: [routesName.adminUsers, routesName.adminUserDetails],
+    path: routesName.commerciaux,
+    childrenPath: [routesName.commerciaux, routesName.createCommercial, routesName.commercialDetails],
     icon: icon('ic_user'),
-    protected: [RoleEnum.SUPERADMIN, RoleEnum.ADMIN],
+    protected: ['ADMIN'], // Administrateur uniquement
   },
   {
-    title: 'Stations',
-    path: routesName.adminStations,
-    childrenPath: [routesName.adminStations, routesName.adminStationDetails],
+    title: 'Administration du site',
+    path: routesName.siteAdminSlides,
+    childrenPath: [
+      routesName.siteAdminSlides,
+      routesName.siteAdminServices,
+      routesName.siteAdminPartnerLogos,
+    ],
     icon: icon('ic_blog'),
-    protected: [RoleEnum.SUPERADMIN, RoleEnum.ADMIN, RoleEnum.STATION],
-  },
-  {
-    title: 'Sessions',
-    path: routesName.adminSessions,
-    childrenPath: [routesName.adminSessions, routesName.adminSessionDetails],
-    icon: icon('ic_blog'),
-    protected: [RoleEnum.SUPERADMIN, RoleEnum.ADMIN, RoleEnum.STATION],
-  },
-  {
-    title: 'Files Actives',
-    path: routesName.adminFileActive,
-    childrenPath: [routesName.adminFileActive, routesName.adminFileActiveBySession],
-    icon: icon('ic_blog'),
-    protected: [RoleEnum.SUPERADMIN, RoleEnum.ADMIN, RoleEnum.STATION],
-  },
-  {
-    title: 'Actions Critiques',
-    path: routesName.adminCritical,
-    childrenPath: [routesName.adminCritical],
-    icon: icon('ic_lock'),
-    protected: [RoleEnum.SUPERADMIN],
-  },
-  {
-    title: 'Configuration Système',
-    path: routesName.adminConfiguration,
-    childrenPath: [routesName.adminConfiguration],
-    icon: icon('ic_settings'),
-    protected: [RoleEnum.SUPERADMIN],
-  },
-  {
-    title: 'Rapports & Statistiques',
-    path: routesName.adminReports,
-    childrenPath: [routesName.adminReports],
-    icon: icon('ic_analytics'),
-    protected: [RoleEnum.SUPERADMIN],
-  },
-  {
-    title: 'Rôles & Permissions',
-    path: routesName.adminRolesPermissions,
-    childrenPath: [routesName.adminRolesPermissions],
-    icon: icon('ic_lock'),
-    protected: [RoleEnum.SUPERADMIN],
-  },
-  {
-    title: 'Tableau de bord Station',
-    path: routesName.admin,
-    childrenPath: [routesName.admin],
-    icon: icon('ic_analytics'),
-    protected: [RoleEnum.STATION],
+    protected: ['ADMIN', 'ADMIN_SITE_WEB'], // Administrateur et Administrateur site web
   },
 ];
 

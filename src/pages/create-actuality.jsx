@@ -8,7 +8,7 @@ export default function CreateActualityPage() {
   return (
     <>
       <Helmet>
-        <title> Création Formation | BoozGame </title>
+        <title> Création Formation | AnnourTravel </title>
       </Helmet>
 
       <CreateActualityView />

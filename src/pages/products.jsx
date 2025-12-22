@@ -8,7 +8,7 @@ export default function ProductsPage() {
   return (
     <>
       <Helmet>
-        <title> Candidats | BoozGame </title>
+        <title> Candidats | AnnourTravel </title>
       </Helmet>
 
       <ProductsView />

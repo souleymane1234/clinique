@@ -412,7 +412,7 @@ export default function RolesPermissionsView() {
   return (
     <>
       <Helmet>
-        <title> Rôles & Permissions | CarbuGo </title>
+        <title> Rôles & Permissions | AnnourTravel </title>
       </Helmet>
 
       {contextHolder}

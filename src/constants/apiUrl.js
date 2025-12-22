@@ -1,92 +1,88 @@
 // const base_url = import.meta.env.VITE_BASE_URL;
-const base_url = 'https://carbugo-dev.up.railway.app/api/v1';
+const base_url = 'http://localhost:3001';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
   // Authentication
   authentication: `${base_url}/auth/login`,
+  register: `${base_url}/auth/register`,
+  getCurrentUser: `${base_url}/auth`,
   resetPassword: `${base_url}/reset-passord`,
 
-  // Super Admin - Critical Administration Actions
-  adminCriticalKillSwitch: `${base_url}/administration/critical/kill-switch`,
-  adminCriticalPompisteBan: (pompisteId) => `${base_url}/administration/critical/pompistes/${pompisteId}/ban`,
-  adminCriticalPompisteReassign: (pompisteId) => `${base_url}/administration/critical/pompistes/${pompisteId}/reassign`,
-  adminCriticalSessionCorrectReservoir: (sessionId) => `${base_url}/administration/critical/sessions/${sessionId}/correct-reservoir`,
-  adminCriticalSessionCorrectServed: (sessionId) => `${base_url}/administration/critical/sessions/${sessionId}/correct-served`,
-  adminCriticalStationBan: (stationId) => `${base_url}/administration/critical/stations/${stationId}/ban`,
-  adminCriticalStationDelete: (stationId) => `${base_url}/administration/critical/stations/${stationId}/permanent`,
-  adminCriticalUserBan: (userId) => `${base_url}/administration/critical/users/${userId}/ban`,
-  adminCriticalUserDelete: (userId) => `${base_url}/administration/critical/users/${userId}`,
-  adminCriticalUserResetPassages: (userId) => `${base_url}/administration/critical/users/${userId}/reset-passages`,
-
-  // Super Admin - Administration Admins Management
-  adminAdministrationAdmins: `${base_url}/administration/admins`,
-  adminAdministrationAdminById: (adminId) => `${base_url}/administration/admins/${adminId}`,
-  adminAdministrationAdminActivity: (adminId) => `${base_url}/administration/admins/${adminId}/activity`,
-  adminAdministrationAdminResetPassword: (adminId) => `${base_url}/administration/admins/${adminId}/reset-password`,
-  adminAdministrationAdminStatus: (adminId) => `${base_url}/administration/admins/${adminId}/status`,
-
-  // File Active Management
-  administrationFileActiveBySession: (sessionId) => `${base_url}/administration/file-active/session/${sessionId}`,
-  administrationFileActiveUpdateStatus: (fileActiveId) => `${base_url}/administration/file-active/${fileActiveId}/status`,
-
-  // Administration - Global Configuration
-  administrationConfig: `${base_url}/administration/config`,
-  administrationConfigByKey: (key) => `${base_url}/administration/config/${key}`,
-  administrationConfigNotifications: `${base_url}/administration/config/notifications`,
-  administrationConfigPassagesLimits: `${base_url}/administration/config/passages/limits`,
-  administrationConfigQRCodeValidity: `${base_url}/administration/config/qr-code/validity`,
-  administrationConfigStationRadius: `${base_url}/administration/config/station/radius`,
-
-  // Administration - Reports & Statistics
-  administrationReportsActiveFilesOccupation: `${base_url}/administration/reports/active-files-occupation`,
-  administrationReportsAverageServiceTime: `${base_url}/administration/reports/average-service-time`,
-  administrationReportsLitersDistribution: (period) => `${base_url}/administration/reports/liters-distribution?period=${period}`,
-  administrationReportsMostActiveStations: (limit) => `${base_url}/administration/reports/most-active-stations${limit ? `?limit=${limit}` : ''}`,
-  administrationReportsRefusalExpirationRates: `${base_url}/administration/reports/refusal-expiration-rates`,
-  administrationReportsTotalPassages: (period) => `${base_url}/administration/reports/total-passages?period=${period}`,
-  administrationReportsUserGrowth: `${base_url}/administration/reports/user-growth`,
-  administrationReportsExport: `${base_url}/administration/reports/export`,
-
-  // Administration - Roles & Permissions
-  administrationRolesPermissionsMatrix: `${base_url}/administration/roles/permissions-matrix`,
-  administrationRolesUsers: `${base_url}/administration/roles/users`,
-  administrationRolesUserById: (userId) => `${base_url}/administration/roles/users/${userId}`,
-  administrationRolesUserDisconnect: (userId) => `${base_url}/administration/roles/users/${userId}/disconnect`,
-  administrationRolesUserResetPassword: (userId) => `${base_url}/administration/roles/users/${userId}/reset-password`,
-  administrationRolesUserUpdateRole: (userId) => `${base_url}/administration/roles/users/${userId}/role`,
-
-  // Stations Management
-  stations: `${base_url}/stations`,
-  stationById: (stationId) => `${base_url}/stations/${stationId}`,
-  stationCapacity: (stationId) => `${base_url}/stations/${stationId}/capacity`,
-  stationFiles: (stationId) => `${base_url}/stations/${stationId}/files`,
-  stationPompistesPerformance: (stationId) => `${base_url}/stations/${stationId}/pompistes/performance`,
-  stationSessions: (stationId) => `${base_url}/stations/${stationId}/sessions`,
-  stationPompistes: (stationId) => `${base_url}/stations/${stationId}/pompistes`,
-  stationReset: (stationId) => `${base_url}/stations/${stationId}/reset`,
-  stationStatus: (stationId) => `${base_url}/stations/${stationId}/status`,
-
-  // Users Management
+  // Users
   users: `${base_url}/users`,
-  userIncidents: (userId) => `${base_url}/users/${userId}/incidents`,
-  userPassages: (userId) => `${base_url}/users/${userId}/passages`,
-  userProfile: (userId) => `${base_url}/users/${userId}/profile`,
-  userVehicle: (userId) => `${base_url}/users/${userId}/vehicle`,
-  userUpdateRole: (userId) => `${base_url}/users/${userId}/role`,
-  userUpdateStatus: (userId) => `${base_url}/users/${userId}/status`,
+  getUserById: (userId) => `${base_url}/users/${userId}`,
+  updateUser: (id) => `${base_url}/users/${id}`,
+  deleteUser: (id) => `${base_url}/users/${id}`,
+  suspendUser: (id) => `${base_url}/users/${id}/suspend`,
 
-  // Sessions Management
-  sessions: `${base_url}/sessions`,
-  sessionsActive: `${base_url}/sessions/active`,
-  sessionById: (sessionId) => `${base_url}/sessions/${sessionId}`,
-  sessionClose: (sessionId) => `${base_url}/sessions/${sessionId}/close`,
-  sessionRefreshFile: (sessionId) => `${base_url}/sessions/${sessionId}/refresh-file`,
-  sessionResolve: (sessionId) => `${base_url}/sessions/${sessionId}/resolve`,
-  sessionUpdateCapacity: (sessionId) => `${base_url}/sessions/${sessionId}/capacity`,
-  sessionUpdateRadius: (sessionId) => `${base_url}/sessions/${sessionId}/radius`,
-  sessionUpdateStatus: (sessionId) => `${base_url}/sessions/${sessionId}/status`,
-  sessionUpdateVolumePerService: (sessionId) => `${base_url}/sessions/${sessionId}/volume-per-service`,
+  // Clients
+  clients: `${base_url}/clients`,
+  clientsUnassigned: `${base_url}/clients/unassigned`,
+  clientsWithCommercial: `${base_url}/clients/withcommercial`,
+  clientsCountByStatus: `${base_url}/clients/count-by-status`,
+  clientCheckByNumber: (numero) => `${base_url}/clients/check/${numero}`,
+  clientsAssignedToUser: (userId) => `${base_url}/clients/assigned/${userId}`,
+  clientById: (id) => `${base_url}/clients/${id}`,
+  clientSummary: (id) => `${base_url}/clients/${id}/summary`,
+  clientAssign: (id) => `${base_url}/clients/${id}/assign`,
+  clientStatus: (id) => `${base_url}/clients/${id}/status`,
+  clientSessions: (id) => `${base_url}/clients/${id}/sessions`,
+  clientActiveSession: (id) => `${base_url}/clients/${id}/active-session`,
+  clientOpenSession: (id) => `${base_url}/clients/${id}/sessions`,
+  sessionById: (sessionId) => `${base_url}/clients/sessions/${sessionId}`,
+  sessionClose: (sessionId) => `${base_url}/clients/sessions/${sessionId}/close`,
+  sessionConclusions: (sessionId) => `${base_url}/clients/sessions/${sessionId}/conclusions`,
+
+  // Facturation
+  factures: `${base_url}/facturation/factures`,
+  factureById: (id) => `${base_url}/facturation/factures/${id}`,
+  clientFactures: (clientId) => `${base_url}/facturation/clients/${clientId}/factures`,
+  facturePaiements: (id) => `${base_url}/facturation/factures/${id}/paiements`,
+  facturePdf: (id) => `${base_url}/facturation/factures/${id}/pdf`,
+  factureGeneratePdf: (id) => `${base_url}/facturation/factures/${id}/generate-pdf`,
+  paiements: `${base_url}/facturation/paiements`,
+  
+  // Finance - Bons de sortie
+  bonsDeSortie: `${base_url}/finance/bons-de-sortie`,
+  bonDeSortieById: (id) => `${base_url}/finance/bons-de-sortie/${id}`,
+  bonDeSortieStatus: (id) => `${base_url}/finance/bons-de-sortie/${id}/status`,
+  bilanMensuel: `${base_url}/finance/bilan/mensuel`,
+  bilanAnnuel: `${base_url}/finance/bilan/annuel`,
+  // Notifications
+  notifications: (userId) => `${base_url}/notifications/${userId}`,
+  notificationRead: (id) => `${base_url}/notifications/${id}/read`,
+  notificationsReadAll: (userId) => `${base_url}/notifications/users/${userId}/read-all`,
+  // Statistics
+  statisticsGlobal: `${base_url}/statistics/global`,
+  statisticsClients: `${base_url}/statistics/clients`,
+  statisticsFacturation: `${base_url}/statistics/facturation`,
+  
+  // Rendez-vous
+  rendezVousDuJour: (userId) => `${base_url}/rendez-vous/du-jour/${userId}`,
+  rendezVous: `${base_url}/rendez-vous`,
+  rendezVousById: (id) => `${base_url}/rendez-vous/${id}`,
+  reprogrammerRendezVous: (id) => `${base_url}/rendez-vous/${id}/reprogrammer`,
+  prendreRendezVous: (id) => `${base_url}/rendez-vous/${id}/prendre`,
+  
+  // Site Administration - Slides
+  slides: `${base_url}/api/slides`,
+  siteAdminSlides: `${base_url}/api/site-admin/slides`,
+  siteAdminSlideById: (id) => `${base_url}/api/site-admin/slides/${id}`,
+  siteAdminSlideUploadImage: `${base_url}/api/site-admin/slides/upload-image`,
+  siteAdminSlideToggleActive: (id) => `${base_url}/api/site-admin/slides/${id}/toggle-active`,
+  
+  // Site Administration - Services
+  siteAdminServices: `${base_url}/api/site-admin/services`,
+  siteAdminServiceById: (id) => `${base_url}/api/site-admin/services/${id}`,
+  siteAdminServiceUploadImage: `${base_url}/api/site-admin/services/upload-image`,
+  siteAdminServiceToggleActive: (id) => `${base_url}/api/site-admin/services/${id}/toggle-active`,
+  
+  // Site Administration - Partner Logos
+  siteAdminPartnerLogos: `${base_url}/api/site-admin/partner-logos`,
+  siteAdminPartnerLogoById: (id) => `${base_url}/api/site-admin/partner-logos/${id}`,
+  siteAdminPartnerLogoUpload: `${base_url}/api/site-admin/partner-logos/upload-logo`,
+  siteAdminPartnerLogoToggleActive: (id) => `${base_url}/api/site-admin/partner-logos/${id}/toggle-active`,
 };
 
 export const apiUrlAsset = {

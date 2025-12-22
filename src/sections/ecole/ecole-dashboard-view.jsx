@@ -200,7 +200,7 @@ export default function EcoleDashboardView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Tableau de bord | CarbuGo </title>
+        <title> Tableau de bord | AnnourTravel </title>
       </Helmet>
       <Container>
         <Stack spacing={4} sx={{ mb: 5 }}>

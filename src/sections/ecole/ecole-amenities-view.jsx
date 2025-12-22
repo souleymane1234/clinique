@@ -127,7 +127,7 @@ export default function EcoleAmenitiesView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Équipements | CarbuGo </title>
+        <title> Équipements | AnnourTravel </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

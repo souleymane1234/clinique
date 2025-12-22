@@ -8,7 +8,7 @@ export default function VotingPage() {
   return (
     <>
       <Helmet>
-        <title> Clients | BoozGame </title>
+        <title> Clients | AnnourTravel </title>
       </Helmet>
 
       <VotingView />

@@ -163,7 +163,7 @@ export default function EcoleFormationsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Formations | CarbuGo </title>
+        <title> Formations | AnnourTravel </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

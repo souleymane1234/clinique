@@ -75,7 +75,7 @@ export default function ApplicationDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails de la candidature | CarbuGo</title>
+        <title> Détails de la candidature | AnnourTravel</title>
       </Helmet>
 
       <Container>

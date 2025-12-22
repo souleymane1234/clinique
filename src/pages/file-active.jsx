@@ -8,7 +8,7 @@ export default function FileActivePage() {
   return (
     <>
       <Helmet>
-        <title>Gestion des Files Actives | CarbuGo</title>
+        <title>Gestion des Files Actives | AnnourTravel</title>
       </Helmet>
 
       <FileActiveView />

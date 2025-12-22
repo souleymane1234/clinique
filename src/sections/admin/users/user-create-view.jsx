@@ -3,16 +3,14 @@ import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
+import { LoadingButton } from '@mui/lab';
 import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
-import Divider from '@mui/material/Divider';
-import Checkbox from '@mui/material/Checkbox';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import InputLabel from '@mui/material/InputLabel';
 import Typography from '@mui/material/Typography';
 import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
 
 import { useRouter } from 'src/routes/hooks';
 
@@ -22,10 +20,11 @@ import ConsumApi from 'src/services_workers/consum_api';
 
 // ----------------------------------------------------------------------
 
-const ROLES = [
-  { value: 'ETUDIANT', label: 'Étudiant' },
-  { value: 'ECOLE', label: 'École' },
-  { value: 'ADMIN', label: 'Administrateur' },
+const SERVICES = [
+  { value: 'Administrateur', label: 'Administrateur' },
+  { value: 'Commercial', label: 'Commercial' },
+  { value: 'Comptable', label: 'Comptable' },
+  { value: 'Administrateur site web', label: 'Administrateur Site Web' },
 ];
 
 export default function UserCreateView() {
@@ -35,36 +34,95 @@ export default function UserCreateView() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    phoneNumber: '',
-    role: 'ETUDIANT',
-    emailVerified: true,
-    premiumActive: false,
+    firstname: '',
+    lastname: '',
+    telephone: '',
+    service: 'Commercial', // Valeur par défaut
   });
 
+  const [errors, setErrors] = useState({});
+
   const handleInputChange = (field) => (event) => {
-    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    const {value} = event.target;
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
+    // Effacer l'erreur du champ modifié
+    if (errors[field]) {
+      setErrors((prev) => ({
+        ...prev,
+        [field]: '',
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.email || !formData.email.includes('@')) {
+      newErrors.email = 'Email invalide';
+    }
+
+    if (!formData.password || formData.password.length < 6) {
+      newErrors.password = 'Le mot de passe doit contenir au moins 6 caractères';
+    }
+
+    if (!formData.firstname || formData.firstname.trim().length < 2) {
+      newErrors.firstname = 'Le prénom doit contenir au moins 2 caractères';
+    }
+
+    if (!formData.lastname || formData.lastname.trim().length < 2) {
+      newErrors.lastname = 'Le nom doit contenir au moins 2 caractères';
+    }
+
+    if (!formData.telephone || formData.telephone.trim().length < 8) {
+      newErrors.telephone = 'Le numéro de téléphone est requis (minimum 8 caractères)';
+    }
+
+    if (!formData.service) {
+      newErrors.service = 'Le service est requis';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!validateForm()) {
+      showError('Erreur de validation', 'Veuillez corriger les erreurs dans le formulaire');
+      return;
+    }
+
     setLoading(true);
 
     try {
+      console.log('📝 Création utilisateur - Données:', formData);
+
       const result = await ConsumApi.createUser(formData);
 
+      console.log('📥 Résultat création utilisateur:', result);
+
       if (result.success) {
-        showSuccess('Utilisateur créé avec succès');
-        router.push('/admin/users');
+        showSuccess('Succès', 'Utilisateur créé avec succès');
+        // Rediriger vers la liste des utilisateurs après un court délai
+        setTimeout(() => {
+          router.push('/admin/users');
+        }, 1000);
+      } else if (result.status === 400) {
+        // Gérer les erreurs spécifiques
+        const errorMessage = result.message || 'Données invalides ou email déjà utilisé';
+        showError('Erreur de validation', errorMessage);
+      } else if (result.status === 404) {
+        showError('Endpoint non disponible', 'L\'endpoint /auth/register n\'est pas disponible. Vérifiez que le serveur backend est démarré.');
       } else {
-        showError(result.message || 'Erreur lors de la création de l\'utilisateur');
+        showError('Erreur', result.message || 'Erreur lors de la création de l\'utilisateur');
       }
     } catch (error) {
-      console.error('Error creating user:', error);
-      showError('Erreur lors de la création de l\'utilisateur');
+      console.error('❌ Exception lors de la création:', error);
+      showError('Erreur', error.message || 'Une erreur inattendue est survenue');
     } finally {
       setLoading(false);
     }
@@ -81,77 +139,113 @@ export default function UserCreateView() {
       </Box>
 
       <Card sx={{ p: 3 }}>
-        <Box component="form" onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={3}>
+            {/* Prénom et Nom */}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 fullWidth
-                label="Email"
-                value={formData.email}
-                onChange={handleInputChange('email')}
+                id="firstname"
+                name="firstname"
+                label="Prénom"
+                value={formData.firstname}
+                onChange={handleInputChange('firstname')}
+                error={!!errors.firstname}
+                helperText={errors.firstname}
                 required
-                type="email"
+                autoComplete="given-name"
               />
               <TextField
                 fullWidth
-                label="Mot de passe"
-                value={formData.password}
-                onChange={handleInputChange('password')}
+                id="lastname"
+                name="lastname"
+                label="Nom"
+                value={formData.lastname}
+                onChange={handleInputChange('lastname')}
+                error={!!errors.lastname}
+                helperText={errors.lastname}
                 required
-                type="password"
+                autoComplete="family-name"
               />
             </Stack>
 
+            {/* Email et Mot de passe */}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 fullWidth
-                label="Numéro de téléphone"
-                value={formData.phoneNumber}
-                onChange={handleInputChange('phoneNumber')}
-                placeholder="+225 07 00 00 00 01"
+                id="email"
+                name="email"
+                label="Email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange('email')}
+                error={!!errors.email}
+                helperText={errors.email}
+                required
+                autoComplete="email"
               />
-              <FormControl fullWidth>
-                <InputLabel>Rôle</InputLabel>
-                <Select value={formData.role} label="Rôle" onChange={handleInputChange('role')}>
-                  {ROLES.map((role) => (
-                    <MenuItem key={role.value} value={role.value}>
-                      {role.label}
+              <TextField
+                fullWidth
+                id="password"
+                name="password"
+                label="Mot de passe"
+                type="password"
+                value={formData.password}
+                onChange={handleInputChange('password')}
+                error={!!errors.password}
+                helperText={errors.password}
+                required
+                autoComplete="new-password"
+              />
+            </Stack>
+
+            {/* Téléphone et Service */}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                id="telephone"
+                name="telephone"
+                label="Numéro de téléphone"
+                value={formData.telephone}
+                onChange={handleInputChange('telephone')}
+                error={!!errors.telephone}
+                helperText={errors.telephone || 'Format: +221771234567'}
+                placeholder="+221771234567"
+                required
+                autoComplete="tel"
+              />
+              <FormControl fullWidth required error={!!errors.service}>
+                <InputLabel id="service-label">Service</InputLabel>
+                <Select
+                  id="service"
+                  name="service"
+                  labelId="service-label"
+                  value={formData.service}
+                  label="Service"
+                  onChange={handleInputChange('service')}
+                >
+                  {SERVICES.map((service) => (
+                    <MenuItem key={service.value} value={service.value}>
+                      {service.label}
                     </MenuItem>
                   ))}
                 </Select>
+                {errors.service && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
+                    {errors.service}
+                  </Typography>
+                )}
               </FormControl>
             </Stack>
 
-            <Divider />
-
-            <Stack direction="row" spacing={2}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={formData.emailVerified}
-                    onChange={handleInputChange('emailVerified')}
-                  />
-                }
-                label="Email vérifié"
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={formData.premiumActive}
-                    onChange={handleInputChange('premiumActive')}
-                  />
-                }
-                label="Premium actif"
-              />
-            </Stack>
-
-            <Stack direction="row" spacing={2} justifyContent="flex-end">
+            {/* Boutons d'action */}
+            <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 2 }}>
               <Button variant="outlined" onClick={() => router.back()} disabled={loading}>
                 Annuler
               </Button>
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? 'Création...' : 'Créer l&apos;utilisateur'}
-              </Button>
+              <LoadingButton type="submit" variant="contained" loading={loading}>
+                Créer l&apos;utilisateur
+              </LoadingButton>
             </Stack>
           </Stack>
         </Box>

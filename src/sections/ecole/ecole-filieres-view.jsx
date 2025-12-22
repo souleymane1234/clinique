@@ -136,7 +136,7 @@ export default function EcoleFilieresView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Filières d&apos;orientation | CarbuGo </title>
+        <title> Filières d&apos;orientation | AnnourTravel </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
