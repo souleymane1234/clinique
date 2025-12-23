@@ -95,11 +95,19 @@ export default function UnassignedClientsView() {
       // Obtenir tous les utilisateurs et filtrer par service "Commercial"
       const result = await ConsumApi.getUsers();
       if (result.success && Array.isArray(result.data)) {
-        // Filtrer uniquement les utilisateurs avec le service "Commercial"
+        // Filtrer commerciaux + admins (rôle ou service)
         const commerciauxList = result.data
           .filter((user) => {
-            const service = (user.service || '').trim();
-            return service === 'Commercial' || service === 'commercial';
+            const service = (user.service || '').trim().toLowerCase();
+            const role = (user.role || '').trim().toUpperCase();
+            return (
+              service === 'commercial' ||
+              service === 'commerciale' ||
+              service.includes('commercial') ||
+              service.includes('admin') ||
+              role.startsWith('ADMIN') ||
+              role === 'SUPERADMIN'
+            );
           })
           .map((commercial) => {
             const firstName = commercial.firstname || commercial.firstName || '';

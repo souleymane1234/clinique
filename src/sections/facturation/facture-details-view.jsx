@@ -157,14 +157,25 @@ export default function FactureDetailsView() {
   const handleDownloadPdf = async () => {
     try {
       const result = await ConsumApi.downloadFacturePdf(factureId);
-      if (result.success) {
-        showSuccess('Succès', 'PDF téléchargé avec succès');
+      if (!result.success) {
+        showError('Erreur', result.message || 'Impossible d’afficher le PDF');
+        return;
+      }
+
+      // Ouvrir le PDF dans un nouvel onglet au lieu de télécharger
+      if (result.data instanceof Blob) {
+        const url = window.URL.createObjectURL(result.data);
+        window.open(url, '_blank');
+        // Nettoyer l'URL après un délai
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 1000);
       } else {
-        showError('Erreur', result.message || 'Impossible de télécharger le PDF');
+        showError('Erreur', 'PDF non disponible');
       }
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      showError('Erreur', 'Impossible de télécharger le PDF');
+      showError('Erreur', 'Impossible d’afficher le PDF');
     }
   };
 
@@ -214,7 +225,7 @@ export default function FactureDetailsView() {
   if (!facture) {
     return (
       <Box sx={{ width: '100%', px: 3 }}>
-        <Alert severity="error">Facture non trouvée</Alert>
+        <Alert severity="error">Reçu non trouvé</Alert>
       </Box>
     );
   }
@@ -226,7 +237,7 @@ export default function FactureDetailsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Facture {facture.numeroFacture} | Annour Travel </title>
+        <title>{facture?.numeroFacture ? `Reçu ${facture.numeroFacture} | Annour Travel` : 'Reçu | Annour Travel'}</title>
       </Helmet>
 
       <Box sx={{ width: '100%', px: { xs: 2, sm: 3, md: 4, lg: 5 }, py: 3 }}>
@@ -240,7 +251,7 @@ export default function FactureDetailsView() {
               <Box sx={{ flex: 1 }}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} mb={1}>
                   <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-                    Facture {facture.numeroFacture || `#${facture.id.slice(0, 8)}`}
+                    Reçu {facture.numeroFacture || `#${facture.id.slice(0, 8)}`}
                   </Typography>
                   <Chip
                     label={statusText[facture.status] || facture.status}
@@ -269,9 +280,9 @@ export default function FactureDetailsView() {
                 startIcon={<Iconify icon="solar:download-bold" />}
                 onClick={handleDownloadPdf}
               >
-                Télécharger PDF
+                Voir le reçu
               </Button>
-              <Button
+              {/* <Button
                 variant="outlined"
                 fullWidth
                 sx={{ width: { xs: '100%', sm: 'auto' } }}
@@ -279,7 +290,7 @@ export default function FactureDetailsView() {
                 onClick={handleGeneratePdf}
               >
                 Régénérer PDF
-              </Button>
+              </Button> */}
               {facture.status !== 'paid' && (
                 <Button
                   variant="contained"

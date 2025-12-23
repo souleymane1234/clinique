@@ -39,6 +39,7 @@ import {
 } from '@mui/material';
 
 import { useRouter } from 'src/routes/hooks';
+import { useAdminStore } from 'src/store/useAdminStore';
 
 import { useNotification } from 'src/hooks/useNotification';
 
@@ -90,6 +91,13 @@ const FACTURE_STATUS_COLORS = {
   overdue: 'error',
 };
 
+const STATUS_OPTIONS = [
+  { value: 'lead', label: 'Lead' },
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'client', label: 'Client' },
+  { value: 'archived', label: 'Archivé' },
+];
+
 const base_url = 'http://localhost:3001';
 
 const getDocumentUrl = (url) => {
@@ -102,6 +110,7 @@ export default function ClientDetailsView() {
   const { id: clientId } = useParams();
   const router = useRouter();
   const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+  const { admin } = useAdminStore();
 
   const [loading, setLoading] = useState(true);
   const [client, setClient] = useState(null);
@@ -144,6 +153,25 @@ export default function ClientDetailsView() {
     open: false,
     loading: false,
     userId: '',
+  });
+
+  // Dialog édition client
+  const [editClientDialog, setEditClientDialog] = useState({
+    open: false,
+    loading: false,
+    formData: {
+      nom: '',
+      numero: '',
+      email: '',
+      service: '',
+      commentaire: '',
+      status: 'lead',
+    },
+  });
+
+  const [deleteClientDialog, setDeleteClientDialog] = useState({
+    open: false,
+    loading: false,
   });
 
   const [commerciaux, setCommerciaux] = useState([]);
@@ -216,11 +244,19 @@ export default function ClientDetailsView() {
       // Obtenir tous les utilisateurs et filtrer par service "Commercial"
       const result = await ConsumApi.getUsers();
       if (result.success && Array.isArray(result.data)) {
-        // Filtrer uniquement les utilisateurs avec le service "Commercial"
+        // Filtrer commerciaux + admins (rôle ou service)
         const commerciauxList = result.data
           .filter((user) => {
-            const service = (user.service || '').trim();
-            return service === 'Commercial' || service === 'commercial';
+            const service = (user.service || '').trim().toLowerCase();
+            const role = (user.role || '').trim().toUpperCase();
+            return (
+              service === 'commercial' ||
+              service === 'commerciale' ||
+              service.includes('commercial') ||
+              service.includes('admin') ||
+              role.startsWith('ADMIN') ||
+              role === 'SUPERADMIN'
+            );
           })
           .map((commercial) => {
             const firstName = commercial.firstname || commercial.firstName || '';
@@ -460,6 +496,96 @@ export default function ClientDetailsView() {
     if (mimeType?.includes('word')) return 'solar:file-bold';
     if (mimeType?.includes('excel') || mimeType?.includes('spreadsheet')) return 'solar:file-bold';
     return 'solar:document-bold';
+  };
+
+  const openEditClientDialog = () => {
+    if (!client) return;
+    setEditClientDialog({
+      open: true,
+      loading: false,
+      formData: {
+        nom: client.nom || '',
+        numero: client.numero || '',
+        email: client.email || '',
+        service: client.service || '',
+        commentaire: client.commentaire || '',
+        status: client.status || client.statut || 'lead',
+      },
+    });
+  };
+
+  const handleUpdateClientInfo = async () => {
+    if (!clientId) return;
+    const { nom, numero, email, service, commentaire, status } = editClientDialog.formData;
+
+    if (!nom?.trim() || !numero?.trim()) {
+      showError('Erreur', 'Le nom et le numéro sont obligatoires');
+      return;
+    }
+
+    setEditClientDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      const result = await ConsumApi.updateClient(clientId, {
+        nom,
+        numero,
+        email,
+        service,
+        commentaire,
+        status,
+      });
+
+      const processed = showApiResponse(result, {
+        successTitle: 'Client mis à jour',
+        errorTitle: 'Erreur de mise à jour',
+      });
+
+      if (processed.success) {
+        // Toujours recharger les données complètes pour garder tout en cohérence
+        await loadClientData();
+        setEditClientDialog({
+          open: false,
+          loading: false,
+          formData: { nom: '', numero: '', email: '', service: '', commentaire: '', status: 'lead' },
+        });
+      } else {
+        setEditClientDialog((prev) => ({ ...prev, loading: false }));
+      }
+    } catch (error) {
+      console.error('Error updating client:', error);
+      showError('Erreur', 'Impossible de mettre à jour le client');
+      setEditClientDialog((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const canDeleteClient = () => {
+    const role = (admin?.role || '').toUpperCase();
+    const service = (admin?.service || '').toLowerCase();
+    return role === 'SUPERADMIN' || role === 'ADMIN' || service.includes('admin');
+  };
+
+  const handleDeleteClient = async () => {
+    if (!clientId) return;
+
+    setDeleteClientDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      const result = await ConsumApi.deleteClient(clientId);
+      const processed = showApiResponse(result, {
+        successTitle: 'Client supprimé',
+        errorTitle: 'Suppression impossible',
+      });
+
+      if (processed.success) {
+        showSuccess('Succès', 'Client supprimé avec succès');
+        setDeleteClientDialog({ open: false, loading: false });
+        router.push('/clients');
+      } else {
+        setDeleteClientDialog((prev) => ({ ...prev, loading: false }));
+      }
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      showError('Erreur', 'Impossible de supprimer le client');
+      setDeleteClientDialog((prev) => ({ ...prev, loading: false }));
+    }
   };
 
 
@@ -733,7 +859,7 @@ export default function ClientDetailsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Client {client.nom} | Annour Travel </title>
+        <title>{client?.nom ? `Client ${client.nom} | Annour Travel` : 'Client | Annour Travel'}</title>
       </Helmet>
 
       <Container maxWidth="xl">
@@ -804,29 +930,31 @@ export default function ClientDetailsView() {
               >
                 Modifier le statut
               </Button>
-              <Button
-                variant={client?.assignedTo ? 'outlined' : 'contained'}
-                color={client?.assignedTo ? 'primary' : 'warning'}
-                startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
-                onClick={async () => {
-                  // Charger les commerciaux si pas encore chargés
-                  if (commerciaux.length === 0 && !loadingCommerciaux) {
-                    await loadCommerciaux();
-                  }
-                  // Pré-remplir avec le commercial actuel si déjà assigné
-                  if (client?.assignedTo) {
-                    const commercialId =
-                      typeof client.assignedTo === 'object' && client.assignedTo !== null
-                        ? client.assignedTo.id || client.assignedTo.userId
-                        : client.assignedTo;
-                    setAssignDialog({ open: true, loading: false, userId: commercialId || '' });
-                  } else {
+              {!client?.assignedTo && (
+                <Button
+                  variant="contained"
+                  color="warning"
+                  startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
+                  onClick={async () => {
+                    if (commerciaux.length === 0 && !loadingCommerciaux) {
+                      await loadCommerciaux();
+                    }
                     setAssignDialog({ open: true, loading: false, userId: '' });
-                  }
-                }}
-              >
-                {client?.assignedTo ? 'Réassigner' : 'Assigner'}
-              </Button>
+                  }}
+                >
+                  Assigner
+                </Button>
+              )}
+              {canDeleteClient() && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
+                  onClick={() => setDeleteClientDialog({ open: true, loading: false })}
+                >
+                  Supprimer
+                </Button>
+              )}
               {activeSession ? (
                 <Button
                   variant="outlined"
@@ -1348,9 +1476,17 @@ export default function ClientDetailsView() {
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
               <Card sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Informations de Contact
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                  <Typography variant="h6">Informations de Contact</Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Iconify icon="solar:pen-bold" />}
+                    onClick={openEditClientDialog}
+                  >
+                    Modifier
+                  </Button>
+                </Stack>
                 <Divider sx={{ mb: 3 }} />
                 <Stack spacing={2.5}>
                   <Box>
@@ -1682,9 +1818,7 @@ export default function ClientDetailsView() {
             <Stack direction="row" spacing={2} alignItems="center">
               <Iconify icon="solar:user-check-rounded-bold" width={24} />
               <Box>
-                <Typography variant="h6">
-                  {client?.assignedTo ? 'Réassigner le client' : 'Assigner le client'}
-                </Typography>
+                <Typography variant="h6">Assigner le client</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {client?.nom}
                 </Typography>
@@ -1793,7 +1927,161 @@ export default function ClientDetailsView() {
               disabled={!assignDialog.userId.trim()}
               startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
             >
-              {client?.assignedTo ? 'Réassigner' : 'Assigner'}
+              Assigner
+            </LoadingButton>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialog éditer client */}
+        <Dialog
+          open={editClientDialog.open}
+          onClose={() =>
+            setEditClientDialog({
+              open: false,
+              loading: false,
+              formData: { nom: '', numero: '', email: '', service: '', commentaire: '', status: 'lead' },
+            })
+          }
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Modifier le client</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <TextField
+                label="Nom *"
+                fullWidth
+                value={editClientDialog.formData.nom}
+                onChange={(e) =>
+                  setEditClientDialog({
+                    ...editClientDialog,
+                    formData: { ...editClientDialog.formData, nom: e.target.value },
+                  })
+                }
+              />
+              <TextField
+                label="Numéro *"
+                fullWidth
+                value={editClientDialog.formData.numero}
+                onChange={(e) =>
+                  setEditClientDialog({
+                    ...editClientDialog,
+                    formData: { ...editClientDialog.formData, numero: e.target.value },
+                  })
+                }
+              />
+              <TextField
+                label="Email (optionnel)"
+                fullWidth
+                type="email"
+                value={editClientDialog.formData.email}
+                onChange={(e) =>
+                  setEditClientDialog({
+                    ...editClientDialog,
+                    formData: { ...editClientDialog.formData, email: e.target.value },
+                  })
+                }
+              />
+              <TextField
+                label="Service"
+                fullWidth
+                value={editClientDialog.formData.service}
+                onChange={(e) =>
+                  setEditClientDialog({
+                    ...editClientDialog,
+                    formData: { ...editClientDialog.formData, service: e.target.value },
+                  })
+                }
+                placeholder="Ex: Visa Canada"
+              />
+              <TextField
+                label="Commentaire"
+                fullWidth
+                multiline
+                rows={3}
+                value={editClientDialog.formData.commentaire}
+                onChange={(e) =>
+                  setEditClientDialog({
+                    ...editClientDialog,
+                    formData: { ...editClientDialog.formData, commentaire: e.target.value },
+                  })
+                }
+              />
+              <FormControl fullWidth>
+                <InputLabel>Statut</InputLabel>
+                <Select
+                  value={editClientDialog.formData.status}
+                  label="Statut"
+                  onChange={(e) =>
+                    setEditClientDialog({
+                      ...editClientDialog,
+                      formData: { ...editClientDialog.formData, status: e.target.value },
+                    })
+                  }
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() =>
+                setEditClientDialog({
+                  open: false,
+                  loading: false,
+                  formData: { nom: '', numero: '', email: '', service: '', commentaire: '', status: 'lead' },
+                })
+              }
+              disabled={editClientDialog.loading}
+            >
+              Annuler
+            </Button>
+            <LoadingButton
+              variant="contained"
+              onClick={handleUpdateClientInfo}
+              loading={editClientDialog.loading}
+              startIcon={<Iconify icon="solar:pen-bold" />}
+            >
+              Enregistrer
+            </LoadingButton>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialog supprimer client */}
+        <Dialog
+          open={deleteClientDialog.open}
+          onClose={() => setDeleteClientDialog({ open: false, loading: false })}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Supprimer le client</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography>
+                Cette action supprimera le client s&apos;il n&apos;a pas de sessions, factures ou paiements associés.
+              </Typography>
+              <Alert severity="warning">
+                Vérifiez qu&apos;aucune session/facture/paiement n&apos;est lié à ce client avant de confirmer.
+              </Alert>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteClientDialog({ open: false, loading: false })} disabled={deleteClientDialog.loading}>
+              Annuler
+            </Button>
+            <LoadingButton
+              color="error"
+              variant="contained"
+              onClick={handleDeleteClient}
+              loading={deleteClientDialog.loading}
+              startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
+            >
+              Supprimer
             </LoadingButton>
           </DialogActions>
         </Dialog>

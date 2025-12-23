@@ -113,12 +113,12 @@ export default function UserCreateView() {
         }, 1000);
       } else if (result.status === 400) {
         // Gérer les erreurs spécifiques
-        const errorMessage = result.message || 'Données invalides ou email déjà utilisé';
-        showError('Erreur de validation', errorMessage);
-      } else if (result.status === 404) {
-        showError('Endpoint non disponible', 'L\'endpoint /auth/register n\'est pas disponible. Vérifiez que le serveur backend est démarré.');
-      } else {
-        showError('Erreur', result.message || 'Erreur lors de la création de l\'utilisateur');
+          const errorMessage = result.message || 'Données invalides ou email déjà utilisé';
+          showError('Erreur de validation', errorMessage);
+        } else if (result.status === 404) {
+          showError('Endpoint non disponible', 'L\'endpoint /auth/register n\'est pas disponible. Vérifiez que le serveur backend est démarré.');
+        } else {
+          showError('Erreur', result.message || 'Erreur lors de la création de l\'utilisateur');
       }
     } catch (error) {
       console.error('❌ Exception lors de la création:', error);

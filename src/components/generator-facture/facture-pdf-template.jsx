@@ -292,7 +292,8 @@ const styles = StyleSheet.create({
 
 // Composant PDF de la facture
 const FacturePdfDocument = ({ facture }) => {
-  const isProforma = facture.type === 'proforma';
+  // Déterminer si c'est une proforma (seulement ce cas garde le cachet)
+  const isProforma = facture.type === 'proforma' || facture.invoiceType === 'proforma';
   const items = facture.items || [];
   
   // Utiliser les images en base64 si disponibles, sinon utiliser les URLs
@@ -341,7 +342,7 @@ const FacturePdfDocument = ({ facture }) => {
         <View style={styles.content}>
           {/* Titre */}
           <Text style={styles.invoiceTitle}>
-            {isProforma ? 'FACTURE PROFORMA' : 'FACTURE'}
+            {isProforma ? 'FACTURE PROFORMA' : 'REÇU'}
           </Text>
           {isProforma && (
             <Text style={styles.invoiceSubtitle}>
@@ -481,8 +482,8 @@ const FacturePdfDocument = ({ facture }) => {
 
         </View>
 
-        {/* Cachet en bas à droite */}
-        {cachetImageSrc && (
+        {/* Cachet en bas à droite (uniquement pour proforma) */}
+        {isProforma && cachetImageSrc && (
           <View style={styles.cachetContainer}>
             <Image
               src={cachetImageSrc}
@@ -507,7 +508,7 @@ const FacturePdfDocument = ({ facture }) => {
             Orange Money / Wave : 0789244760
           </Text>
           <Text style={styles.footerTextBold}>
-            RIB : CI93 CI16 6010 2301 0346 5241 0114
+            RIB CORIS BANK : 01023   010346524101    14
           </Text>
         </View>
       </Page>

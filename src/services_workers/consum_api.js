@@ -356,14 +356,66 @@ export default class ConsumApi {
 
   // Créer un nouveau client
   static async createClient({ nom, numero, email, service, commentaire, status }) {
-    return this._authenticatedRequest('POST', apiUrl.clients, {
-      nom,
-      numero,
-      email,
-      service,
-      commentaire,
-      status
-    });
+    // Construire le payload en évitant d'envoyer un email vide (optionnel)
+    const payload = {
+      nom: nom?.trim() || '',
+      numero: numero?.trim() || '',
+      status: status || 'lead',
+    };
+
+    if (email && email.trim()) {
+      payload.email = email.trim();
+    }
+    if (service) {
+      payload.service = service;
+    }
+    if (commentaire && commentaire.trim()) {
+      payload.commentaire = commentaire.trim();
+    }
+
+    return this._authenticatedRequest('POST', apiUrl.clients, payload);
+  }
+
+  // Mettre à jour un client (seuls les champs fournis sont modifiés)
+  static async updateClient(id, { nom, numero, email, service, commentaire, status } = {}) {
+    const updateData = {};
+
+    const nomTrim = nom?.trim();
+    const numeroTrim = numero?.trim();
+    const emailTrim = email?.trim();
+    const commentaireTrim = commentaire?.trim();
+
+    if (nom !== undefined && nomTrim) updateData.nom = nomTrim;
+    if (numero !== undefined && numeroTrim) updateData.numero = numeroTrim;
+    if (status !== undefined && status) updateData.status = status;
+
+    // Email optionnel : l'envoyer uniquement s'il est non vide, ou explicitement null pour l'effacer
+    if (email !== undefined) {
+      if (emailTrim) {
+        updateData.email = emailTrim;
+      } else {
+        updateData.email = null; // autoriser la suppression de l'email
+      }
+    }
+
+    if (service !== undefined && service) updateData.service = service;
+    if (commentaire !== undefined && commentaireTrim) updateData.commentaire = commentaireTrim;
+
+    // Éviter d'envoyer un payload vide
+    if (Object.keys(updateData).length === 0) {
+      return {
+        success: false,
+        message: 'Aucune donnée à mettre à jour',
+        errors: [],
+      };
+    }
+
+    return this._authenticatedRequest('PATCH', apiUrl.updateClient(id), updateData);
+  }
+
+  // Supprimer un client
+  static async deleteClient(id) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteClient(id));
   }
 
   // Obtenir tous les clients
@@ -408,7 +460,8 @@ export default class ConsumApi {
 
   // Assigner un client à un commercial
   static async assignClient(id, userId) {
-    return this._authenticatedRequest('POST', apiUrl.clientAssign(id), { userId });
+    // Compat: certains backends attendent "userId", d'autres "assignedTo"
+    return this._authenticatedRequest('POST', apiUrl.clientAssign(id), { userId, assignedTo: userId });
   }
 
   // Mettre à jour le statut d'un client

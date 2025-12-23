@@ -1,6 +1,6 @@
 // const base_url = import.meta.env.VITE_BASE_URL;
 const base_url = 'https://api.annour-travel.com';
-// const base_url = 'http://localhost:3001';
+// const base_url = 'http://localhost:3010';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
@@ -26,6 +26,8 @@ export const apiUrl = {
   clientCheckByNumber: (numero) => `${base_url}/clients/check/${numero}`,
   clientsAssignedToUser: (userId) => `${base_url}/clients/assigned/${userId}`,
   clientById: (id) => `${base_url}/clients/${id}`,
+  updateClient: (id) => `${base_url}/clients/${id}`,
+  deleteClient: (id) => `${base_url}/clients/${id}`,
   clientSummary: (id) => `${base_url}/clients/${id}/summary`,
   clientAssign: (id) => `${base_url}/clients/${id}/assign`,
   clientStatus: (id) => `${base_url}/clients/${id}/status`,

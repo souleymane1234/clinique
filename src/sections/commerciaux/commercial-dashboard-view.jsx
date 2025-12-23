@@ -378,16 +378,16 @@ export default function CommercialDashboardView() {
                       </TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
-                          {rdv.clientId && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              startIcon={<Iconify icon="solar:user-bold" width={16} />}
-                              onClick={() => handleViewClient(rdv.clientId)}
-                            >
-                              Voir client
-                            </Button>
-                          )}
+                        {rdv.clientId && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<Iconify icon="solar:user-bold" width={16} />}
+                            onClick={() => handleViewClient(rdv.clientId)}
+                          >
+                            Voir client
+                          </Button>
+                        )}
                           {rdv.status !== 'completed' && (
                             <>
                               <Button
