@@ -54,7 +54,7 @@ const navConfig = [
       routesName.bilanAnnuel,
     ],
     icon: icon('ic_blog'),
-    protected: ['ADMIN', 'COMPTABLE', 'GERANT'], // Administrateur, Comptable, Gérant
+    protected: ['ADMIN', 'COMPTABLE', 'GERANT', 'COMMERCIAL'], // Administrateur, Comptable, Gérant, Commercial
   },
   {
     title: 'Utilisateurs',

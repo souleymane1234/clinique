@@ -227,10 +227,10 @@ function getSubMenuItems(title, adminRole = null) {
   
   const subMenus = {
     'Facturation': [
-      { title: 'Reçu', path: '/facturation/factures', icon: 'eva:file-text-fill' },
+      { title: 'Reçu', path: '/facturation/factures', icon: 'eva:file-text-fill', restrictedRoles: ['COMMERCIAL'] },
       { title: 'Factures Proforma', path: '/facturation/factures/categories', icon: 'eva:layers-fill' },
-      { title: 'Bons de sortie', path: '/facturation/bons-de-sortie', icon: 'eva:file-remove-fill' },
-      { title: 'Bilan financier', path: '/facturation/bilan', icon: 'eva:pie-chart-fill', restrictedRoles: ['GERANT'] },
+      { title: 'Bons de sortie', path: '/facturation/bons-de-sortie', icon: 'eva:file-remove-fill', restrictedRoles: ['COMMERCIAL'] },
+      { title: 'Bilan financier', path: '/facturation/bilan', icon: 'eva:pie-chart-fill', restrictedRoles: ['GERANT', 'COMMERCIAL'] },
     ],
     'Statistiques': [
       { title: 'Statistiques Globales', path: '/statistics/global', icon: 'eva:bar-chart-2-fill', restrictedRoles: ['GERANT'] },
