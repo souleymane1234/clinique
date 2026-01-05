@@ -13,7 +13,14 @@ const navConfig = [
     path: routesName.admin,
     childrenPath: [routesName.admin],
     icon: icon('ic_analytics'),
-    protected: ['ADMIN', 'COMMERCIAL', 'COMPTABLE', 'GERANT'], // Administrateur, Commercial, Comptable, Gérant
+    protected: ['ADMIN', 'COMPTABLE', 'GERANT'], // Administrateur, Comptable, Gérant
+  },
+  {
+    title: 'Dashboard',
+    path: routesName.commercialDashboard,
+    childrenPath: [routesName.commercialDashboard],
+    icon: icon('ic_analytics'),
+    protected: ['COMMERCIAL'], // Commercial uniquement
   },
   {
     title: 'Statistiques',

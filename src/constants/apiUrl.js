@@ -1,6 +1,6 @@
 // const base_url = import.meta.env.VITE_BASE_URL;
-const base_url = 'https://api.annour-travel.com';
-// const base_url = 'http://localhost:3010';
+// const base_url = 'https://api.annour-travel.com';
+const base_url = 'http://localhost:3010';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
