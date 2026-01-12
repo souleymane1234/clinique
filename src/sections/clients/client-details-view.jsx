@@ -623,7 +623,7 @@ export default function ClientDetailsView() {
         successTitle: 'Session ouverte',
         errorTitle: 'Erreur',
       });
-
+  
       if (processed.success) {
         showSuccess('Succès', 'Session ouverte avec succès');
         setOpenSessionDialog({ open: false, loading: false, service: '' });
@@ -759,13 +759,18 @@ export default function ClientDetailsView() {
 
     setAssignDialog(prev => ({ ...prev, loading: true }));
     try {
+      const isReassignment = !!client?.assignedTo;
       const result = await ConsumApi.assignClient(clientId, assignDialog.userId);
       const processed = showApiResponse(result, {
-        successTitle: 'Client assigné',
+        successTitle: isReassignment ? 'Client réassigné' : 'Client assigné',
         errorTitle: 'Erreur',
       });
 
       if (processed && processed.success) {
+        const successMessage = isReassignment 
+          ? 'Client réassigné avec succès'
+          : 'Client assigné avec succès';
+        showSuccess('Succès', successMessage);
         setAssignDialog({ open: false, loading: false, userId: '' });
         await loadClientData();
         // Si on venait d'essayer d'ouvrir une session, rouvrir le dialog
@@ -777,7 +782,10 @@ export default function ClientDetailsView() {
       }
     } catch (error) {
       console.error('Error assigning client:', error);
-      showError('Erreur', 'Impossible d\'assigner le client');
+      const errorMessage = client?.assignedTo 
+        ? 'Impossible de réassigner le client'
+        : 'Impossible d\'assigner le client';
+      showError('Erreur', errorMessage);
       setAssignDialog(prev => ({ ...prev, loading: false }));
     } 
   };
@@ -938,21 +946,19 @@ export default function ClientDetailsView() {
               >
                 Modifier le statut
               </Button>
-              {!client?.assignedTo && (
-                <Button
-                  variant="contained"
-                  color="warning"
-                  startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
-                  onClick={async () => {
-                    if (commerciaux.length === 0 && !loadingCommerciaux) {
-                      await loadCommerciaux();
-                    }
+              <Button
+                variant="contained"
+                color="warning"
+                startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
+                onClick={async () => {
+                  if (commerciaux.length === 0 && !loadingCommerciaux) {
+                    await loadCommerciaux();
+                  }
                     setAssignDialog({ open: true, loading: false, userId: '' });
-                  }}
-                >
-                  Assigner
-                </Button>
-              )}
+                }}
+              >
+                {client?.assignedTo ? 'Réassigner' : 'Assigner'}
+              </Button>
               {canDeleteClient() && (
                 <Button
                   variant="outlined"
@@ -1826,7 +1832,9 @@ export default function ClientDetailsView() {
             <Stack direction="row" spacing={2} alignItems="center">
               <Iconify icon="solar:user-check-rounded-bold" width={24} />
               <Box>
-                <Typography variant="h6">Assigner le client</Typography>
+                <Typography variant="h6">
+                  {client?.assignedTo ? 'Réassigner le client' : 'Assigner le client'}
+                </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {client?.nom}
                 </Typography>
@@ -1847,6 +1855,9 @@ export default function ClientDetailsView() {
                       <Typography variant="body2" color="text.secondary">
                         {getCommercialName(client.assignedTo)}
                       </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                        Vous pouvez réassigner ce client à un autre commercial en sélectionnant un nouveau commercial ci-dessous.
+                      </Typography>
                     </Box>
                   </Stack>
                 </Alert>
@@ -1860,69 +1871,102 @@ export default function ClientDetailsView() {
                   </Typography>
                 </Box>
               )}
-              {!loadingCommerciaux && commerciaux.length === 0 && (
-                <Alert severity="warning">
-                  <Typography variant="body2" gutterBottom>
-                    Aucun commercial disponible dans la liste.
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Vous pouvez entrer l&apos;ID du commercial manuellement ci-dessous.
-                  </Typography>
-                </Alert>
-              )}
-              {!loadingCommerciaux && commerciaux.length > 0 && (
-                <FormControl fullWidth>
-                  <InputLabel>Commercial *</InputLabel>
-                  <Select
-                    value={assignDialog.userId}
-                    label="Commercial *"
-                    onChange={(e) => setAssignDialog({ ...assignDialog, userId: e.target.value })}
-                    renderValue={(selected) => {
-                      if (!selected) return '';
-                      // Chercher dans la liste des commerciaux chargés
-                      const selectedCommercial = commerciaux.find((c) => c.id === selected);
-                      if (selectedCommercial?.name) {
-                        return selectedCommercial.name;
-                      }
-                      // Si le commercial n'est pas dans la liste, utiliser getCommercialName
-                      // en créant un objet temporaire avec l'ID
-                      const tempAssignedTo = { id: selected };
-                      const name = getCommercialName(tempAssignedTo);
-                      if (name && name !== 'Non assigné' && name !== 'Commercial inconnu') {
-                        return name;
-                      }
-                      // Si toujours pas trouvé, chercher dans client.assignedTo
-                      if (client?.assignedTo) {
-                        const assignedToId = typeof client.assignedTo === 'object' && client.assignedTo !== null
-                          ? client.assignedTo.id || client.assignedTo.userId
-                          : client.assignedTo;
-                        if (assignedToId === selected) {
-                          const nameFromClient = getCommercialName(client.assignedTo);
-                          if (nameFromClient && nameFromClient !== 'Non assigné' && nameFromClient !== 'Commercial inconnu') {
-                            return nameFromClient;
+              {(() => {
+                // Filtrer les commerciaux disponibles (exclure le commercial actuellement assigné)
+                const availableCommerciaux = commerciaux.filter((commercial) => {
+                  if (client?.assignedTo) {
+                    const assignedToId = typeof client.assignedTo === 'object' && client.assignedTo !== null
+                      ? client.assignedTo.id || client.assignedTo.userId
+                      : client.assignedTo;
+                    return commercial.id !== assignedToId;
+                  }
+                  return true;
+                });
+
+                if (!loadingCommerciaux && commerciaux.length === 0) {
+                  return (
+                    <Alert severity="warning">
+                      <Typography variant="body2" gutterBottom>
+                        Aucun commercial disponible dans la liste.
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Vous pouvez entrer l&apos;ID du commercial manuellement ci-dessous.
+                      </Typography>
+                    </Alert>
+                  );
+                }
+
+                if (!loadingCommerciaux && commerciaux.length > 0 && availableCommerciaux.length === 0) {
+                  return (
+                    <Alert severity="warning">
+                      <Typography variant="body2" gutterBottom>
+                        Aucun autre commercial disponible pour la réassignation.
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Le client est déjà assigné au seul commercial disponible. Vous pouvez entrer l&apos;ID d&apos;un autre commercial manuellement ci-dessous.
+                      </Typography>
+                    </Alert>
+                  );
+                }
+
+                if (!loadingCommerciaux && availableCommerciaux.length > 0) {
+                  return (
+                    <FormControl fullWidth>
+                      <InputLabel>Commercial *</InputLabel>
+                      <Select
+                        value={assignDialog.userId}
+                        label="Commercial *"
+                        onChange={(e) => setAssignDialog({ ...assignDialog, userId: e.target.value })}
+                        renderValue={(selected) => {
+                          if (!selected) return '';
+                          // Chercher dans la liste des commerciaux chargés
+                          const selectedCommercial = commerciaux.find((c) => c.id === selected);
+                          if (selectedCommercial?.name) {
+                            return selectedCommercial.name;
                           }
-                        }
-                      }
-                      return 'Sélectionner un commercial';
-                    }}
-                  >
-                    {commerciaux.map((commercial) => (
-                      <MenuItem key={commercial.id} value={commercial.id}>
-                        <Stack>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {commercial.name}
-                          </Typography>
-                          {commercial.email && commercial.email !== commercial.name && (
-                            <Typography variant="caption" color="text.secondary">
-                              {commercial.email}
-                            </Typography>
-                          )}
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+                          // Si le commercial n'est pas dans la liste, utiliser getCommercialName
+                          // en créant un objet temporaire avec l'ID
+                          const tempAssignedTo = { id: selected };
+                          const name = getCommercialName(tempAssignedTo);
+                          if (name && name !== 'Non assigné' && name !== 'Commercial inconnu') {
+                            return name;
+                          }
+                          // Si toujours pas trouvé, chercher dans client.assignedTo
+                          if (client?.assignedTo) {
+                            const assignedToId = typeof client.assignedTo === 'object' && client.assignedTo !== null
+                              ? client.assignedTo.id || client.assignedTo.userId
+                              : client.assignedTo;
+                            if (assignedToId === selected) {
+                              const nameFromClient = getCommercialName(client.assignedTo);
+                              if (nameFromClient && nameFromClient !== 'Non assigné' && nameFromClient !== 'Commercial inconnu') {
+                                return nameFromClient;
+                              }
+                            }
+                          }
+                          return 'Sélectionner un commercial';
+                        }}
+                      >
+                        {availableCommerciaux.map((commercial) => (
+                          <MenuItem key={commercial.id} value={commercial.id}>
+                            <Stack>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {commercial.name}
+                              </Typography>
+                              {commercial.email && commercial.email !== commercial.name && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {commercial.email}
+                                </Typography>
+                              )}
+                            </Stack>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  );
+                }
+
+                return null;
+              })()}
 
             </Stack>
           </DialogContent>
@@ -1935,7 +1979,7 @@ export default function ClientDetailsView() {
               disabled={!assignDialog.userId.trim()}
               startIcon={<Iconify icon="solar:user-check-rounded-bold" />}
             >
-              Assigner
+              {client?.assignedTo ? 'Réassigner' : 'Assigner'}
             </LoadingButton>
           </DialogActions>
         </Dialog>
