@@ -16,9 +16,10 @@ import { useResponsive } from 'src/hooks/use-responsive';
 
 import { apiUrlAsset } from 'src/constants/apiUrl';
 import { useAdminStore } from 'src/store/useAdminStore';
-import Logo from '/assets/logo.jpg';
 
 import Iconify from 'src/components/iconify';
+
+import Logo from 'src/assets/logo.jpg';
 import Scrollbar from 'src/components/scrollbar';
 
 import { NAV } from './config-layout';
