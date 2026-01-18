@@ -275,7 +275,7 @@ export default function EcoleProfilView() {
                   label="URL du logo (optionnel)"
                   value={profile.logoUrl || ''}
                   onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
-                  placeholder="https://exemple.com/logo.png"
+                  placeholder="https://exemple.com/logo.jpg"
                   helperText="Ou entrez directement une URL de logo"
                 />
                 <TextField

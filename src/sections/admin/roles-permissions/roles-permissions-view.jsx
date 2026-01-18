@@ -39,11 +39,35 @@ import Iconify from 'src/components/iconify';
 // ----------------------------------------------------------------------
 
 const ROLE_COLORS = {
+  DIRECTEUR: 'error',
+  ADMINISTRATEUR: 'warning',
+  RH: 'info',
+  COMPTABLE: 'primary',
+  ACHAT: 'secondary',
+  ASSURANCE: 'success',
+  LABORANTIN: 'default',
+  MEDECIN: 'error',
+  INFIRMIER: 'warning',
+  AIDE_SOIGNANT: 'info',
+  // Rôles legacy
   SUPERADMIN: 'error',
   ADMIN: 'warning',
   STATION: 'info',
   POMPISTE: 'secondary',
   USER: 'default',
+};
+
+const ROLE_LABELS = {
+  DIRECTEUR: 'Directeur',
+  ADMINISTRATEUR: 'Administrateur',
+  RH: 'RH',
+  COMPTABLE: 'Comptable',
+  ACHAT: 'Achat',
+  ASSURANCE: 'Assurance',
+  LABORANTIN: 'Laborantin',
+  MEDECIN: 'Médecin',
+  INFIRMIER: 'Infirmier',
+  AIDE_SOIGNANT: 'Aide-soignant',
 };
 
 export default function RolesPermissionsView() {
@@ -55,6 +79,10 @@ export default function RolesPermissionsView() {
   // Matrice des permissions
   const [permissionsMatrix, setPermissionsMatrix] = useState(null);
   const [hierarchy, setHierarchy] = useState(null);
+  const [allFunctionalities, setAllFunctionalities] = useState([]);
+  
+  // Dialog pour ajouter une permission
+  const [addPermissionDialog, setAddPermissionDialog] = useState({ open: false, role: '', newPermission: '' });
 
   // Liste des utilisateurs
   const [users, setUsers] = useState([]);
@@ -84,6 +112,7 @@ export default function RolesPermissionsView() {
       if (processed.success && processed.data) {
         setPermissionsMatrix(processed.data.matrix);
         setHierarchy(processed.data.hierarchy);
+        setAllFunctionalities(processed.data.allFunctionalities || []);
       }
     } catch (error) {
       console.error('Error loading permissions matrix:', error);
@@ -197,6 +226,52 @@ export default function RolesPermissionsView() {
     }
   };
 
+  const handleAddPermission = async () => {
+    if (!addPermissionDialog.role || !addPermissionDialog.newPermission) {
+      showError('Erreur', 'Veuillez sélectionner un rôle et une fonctionnalité');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.addRolePermission(addPermissionDialog.role, addPermissionDialog.newPermission);
+      const processed = showApiResponse(result, {
+        successTitle: 'Permission ajoutée',
+        errorTitle: 'Erreur d\'ajout',
+      });
+      if (processed.success) {
+        showSuccess('Succès', 'La fonctionnalité a été ajoutée au rôle avec succès');
+        setAddPermissionDialog({ open: false, role: '', newPermission: '' });
+        loadPermissionsMatrix();
+      }
+    } catch (error) {
+      console.error('Error adding permission:', error);
+      showError('Erreur', 'Impossible d\'ajouter la fonctionnalité');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemovePermission = async (role, permission) => {
+    setLoading(true);
+    try {
+      const result = await ConsumApi.removeRolePermission(role, permission);
+      const processed = showApiResponse(result, {
+        successTitle: 'Permission retirée',
+        errorTitle: 'Erreur de suppression',
+      });
+      if (processed.success) {
+        showSuccess('Succès', 'La fonctionnalité a été retirée du rôle avec succès');
+        loadPermissionsMatrix();
+      }
+    } catch (error) {
+      console.error('Error removing permission:', error);
+      showError('Erreur', 'Impossible de retirer la fonctionnalité');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderPermissionsMatrixSection = () => (
       <Stack spacing={3}>
         <Alert severity="info">
@@ -249,7 +324,7 @@ export default function RolesPermissionsView() {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Chip
-                      label={role}
+                      label={ROLE_LABELS[role] || role}
                       color={ROLE_COLORS[role] || 'default'}
                       size="large"
                     />
@@ -278,9 +353,19 @@ export default function RolesPermissionsView() {
                 <Divider />
 
                 <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Permissions:
-                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2">
+                      Fonctionnalités ({roleData.permissions.length}):
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<Iconify icon="eva:plus-outline" />}
+                      onClick={() => setAddPermissionDialog({ open: true, role, newPermission: '' })}
+                    >
+                      Ajouter
+                    </Button>
+                  </Box>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {roleData.permissions.map((permission, index) => (
                       <Chip
@@ -288,6 +373,8 @@ export default function RolesPermissionsView() {
                         label={permission}
                         size="small"
                         sx={{ bgcolor: 'primary.lighter' }}
+                        onDelete={() => handleRemovePermission(role, permission)}
+                        deleteIcon={<Iconify icon="eva:close-outline" />}
                       />
                     ))}
                   </Box>
@@ -496,10 +583,16 @@ export default function RolesPermissionsView() {
                   label="Nouveau Rôle"
                   onChange={(e) => setChangeRoleDialog({ ...changeRoleDialog, newRole: e.target.value })}
                 >
-                  <MenuItem value="USER">USER</MenuItem>
-                  <MenuItem value="POMPISTE">POMPISTE</MenuItem>
-                  <MenuItem value="STATION">STATION</MenuItem>
-                  <MenuItem value="ADMIN">ADMIN</MenuItem>
+                  <MenuItem value="DIRECTEUR">Directeur</MenuItem>
+                  <MenuItem value="ADMINISTRATEUR">Administrateur</MenuItem>
+                  <MenuItem value="RH">RH</MenuItem>
+                  <MenuItem value="COMPTABLE">Comptable</MenuItem>
+                  <MenuItem value="ACHAT">Achat</MenuItem>
+                  <MenuItem value="ASSURANCE">Assurance</MenuItem>
+                  <MenuItem value="LABORANTIN">Laborantin</MenuItem>
+                  <MenuItem value="MEDECIN">Médecin</MenuItem>
+                  <MenuItem value="INFIRMIER">Infirmier</MenuItem>
+                  <MenuItem value="AIDE_SOIGNANT">Aide-soignant</MenuItem>
                 </Select>
               </FormControl>
 
@@ -636,6 +729,80 @@ export default function RolesPermissionsView() {
               </Box>
             </Stack>
           )}
+        </Box>
+      </Dialog>
+
+      {/* Dialog pour ajouter une permission */}
+      <Dialog
+        open={addPermissionDialog.open}
+        onClose={() => setAddPermissionDialog({ open: false, role: '', newPermission: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Ajouter une Fonctionnalité
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Rôle</InputLabel>
+              <Select
+                value={addPermissionDialog.role}
+                label="Rôle"
+                onChange={(e) => setAddPermissionDialog({ ...addPermissionDialog, role: e.target.value })}
+              >
+                {permissionsMatrix && Object.keys(permissionsMatrix).map((role) => (
+                  <MenuItem key={role} value={role}>
+                    {ROLE_LABELS[role] || role}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel>Fonctionnalité</InputLabel>
+              <Select
+                value={addPermissionDialog.newPermission}
+                label="Fonctionnalité"
+                onChange={(e) => setAddPermissionDialog({ ...addPermissionDialog, newPermission: e.target.value })}
+              >
+                {allFunctionalities
+                  .filter((func) => {
+                    if (!addPermissionDialog.role || !permissionsMatrix) return true;
+                    const rolePermissions = permissionsMatrix[addPermissionDialog.role]?.permissions || [];
+                    return !rolePermissions.includes(func);
+                  })
+                  .map((func) => (
+                    <MenuItem key={func} value={func}>
+                      {func}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+
+            <Alert severity="info">
+              Sélectionnez un rôle et une fonctionnalité à ajouter. Les fonctionnalités déjà assignées ne seront pas affichées.
+            </Alert>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+              <Button
+                onClick={() => setAddPermissionDialog({ open: false, role: '', newPermission: '' })}
+                variant="outlined"
+              >
+                Annuler
+              </Button>
+              <LoadingButton
+                variant="contained"
+                onClick={handleAddPermission}
+                loading={loading}
+                disabled={!addPermissionDialog.role || !addPermissionDialog.newPermission}
+              >
+                Ajouter
+              </LoadingButton>
+            </Box>
+          </Stack>
         </Box>
       </Dialog>
     </>

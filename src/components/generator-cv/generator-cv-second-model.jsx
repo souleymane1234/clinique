@@ -4,7 +4,7 @@ import { Page, Text, View, Font, Image, Document, StyleSheet } from '@react-pdf/
 
 import { fDate } from 'src/utils/format-time';
 
-import Logo from 'src/assets/logo.png';
+import Logo from 'src/assets/logo.jpg';
 import { degreeAccademy } from 'src/constants/skill';
 import etiquette from 'src/assets/icons/png/etiquette.png';
 import { blueColors, borderMaroon } from 'src/styles/colors';

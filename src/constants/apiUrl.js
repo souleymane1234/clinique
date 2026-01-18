@@ -92,6 +92,15 @@ export const apiUrl = {
   siteAdminPartnerLogoById: (id) => `${base_url}/api/site-admin/partner-logos/${id}`,
   siteAdminPartnerLogoUpload: `${base_url}/api/site-admin/partner-logos/upload-logo`,
   siteAdminPartnerLogoToggleActive: (id) => `${base_url}/api/site-admin/partner-logos/${id}/toggle-active`,
+  
+  // Roles & Permissions
+  rolesPermissionsMatrix: `${base_url}/roles-permissions/matrix`,
+  rolesUsers: `${base_url}/roles-permissions/users`,
+  updateUserRole: (userId) => `${base_url}/roles-permissions/users/${userId}/role`,
+  resetUserPassword: (userId) => `${base_url}/roles-permissions/users/${userId}/reset-password`,
+  disconnectUser: (userId) => `${base_url}/roles-permissions/users/${userId}/disconnect`,
+  addRolePermission: (role) => `${base_url}/roles-permissions/roles/${role}/permissions`,
+  removeRolePermission: (role, permission) => `${base_url}/roles-permissions/roles/${role}/permissions/${permission}`,
 };
 
 export const apiUrlAsset = {

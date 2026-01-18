@@ -77,7 +77,7 @@ export default function AdminSchoolsView() {
             slogan: 'Excellence et Innovation',
             region: 'Abidjan',
             city: 'Cocody',
-            logoUrl: null,
+            Url: null,
             isVerified: true,
             hasPaid: true,
             createdAt: '2024-01-15T10:00:00Z'
@@ -88,7 +88,7 @@ export default function AdminSchoolsView() {
             slogan: 'Technologie et Avenir',
             region: 'Bouaké',
             city: 'Centre',
-            logoUrl: null,
+            Url: null,
             isVerified: false,
             hasPaid: false,
             createdAt: '2024-02-20T14:30:00Z'
@@ -99,7 +99,7 @@ export default function AdminSchoolsView() {
             slogan: 'Science et Recherche',
             region: 'San-Pédro',
             city: 'Port',
-            logoUrl: null,
+            Url: null,
             isVerified: true,
             hasPaid: false,
             createdAt: '2024-03-10T09:15:00Z'
@@ -162,7 +162,7 @@ export default function AdminSchoolsView() {
             slogan: 'Ingénierie et Innovation',
             region: 'Bouaké',
             city: 'Centre',
-            logoUrl: null,
+            Url: null,
             isVerified: false,
             hasPaid: false,
             createdAt: '2024-02-01T08:00:00Z',
@@ -174,7 +174,7 @@ export default function AdminSchoolsView() {
             slogan: 'Management et Leadership',
             region: 'San-Pédro',
             city: 'Port',
-            logoUrl: null,
+            Url: null,
             isVerified: false,
             hasPaid: false,
             createdAt: '2024-02-05T12:30:00Z',
@@ -194,7 +194,7 @@ export default function AdminSchoolsView() {
           slogan: 'Ingénierie et Innovation',
           region: 'Bouaké',
           city: 'Centre',
-          logoUrl: null,
+          Url: null,
           isVerified: false,
           hasPaid: false,
           createdAt: '2024-02-01T08:00:00Z',
@@ -206,7 +206,7 @@ export default function AdminSchoolsView() {
           slogan: 'Management et Leadership',
           region: 'San-Pédro',
           city: 'Port',
-          logoUrl: null,
+          Url: null,
           isVerified: false,
           hasPaid: false,
           createdAt: '2024-02-05T12:30:00Z',
@@ -544,10 +544,10 @@ export default function AdminSchoolsView() {
 
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {school.logoUrl && (
+                        {school.Url && (
                           <Box
                             component="img"
-                            src={school.logoUrl}
+                            src={school.Url}
                             sx={{ width: 40, height: 40, borderRadius: 1, mr: 2 }}
                           />
                         )}

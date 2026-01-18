@@ -415,7 +415,7 @@ export default function PartnerLogosListView() {
                     value={formData.logoUrl}
                     onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
                     sx={{ mt: 1 }}
-                    placeholder="/uploads/partners/logo.png"
+                    placeholder="/uploads/partners/logo.jpg"
                   />
                 )}
               </Box>

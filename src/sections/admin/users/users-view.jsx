@@ -45,11 +45,35 @@ import Scrollbar from 'src/components/scrollbar';
 // ----------------------------------------------------------------------
 
 const ROLE_COLORS = {
+  DIRECTEUR: 'error',
+  RH: 'warning',
+  COMPTABLE: 'info',
+  ACHAT: 'primary',
+  ASSURANCE: 'secondary',
+  LABORANTIN: 'success',
+  MEDECIN: 'error',
+  INFIRMIER: 'warning',
+  AIDE_SOIGNANT: 'info',
+  ADMINISTRATEUR: 'default',
+  // Rôles legacy (au cas où)
   SUPERADMIN: 'error',
   ADMIN: 'warning',
   STATION: 'info',
   POMPISTE: 'primary',
   USER: 'default',
+};
+
+const ROLE_LABELS = {
+  DIRECTEUR: 'Directeur',
+  RH: 'RH',
+  COMPTABLE: 'Comptable',
+  ACHAT: 'Achat',
+  ASSURANCE: 'Assurance',
+  LABORANTIN: 'Laborantin',
+  MEDECIN: 'Médecin',
+  INFIRMIER: 'Infirmier',
+  AIDE_SOIGNANT: 'Aide-soignant',
+  ADMINISTRATEUR: 'Administrateur',
 };
 
 export default function UsersView() {
@@ -246,12 +270,16 @@ export default function UsersView() {
                     onChange={(e) => setRoleFilter(e.target.value)}
                   >
                     <MenuItem value="">Tous</MenuItem>
-                    <MenuItem value="USER">Utilisateur</MenuItem>
-                    <MenuItem value="POMPISTE">Pompiste</MenuItem>
-                    <MenuItem value="STATION">Station</MenuItem>
-                    <MenuItem value="ADMIN">Administrateur</MenuItem>
-                    <MenuItem value="GERANT">Gérant</MenuItem>
-                    <MenuItem value="SUPERADMIN">Super Admin</MenuItem>
+                    <MenuItem value="DIRECTEUR">Directeur</MenuItem>
+                    <MenuItem value="RH">RH</MenuItem>
+                    <MenuItem value="COMPTABLE">Comptable</MenuItem>
+                    <MenuItem value="ACHAT">Achat</MenuItem>
+                    <MenuItem value="ASSURANCE">Assurance</MenuItem>
+                    <MenuItem value="LABORANTIN">Laborantin</MenuItem>
+                    <MenuItem value="MEDECIN">Médecin</MenuItem>
+                    <MenuItem value="INFIRMIER">Infirmier</MenuItem>
+                    <MenuItem value="AIDE_SOIGNANT">Aide-soignant</MenuItem>
+                    <MenuItem value="ADMINISTRATEUR">Administrateur</MenuItem>
                   </Select>
                 </FormControl>
                 <FormControl sx={{ minWidth: { xs: '100%', sm: 180 } }}>
@@ -295,12 +323,10 @@ export default function UsersView() {
                 <Table size="small" sx={{ minWidth: 800 }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Nom</TableCell>
-                      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' }, whiteSpace: 'nowrap' }}>Email</TableCell>
-                      <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' }, whiteSpace: 'nowrap' }}>Téléphone</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Matricule</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Noms</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Numéro</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>Rôle</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Statut</TableCell>
-                      <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, whiteSpace: 'nowrap' }} align="right">Passages</TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -310,7 +336,7 @@ export default function UsersView() {
                       if (loading) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                            <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
                               <Typography color="text.secondary">Chargement...</Typography>
                             </TableCell>
                           </TableRow>
@@ -319,7 +345,7 @@ export default function UsersView() {
                       if (users.length === 0) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                            <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
                               <Typography color="text.secondary">Aucun utilisateur trouvé</Typography>
                             </TableCell>
                           </TableRow>
@@ -330,39 +356,26 @@ export default function UsersView() {
                         .map((user) => (
                           <TableRow key={user.id} hover>
                             <TableCell>
-                              <Box>
-                                <Typography variant="subtitle2" noWrap>
-                                  {user.firstName} {user.lastName}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' } }}>
-                                  {user.email}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
-                              <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                                {user.email}
+                              <Typography variant="body2" noWrap>
+                                {user.matricule || user.id?.substring(0, 8) || '-'}
                               </Typography>
                             </TableCell>
-                            <TableCell sx={{ display: { xs: 'none', lg: 'table-cell' } }}>
-                              {user.phone}
+                            <TableCell>
+                              <Typography variant="subtitle2" noWrap>
+                                {user.firstName || ''} {user.lastName || ''}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" noWrap>
+                                {user.phone || user.phoneNumber || '-'}
+                              </Typography>
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={user.role}
+                                label={ROLE_LABELS[user.role] || user.role || 'N/A'}
                                 color={ROLE_COLORS[user.role] || 'default'}
                                 size="small"
                               />
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={user.isSuspended ? 'Suspendu' : 'Actif'}
-                                color={user.isSuspended ? 'error' : 'success'}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }} align="right">
-                              {user.weeklyPassages || 0}
                             </TableCell>
                             <TableCell align="right">
                               <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="nowrap">
@@ -472,11 +485,16 @@ export default function UsersView() {
                 label="Nouveau rôle"
                 onChange={(e) => setRoleDialog({ ...roleDialog, newRole: e.target.value })}
               >
-                <MenuItem value="USER">Utilisateur</MenuItem>
-                <MenuItem value="POMPISTE">Pompiste</MenuItem>
-                <MenuItem value="STATION">Station</MenuItem>
-                <MenuItem value="ADMIN">Administrateur</MenuItem>
-                <MenuItem value="GERANT">Gérant</MenuItem>
+                <MenuItem value="DIRECTEUR">Directeur</MenuItem>
+                <MenuItem value="RH">RH</MenuItem>
+                <MenuItem value="COMPTABLE">Comptable</MenuItem>
+                <MenuItem value="ACHAT">Achat</MenuItem>
+                <MenuItem value="ASSURANCE">Assurance</MenuItem>
+                <MenuItem value="LABORANTIN">Laborantin</MenuItem>
+                <MenuItem value="MEDECIN">Médecin</MenuItem>
+                <MenuItem value="INFIRMIER">Infirmier</MenuItem>
+                <MenuItem value="AIDE_SOIGNANT">Aide-soignant</MenuItem>
+                <MenuItem value="ADMINISTRATEUR">Administrateur</MenuItem>
               </Select>
             </FormControl>
             <Alert severity="warning">

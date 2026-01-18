@@ -1,0 +1,220 @@
+{
+  "services": [
+    {
+      "id": "1",
+      "name": "Consultation générale",
+      "description": "Consultation médicale générale pour le diagnostic et le traitement de diverses affections courantes.",
+      "imageUrl": "/assets/images/services/consultation-generale.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z"
+    },
+    {
+      "id": "2",
+      "name": "Consultation pédiatrique",
+      "description": "Consultation spécialisée pour les enfants et adolescents avec suivi de croissance et vaccination.",
+      "imageUrl": "/assets/images/services/consultation-pediatrie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-16T10:00:00.000Z",
+      "updatedAt": "2024-01-16T10:00:00.000Z"
+    },
+    {
+      "id": "3",
+      "name": "Consultation gynécologique",
+      "description": "Consultation spécialisée en gynécologie et suivi de la santé reproductive des femmes.",
+      "imageUrl": "/assets/images/services/consultation-gynecologie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-17T10:00:00.000Z",
+      "updatedAt": "2024-01-17T10:00:00.000Z"
+    },
+    {
+      "id": "4",
+      "name": "Consultation cardiologique",
+      "description": "Consultation spécialisée en cardiologie pour le diagnostic et le suivi des maladies cardiaques.",
+      "imageUrl": "/assets/images/services/consultation-cardio.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-18T10:00:00.000Z",
+      "updatedAt": "2024-01-18T10:00:00.000Z"
+    },
+    {
+      "id": "5",
+      "name": "Consultation dermatologique",
+      "description": "Consultation spécialisée en dermatologie pour le traitement des affections cutanées.",
+      "imageUrl": "/assets/images/services/consultation-dermatologie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-19T10:00:00.000Z",
+      "updatedAt": "2024-01-19T10:00:00.000Z"
+    },
+    {
+      "id": "6",
+      "name": "Soins infirmiers",
+      "description": "Services de soins infirmiers à domicile et en clinique pour les patients nécessitant des soins continus.",
+      "imageUrl": "/assets/images/services/soins-infirmiers.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-20T10:00:00.000Z",
+      "updatedAt": "2024-01-20T10:00:00.000Z"
+    },
+    {
+      "id": "7",
+      "name": "Analyses médicales",
+      "description": "Service de laboratoire d'analyses médicales (sang, urines, tests de dépistage, etc.).",
+      "imageUrl": "/assets/images/services/analyses-medicales.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-21T10:00:00.000Z",
+      "updatedAt": "2024-01-21T10:00:00.000Z"
+    },
+    {
+      "id": "8",
+      "name": "Radiologie",
+      "description": "Services d'imagerie médicale : radiographies, échographies, scanners et IRM.",
+      "imageUrl": "/assets/images/services/radiologie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-22T10:00:00.000Z",
+      "updatedAt": "2024-01-22T10:00:00.000Z"
+    },
+    {
+      "id": "9",
+      "name": "Pharmacie",
+      "description": "Pharmacie intégrée pour la dispensation de médicaments et conseils pharmaceutiques.",
+      "imageUrl": "/assets/images/services/pharmacie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-23T10:00:00.000Z",
+      "updatedAt": "2024-01-23T10:00:00.000Z"
+    },
+    {
+      "id": "10",
+      "name": "Vaccination",
+      "description": "Service de vaccination pour enfants et adultes avec suivi des calendriers vaccinaux.",
+      "imageUrl": "/assets/images/services/vaccination.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-24T10:00:00.000Z",
+      "updatedAt": "2024-01-24T10:00:00.000Z"
+    },
+    {
+      "id": "11",
+      "name": "Urgences",
+      "description": "Service d'urgence 24/7 pour les cas nécessitant une intervention médicale immédiate.",
+      "imageUrl": "/assets/images/services/urgences.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-25T10:00:00.000Z",
+      "updatedAt": "2024-01-25T10:00:00.000Z"
+    },
+    {
+      "id": "12",
+      "name": "Chirurgie ambulatoire",
+      "description": "Service de chirurgie ambulatoire pour interventions mineures ne nécessitant pas d'hospitalisation.",
+      "imageUrl": "/assets/images/services/chirurgie-ambulatoire.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-26T10:00:00.000Z",
+      "updatedAt": "2024-01-26T10:00:00.000Z"
+    },
+    {
+      "id": "13",
+      "name": "Physiothérapie",
+      "description": "Service de rééducation et physiothérapie pour la récupération fonctionnelle et la réadaptation.",
+      "imageUrl": "/assets/images/services/physiotherapie.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-27T10:00:00.000Z",
+      "updatedAt": "2024-01-27T10:00:00.000Z"
+    },
+    {
+      "id": "14",
+      "name": "Consultation ophtalmologique",
+      "description": "Consultation spécialisée en ophtalmologie pour le diagnostic et le traitement des troubles visuels.",
+      "imageUrl": "/assets/images/services/consultation-ophtalmo.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-28T10:00:00.000Z",
+      "updatedAt": "2024-01-28T10:00:00.000Z"
+    },
+    {
+      "id": "15",
+      "name": "Consultation ORL",
+      "description": "Consultation spécialisée en oto-rhino-laryngologie pour les troubles de l'oreille, du nez et de la gorge.",
+      "imageUrl": "/assets/images/services/consultation-orl.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-29T10:00:00.000Z",
+      "updatedAt": "2024-01-29T10:00:00.000Z"
+    },
+    {
+      "id": "16",
+      "name": "Nutrition et diététique",
+      "description": "Consultation en nutrition et diététique pour le suivi alimentaire et les régimes thérapeutiques.",
+      "imageUrl": "/assets/images/services/nutrition.jpg",
+      "isActive": true,
+      "createdAt": "2024-01-30T10:00:00.000Z",
+      "updatedAt": "2024-01-30T10:00:00.000Z"
+    },
+    {
+      "id": "17",
+      "name": "Consultation neurologique",
+      "description": "Consultation spécialisée en neurologie pour le diagnostic et le traitement des troubles neurologiques.",
+      "imageUrl": "/assets/images/services/consultation-neuro.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-01T10:00:00.000Z",
+      "updatedAt": "2024-02-01T10:00:00.000Z"
+    },
+    {
+      "id": "18",
+      "name": "Consultation urologique",
+      "description": "Consultation spécialisée en urologie pour le traitement des affections de l'appareil urinaire.",
+      "imageUrl": "/assets/images/services/consultation-urologie.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-02T10:00:00.000Z",
+      "updatedAt": "2024-02-02T10:00:00.000Z"
+    },
+    {
+      "id": "19",
+      "name": "Médecine préventive",
+      "description": "Services de médecine préventive : bilans de santé, dépistages et examens de routine.",
+      "imageUrl": "/assets/images/services/medecine-preventive.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-03T10:00:00.000Z",
+      "updatedAt": "2024-02-03T10:00:00.000Z"
+    },
+    {
+      "id": "20",
+      "name": "Suivi de grossesse",
+      "description": "Suivi prénatal complet avec consultations régulières et échographies pour les femmes enceintes.",
+      "imageUrl": "/assets/images/services/suivi-grossesse.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-04T10:00:00.000Z",
+      "updatedAt": "2024-02-04T10:00:00.000Z"
+    },
+    {
+      "id": "21",
+      "name": "Consultation psychologique",
+      "description": "Services de consultation psychologique et soutien mental pour les patients nécessitant un accompagnement psychologique.",
+      "imageUrl": "/assets/images/services/consultation-psycho.jpg",
+      "isActive": false,
+      "createdAt": "2024-02-05T10:00:00.000Z",
+      "updatedAt": "2024-02-05T10:00:00.000Z"
+    },
+    {
+      "id": "22",
+      "name": "Électrocardiogramme (ECG)",
+      "description": "Service d'électrocardiogramme pour l'évaluation de l'activité cardiaque et le dépistage de problèmes cardiaques.",
+      "imageUrl": "/assets/images/services/ecg.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-06T10:00:00.000Z",
+      "updatedAt": "2024-02-06T10:00:00.000Z"
+    },
+    {
+      "id": "23",
+      "name": "Pansements et soins de plaies",
+      "description": "Service de soins de plaies et pansements pour le traitement des blessures et la cicatrisation.",
+      "imageUrl": "/assets/images/services/pansements.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-07T10:00:00.000Z",
+      "updatedAt": "2024-02-07T10:00:00.000Z"
+    },
+    {
+      "id": "24",
+      "name": "Consultation orthopédique",
+      "description": "Consultation spécialisée en orthopédie pour le traitement des troubles musculo-squelettiques.",
+      "imageUrl": "/assets/images/services/consultation-orthopedie.jpg",
+      "isActive": true,
+      "createdAt": "2024-02-08T10:00:00.000Z",
+      "updatedAt": "2024-02-08T10:00:00.000Z"
+    }
+  ]
+}

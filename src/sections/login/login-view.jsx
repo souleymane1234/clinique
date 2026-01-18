@@ -22,7 +22,7 @@ import ConsumApi from 'src/services_workers/consum_api';
 import Iconify from 'src/components/iconify';
 
 // Logo importé depuis le dossier public
-const Logo = '/assets/images/logo.jpg';
+const Logo = '/assets/logo.jpg';
 
 // ----------------------------------------------------------------------
 
