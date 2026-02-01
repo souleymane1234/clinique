@@ -1,11 +1,11 @@
-// const base_url = import.meta.env.VITE_BASE_URL;
-const base_url = 'https://api.annour-travel.com';
+const base_url = import.meta.env.VITE_BASE_URL || 'http://localhost:3000';
+// const base_url = 'https://api.annour-travel.com';
 // const base_url = 'http://localhost:3010';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
   // Authentication
-  authentication: `${base_url}/auth/login`,
+  authentication: `${base_url}/api/auth/login`,
   register: `${base_url}/auth/register`,
   getCurrentUser: `${base_url}/auth`,
   resetPassword: `${base_url}/reset-passord`,
@@ -101,6 +101,31 @@ export const apiUrl = {
   disconnectUser: (userId) => `${base_url}/roles-permissions/users/${userId}/disconnect`,
   addRolePermission: (role) => `${base_url}/roles-permissions/roles/${role}/permissions`,
   removeRolePermission: (role, permission) => `${base_url}/roles-permissions/roles/${role}/permissions/${permission}`,
+  
+  // Modules de permissions
+  permissionModules: `${base_url}/api/module-permission`,
+  permissionModulesPaginated: `${base_url}/api/module-permission/paginated`,
+  permissionModuleById: (id) => `${base_url}/api/module-permission/${id}`,
+  
+  // Permissions
+  permissions: `${base_url}/api/permission`,
+  permissionsPaginated: `${base_url}/api/permission/paginated`,
+  permissionsByModule: (moduleId) => `${base_url}/api/module-permission/${moduleId}/permissions`,
+  permissionsByModulePaginated: (moduleId) => `${base_url}/api/permission/module/${moduleId}/paginated`,
+  permissionById: (id) => `${base_url}/api/permission/${id}`,
+  
+  // Rôles
+  role: `${base_url}/api/role`,
+  roleById: (id) => `${base_url}/api/role/${id}`,
+  rolePaginated: `${base_url}/api/role/paginated`,
+  roleGlobalPermissions: (uuid) => `${base_url}/api/role/${uuid}/global-permissions`,
+  roleTogglePermissionStatus: (uuid) => `${base_url}/api/role/permissions/${uuid}/toggle`,
+  roleGeneratePermissions: (uuid) => `${base_url}/api/role/${uuid}/generate-permissions`,
+  
+  // Assignation rôles aux modules
+  assignRoleToModule: (moduleId, roleId) => `${base_url}/api/module-permission/${moduleId}/roles/${roleId}`,
+  removeRoleFromModule: (moduleId, roleId) => `${base_url}/api/module-permission/${moduleId}/roles/${roleId}`,
+  moduleRoles: (moduleId) => `${base_url}/api/module-permission/${moduleId}/roles`,
 };
 
 export const apiUrlAsset = {

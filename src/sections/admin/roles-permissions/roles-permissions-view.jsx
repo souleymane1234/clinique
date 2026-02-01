@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 
 import { TabList, TabPanel, TabContext, LoadingButton } from '@mui/lab';
@@ -28,6 +28,11 @@ import {
   IconButton,
   FormControl,
   TableContainer,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
@@ -49,12 +54,6 @@ const ROLE_COLORS = {
   MEDECIN: 'error',
   INFIRMIER: 'warning',
   AIDE_SOIGNANT: 'info',
-  // Rôles legacy
-  SUPERADMIN: 'error',
-  ADMIN: 'warning',
-  STATION: 'info',
-  POMPISTE: 'secondary',
-  USER: 'default',
 };
 
 const ROLE_LABELS = {
@@ -73,62 +72,427 @@ const ROLE_LABELS = {
 export default function RolesPermissionsView() {
   const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
   
-  const [currentTab, setCurrentTab] = useState('matrix');
+  const [currentTab, setCurrentTab] = useState('modules');
   const [loading, setLoading] = useState(false);
 
-  // Matrice des permissions
-  const [permissionsMatrix, setPermissionsMatrix] = useState(null);
-  const [hierarchy, setHierarchy] = useState(null);
-  const [allFunctionalities, setAllFunctionalities] = useState([]);
-  
-  // Dialog pour ajouter une permission
-  const [addPermissionDialog, setAddPermissionDialog] = useState({ open: false, role: '', newPermission: '' });
+  // Modules de permissions
+  const [modules, setModules] = useState([]);
+  const [loadingModules, setLoadingModules] = useState(false);
+
+  // Toutes les permissions
+  const [allPermissions, setAllPermissions] = useState([]);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+
+  // Permissions par module
+  const [permissionsByModule, setPermissionsByModule] = useState({});
+
+  // Rôles
+  const [roles, setRoles] = useState([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+
+  // Rôles assignés aux modules
+  const [moduleRoles, setModuleRoles] = useState({});
 
   // Liste des utilisateurs
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Dialogs
+  const [createModuleDialog, setCreateModuleDialog] = useState({ open: false, name: '', description: '', statut: 'ACTIF' });
+  const [createPermissionDialog, setCreatePermissionDialog] = useState({ open: false, moduleId: '', name: '', description: '' });
+  const [assignRoleDialog, setAssignRoleDialog] = useState({ open: false, moduleId: '', roleId: '' });
   const [changeRoleDialog, setChangeRoleDialog] = useState({ open: false, user: null, newRole: '' });
   const [resetPasswordDialog, setResetPasswordDialog] = useState({ open: false, user: null, newPassword: '', confirmPassword: '' });
   const [disconnectDialog, setDisconnectDialog] = useState({ open: false, user: null });
+  
+  // Role management dialogs
+  const [createRoleDialog, setCreateRoleDialog] = useState({ open: false, name: '' });
+  const [editRoleDialog, setEditRoleDialog] = useState({ open: false, role: null, name: '' });
+  const [deleteRoleDialog, setDeleteRoleDialog] = useState({ open: false, role: null });
+  const [manageRolePermissionsDialog, setManageRolePermissionsDialog] = useState({ open: false, role: null });
+  
+  // Role permissions state
+  const [rolePermissions, setRolePermissions] = useState(null);
+  const [loadingRolePermissions, setLoadingRolePermissions] = useState(false);
 
   useEffect(() => {
-    if (currentTab === 'matrix') {
-      loadPermissionsMatrix();
+    console.log('Tab changed to:', currentTab);
+    if (currentTab === 'modules') {
+      loadModules();
+    } else if (currentTab === 'permissions') {
+      console.log('Loading permissions for tab');
+      loadAllPermissions();
+    } else if (currentTab === 'roles') {
+      loadRoles();
+      loadModules();
     } else if (currentTab === 'users') {
       loadUsers();
+      loadRoles();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab]);
 
-  const loadPermissionsMatrix = async () => {
-    setLoading(true);
+  // Charger tous les modules
+  const loadModules = useCallback(async () => {
+    setLoadingModules(true);
     try {
-      const result = await ConsumApi.getRolesPermissionsMatrix();
-      const processed = showApiResponse(result, {
-        successTitle: 'Matrice chargée',
+      const result = await ConsumApi.getPermissionModules();
+      console.log('Raw API result:', result); // Debug
+      
+      // Vérifier si result a déjà la structure attendue
+      if (result && result.success === false) {
+        console.error('API returned error:', result.message, result.errors);
+        showError('Erreur', result.message || 'Impossible de charger les modules');
+        setModules([]);
+        return;
+      }
+      
+      // Traiter la réponse directement si elle a déjà la structure attendue
+      let processed = result;
+      if (result && typeof result === 'object' && 'success' in result) {
+        // Utiliser showApiResponse seulement si la structure est standard
+        processed = showApiResponse(result, {
+          successTitle: 'Modules chargés',
         errorTitle: 'Erreur de chargement',
-      });
-      if (processed.success && processed.data) {
-        setPermissionsMatrix(processed.data.matrix);
-        setHierarchy(processed.data.hierarchy);
-        setAllFunctionalities(processed.data.allFunctionalities || []);
+          showNotification: false,
+        });
+      } else if (result && typeof result === 'object') {
+        // Si pas de champ success, considérer comme succès si on a des données
+        processed = {
+          success: true,
+          data: result.data || result,
+          message: 'Opération réussie',
+          errors: [],
+        };
+      }
+      
+      console.log('Processed result:', processed); // Debug
+      console.log('Processed data:', processed.data); // Debug
+      
+      if (processed && (processed.success || processed.data)) {
+        // La réponse peut être directement un tableau ou un objet avec data
+        let modulesData = [];
+        
+        if (Array.isArray(processed.data)) {
+          modulesData = processed.data;
+        } else if (processed.data && typeof processed.data === 'object') {
+          if (Array.isArray(processed.data.data)) {
+            modulesData = processed.data.data;
+          } else if (Array.isArray(processed.data.items)) {
+            modulesData = processed.data.items;
+          } else if (Array.isArray(processed.data.results)) {
+            modulesData = processed.data.results;
+          }
+        }
+        
+        console.log('Modules data:', modulesData); // Debug
+        
+        setModules(modulesData);
+      } else {
+        console.error('Failed to load modules:', processed.message, processed.errors);
+        showError('Erreur', processed.message || 'Impossible de charger les modules');
+        setModules([]);
       }
     } catch (error) {
-      console.error('Error loading permissions matrix:', error);
-      showError('Erreur', 'Impossible de charger la matrice des permissions');
+      console.error('Error loading modules:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      showError('Erreur', error.message || 'Impossible de charger les modules');
+      setModules([]);
     } finally {
-      setLoading(false);
+      setLoadingModules(false);
     }
-  };
+  }, []);
 
-  const loadUsers = async () => {
+  // Charger les permissions d'un module (à la demande)
+  const loadPermissionsForModule = useCallback(async (moduleId) => {
+    try {
+      // Essayer d'abord l'endpoint spécifique au module
+      let result = await ConsumApi.getPermissionsByModule(moduleId);
+      console.log(`Raw permissions result for module ${moduleId}:`, result); // Debug
+      
+      // Si l'endpoint spécifique ne fonctionne pas (404 ou erreur), utiliser toutes les permissions et filtrer
+      if (result && result.success === false && (result.message?.includes('404') || result.message?.includes('Not Found'))) {
+        console.log(`Endpoint spécifique non disponible, récupération de toutes les permissions et filtrage par module ${moduleId}`);
+        result = await ConsumApi.getPermissions();
+        console.log(`All permissions result:`, result); // Debug
+        
+        // Filtrer les permissions par module
+        if (result && (result.success || result.data)) {
+          let allPermissions = [];
+          
+          if (Array.isArray(result.data)) {
+            allPermissions = result.data;
+          } else if (result.data && typeof result.data === 'object') {
+            if (Array.isArray(result.data.data)) {
+              allPermissions = result.data.data;
+            } else if (Array.isArray(result.data.items)) {
+              allPermissions = result.data.items;
+            } else if (Array.isArray(result.data.results)) {
+              allPermissions = result.data.results;
+            }
+          }
+          
+          // Filtrer par module (le module peut être dans permission.module.id ou permission.module_uuid)
+          const filteredPermissions = allPermissions.filter(permission => {
+            const moduleIdMatch = permission.module?.id === moduleId || 
+                                  permission.module_uuid === moduleId ||
+                                  permission.moduleId === moduleId;
+            return moduleIdMatch;
+          });
+          
+          console.log(`Filtered permissions for module ${moduleId}:`, filteredPermissions); // Debug
+          
+          setPermissionsByModule(prev => ({
+            ...prev,
+            [moduleId]: filteredPermissions,
+          }));
+          return;
+        }
+      }
+      
+      // Traiter la réponse directement si elle a déjà la structure attendue
+      let processed = result;
+      if (result && typeof result === 'object' && 'success' in result) {
+        processed = result;
+      } else if (result && typeof result === 'object') {
+        // Si pas de champ success, considérer comme succès si on a des données
+        processed = {
+          success: true,
+          data: result.data || result,
+          message: 'Opération réussie',
+          errors: [],
+        };
+      }
+      
+      console.log(`Processed permissions result for module ${moduleId}:`, processed); // Debug
+      
+      if (processed && (processed.success || processed.data)) {
+        // La réponse peut être directement un tableau ou un objet avec data
+        let permissionsData = [];
+        
+        if (Array.isArray(processed.data)) {
+          permissionsData = processed.data;
+        } else if (processed.data && typeof processed.data === 'object') {
+          if (Array.isArray(processed.data.data)) {
+            permissionsData = processed.data.data;
+          } else if (Array.isArray(processed.data.items)) {
+            permissionsData = processed.data.items;
+          } else if (Array.isArray(processed.data.results)) {
+            permissionsData = processed.data.results;
+          }
+        }
+        
+        console.log(`Permissions data for module ${moduleId}:`, permissionsData); // Debug
+        
+        setPermissionsByModule(prev => ({
+          ...prev,
+          [moduleId]: permissionsData,
+        }));
+      } else {
+        console.error(`Failed to load permissions for module ${moduleId}:`, processed?.message, processed?.errors);
+        setPermissionsByModule(prev => ({
+          ...prev,
+          [moduleId]: [],
+        }));
+      }
+    } catch (error) {
+      console.error(`Error loading permissions for module ${moduleId}:`, error);
+      console.error(`Error details:`, error.response?.data || error.message);
+      
+      // Si l'erreur est 404, essayer de récupérer toutes les permissions et filtrer
+      if (error.response?.status === 404 || error.message?.includes('404') || error.message?.includes('Not Found')) {
+        try {
+          console.log(`404 error, trying to get all permissions and filter by module ${moduleId}`);
+          const allPermissionsResult = await ConsumApi.getPermissions();
+          console.log(`All permissions result (fallback):`, allPermissionsResult);
+          
+          if (allPermissionsResult && (allPermissionsResult.success || allPermissionsResult.data)) {
+            let allPermissions = [];
+            
+            if (Array.isArray(allPermissionsResult.data)) {
+              allPermissions = allPermissionsResult.data;
+            } else if (allPermissionsResult.data && typeof allPermissionsResult.data === 'object') {
+              if (Array.isArray(allPermissionsResult.data.data)) {
+                allPermissions = allPermissionsResult.data.data;
+              } else if (Array.isArray(allPermissionsResult.data.items)) {
+                allPermissions = allPermissionsResult.data.items;
+              } else if (Array.isArray(allPermissionsResult.data.results)) {
+                allPermissions = allPermissionsResult.data.results;
+              }
+            }
+            
+            // Filtrer par module
+            const filteredPermissions = allPermissions.filter(permission => {
+              const moduleIdMatch = permission.module?.id === moduleId || 
+                                    permission.module_uuid === moduleId ||
+                                    permission.moduleId === moduleId;
+              return moduleIdMatch;
+            });
+            
+            console.log(`Filtered permissions for module ${moduleId} (fallback):`, filteredPermissions);
+            
+            setPermissionsByModule(prev => ({
+              ...prev,
+              [moduleId]: filteredPermissions,
+            }));
+            return;
+          }
+        } catch (fallbackError) {
+          console.error(`Error in fallback loading permissions:`, fallbackError);
+        }
+      }
+      
+      // Initialiser avec un tableau vide en cas d'erreur
+      setPermissionsByModule(prev => ({
+        ...prev,
+        [moduleId]: [],
+      }));
+    }
+  }, []);
+
+  // Charger les rôles assignés à un module (à la demande)
+  const loadRolesForModule = useCallback(async (moduleId) => {
+    try {
+      const result = await ConsumApi.getModuleRoles(moduleId);
+      if (result.success) {
+        setModuleRoles(prev => ({
+          ...prev,
+          [moduleId]: Array.isArray(result.data) ? result.data : [],
+        }));
+      } else {
+        // Si l'endpoint n'existe pas (404), initialiser avec un tableau vide
+        setModuleRoles(prev => ({
+          ...prev,
+          [moduleId]: [],
+        }));
+      }
+    } catch (error) {
+      console.error(`Error loading roles for module ${moduleId}:`, error);
+      // Initialiser avec un tableau vide en cas d'erreur
+      setModuleRoles(prev => ({
+        ...prev,
+        [moduleId]: [],
+      }));
+    }
+  }, []);
+
+  // Charger les rôles
+  const loadRoles = useCallback(async () => {
+    setLoadingRoles(true);
+    try {
+      const result = await ConsumApi.getRoles();
+      const processed = showApiResponse(result, {
+        successTitle: 'Rôles chargés',
+        errorTitle: 'Erreur de chargement',
+        showNotification: false,
+      });
+      if (processed.success) {
+        setRoles(Array.isArray(processed.data) ? processed.data : []);
+      }
+    } catch (error) {
+      console.error('Error loading roles:', error);
+      showError('Erreur', 'Impossible de charger les rôles');
+    } finally {
+      setLoadingRoles(false);
+    }
+  }, []);
+
+  // Charger toutes les permissions
+  const loadAllPermissions = useCallback(async () => {
+    setLoadingPermissions(true);
+    try {
+      const result = await ConsumApi.getPermissions();
+      console.log('=== LOAD PERMISSIONS DEBUG ===');
+      console.log('Raw all permissions result:', result);
+      console.log('Type of result:', typeof result);
+      console.log('Is array?', Array.isArray(result));
+      console.log('Has success?', result && 'success' in result);
+      console.log('Has data?', result && 'data' in result);
+      
+      // Vérifier si result a déjà la structure attendue
+      if (result && result.success === false) {
+        console.error('API returned error:', result.message, result.errors);
+        showError('Erreur', result.message || 'Impossible de charger les permissions');
+        setAllPermissions([]);
+        return;
+      }
+      
+      // Si result est directement un tableau (cas où ApiClient retourne directement le tableau)
+      if (Array.isArray(result)) {
+        console.log('Result is directly an array, length:', result.length);
+        setAllPermissions(result);
+        return;
+      }
+      
+      // Traiter la réponse directement si elle a déjà la structure attendue
+      let processed = result;
+      if (result && typeof result === 'object' && 'success' in result) {
+        processed = result;
+      } else if (result && typeof result === 'object') {
+        // Si pas de champ success, considérer comme succès si on a des données
+        processed = {
+          success: true,
+          data: result.data || result,
+          message: 'Opération réussie',
+          errors: [],
+        };
+      }
+      
+      console.log('Processed all permissions result:', processed);
+      
+      if (processed && (processed.success || processed.data)) {
+        // La réponse peut être directement un tableau ou un objet avec data
+        let permissionsData = [];
+        
+        // Si processed.data est directement un tableau
+        if (Array.isArray(processed.data)) {
+          permissionsData = processed.data;
+        } 
+        // Si processed.data est un objet, chercher un tableau dedans
+        else if (processed.data && typeof processed.data === 'object') {
+          if (Array.isArray(processed.data.data)) {
+            permissionsData = processed.data.data;
+          } else if (Array.isArray(processed.data.items)) {
+            permissionsData = processed.data.items;
+          } else if (Array.isArray(processed.data.results)) {
+            permissionsData = processed.data.results;
+          }
+        }
+        
+        console.log('All permissions data:', permissionsData);
+        console.log('Permissions count:', permissionsData.length);
+        console.log('Sample permission:', permissionsData[0]);
+        
+        if (permissionsData.length > 0) {
+          setAllPermissions(permissionsData);
+        } else {
+          console.warn('No permissions found in response');
+          setAllPermissions([]);
+        }
+      } else {
+        console.error('Failed to load permissions:', processed?.message, processed?.errors);
+        showError('Erreur', processed?.message || 'Impossible de charger les permissions');
+        setAllPermissions([]);
+      }
+    } catch (error) {
+      console.error('Error loading all permissions:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      showError('Erreur', error.message || 'Impossible de charger les permissions');
+      setAllPermissions([]);
+    } finally {
+      setLoadingPermissions(false);
+    }
+  }, []);
+
+  // Charger les utilisateurs
+  const loadUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
       const result = await ConsumApi.getRolesUsers();
       const processed = showApiResponse(result, {
         successTitle: 'Utilisateurs chargés',
         errorTitle: 'Erreur de chargement',
+        showNotification: false,
       });
       if (processed.success) {
         setUsers(Array.isArray(processed.data) ? processed.data : []);
@@ -139,8 +503,120 @@ export default function RolesPermissionsView() {
     } finally {
       setLoadingUsers(false);
     }
+  }, []);
+
+  // Créer un module
+  const handleCreateModule = async () => {
+    if (!createModuleDialog.name || !createModuleDialog.description) {
+      showError('Erreur', 'Veuillez remplir tous les champs');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.createPermissionModule({
+        name: createModuleDialog.name,
+        description: createModuleDialog.description,
+        statut: createModuleDialog.statut,
+      });
+      const processed = showApiResponse(result, {
+        successTitle: 'Module créé',
+        errorTitle: 'Erreur de création',
+      });
+      if (processed.success) {
+        setCreateModuleDialog({ open: false, name: '', description: '', statut: 'ACTIF' });
+        loadModules();
+      }
+    } catch (error) {
+      console.error('Error creating module:', error);
+      showError('Erreur', 'Impossible de créer le module');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Créer une permission
+  const handleCreatePermission = async () => {
+    if (!createPermissionDialog.moduleId || !createPermissionDialog.name || !createPermissionDialog.description) {
+      showError('Erreur', 'Veuillez remplir tous les champs');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.createPermission({
+        module_uuid: createPermissionDialog.moduleId,
+        name: createPermissionDialog.name,
+        description: createPermissionDialog.description,
+      });
+      const processed = showApiResponse(result, {
+        successTitle: 'Permission créée',
+        errorTitle: 'Erreur de création',
+      });
+      if (processed.success) {
+        const moduleId = createPermissionDialog.moduleId;
+        setCreatePermissionDialog({ open: false, moduleId: '', name: '', description: '' });
+        // Recharger toutes les permissions et les permissions du module
+        await loadAllPermissions();
+        if (moduleId) {
+          await loadPermissionsForModule(moduleId);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating permission:', error);
+      showError('Erreur', 'Impossible de créer la permission');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Assigner un rôle à un module
+  const handleAssignRoleToModule = async () => {
+    if (!assignRoleDialog.moduleId || !assignRoleDialog.roleId) {
+      showError('Erreur', 'Veuillez sélectionner un module et un rôle');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.assignRoleToModule(assignRoleDialog.moduleId, assignRoleDialog.roleId);
+      const processed = showApiResponse(result, {
+        successTitle: 'Rôle assigné',
+        errorTitle: 'Erreur d\'assignation',
+      });
+      if (processed.success) {
+        setAssignRoleDialog({ open: false, moduleId: '', roleId: '' });
+        await loadRolesForModule(assignRoleDialog.moduleId);
+      }
+    } catch (error) {
+      console.error('Error assigning role:', error);
+      showError('Erreur', 'Impossible d\'assigner le rôle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Retirer un rôle d'un module
+  const handleRemoveRoleFromModule = async (moduleId, roleId) => {
+    setLoading(true);
+    try {
+      const result = await ConsumApi.removeRoleFromModule(moduleId, roleId);
+      const processed = showApiResponse(result, {
+        successTitle: 'Rôle retiré',
+        errorTitle: 'Erreur de suppression',
+      });
+      if (processed.success) {
+        await loadRolesForModule(moduleId);
+      }
+    } catch (error) {
+      console.error('Error removing role:', error);
+      showError('Erreur', 'Impossible de retirer le rôle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Modifier le rôle d'un utilisateur
   const handleChangeRole = async () => {
     if (!changeRoleDialog.user || !changeRoleDialog.newRole) {
       showError('Erreur', 'Veuillez sélectionner un rôle');
@@ -167,6 +643,7 @@ export default function RolesPermissionsView() {
     }
   };
 
+  // Réinitialiser le mot de passe
   const handleResetPassword = async () => {
     if (!resetPasswordDialog.user || !resetPasswordDialog.newPassword) {
       showError('Erreur', 'Veuillez remplir tous les champs');
@@ -202,6 +679,7 @@ export default function RolesPermissionsView() {
     }
   };
 
+  // Forcer la déconnexion
   const handleDisconnect = async () => {
     if (!disconnectDialog.user) {
       return;
@@ -226,167 +704,775 @@ export default function RolesPermissionsView() {
     }
   };
 
-  const handleAddPermission = async () => {
-    if (!addPermissionDialog.role || !addPermissionDialog.newPermission) {
-      showError('Erreur', 'Veuillez sélectionner un rôle et une fonctionnalité');
+  // ========== ROLE CRUD OPERATIONS ==========
+
+  // Créer un rôle
+  const handleCreateRole = async () => {
+    if (!createRoleDialog.name.trim()) {
+      showError('Erreur', 'Veuillez saisir un nom de rôle');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await ConsumApi.addRolePermission(addPermissionDialog.role, addPermissionDialog.newPermission);
+      const result = await ConsumApi.createRole(createRoleDialog.name);
       const processed = showApiResponse(result, {
-        successTitle: 'Permission ajoutée',
-        errorTitle: 'Erreur d\'ajout',
+        successTitle: 'Rôle créé',
+        errorTitle: 'Erreur de création',
       });
       if (processed.success) {
-        showSuccess('Succès', 'La fonctionnalité a été ajoutée au rôle avec succès');
-        setAddPermissionDialog({ open: false, role: '', newPermission: '' });
-        loadPermissionsMatrix();
+        showSuccess('Succès', 'Le rôle a été créé avec succès');
+        setCreateRoleDialog({ open: false, name: '' });
+        loadRoles();
       }
     } catch (error) {
-      console.error('Error adding permission:', error);
-      showError('Erreur', 'Impossible d\'ajouter la fonctionnalité');
+      console.error('Error creating role:', error);
+      showError('Erreur', 'Impossible de créer le rôle');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRemovePermission = async (role, permission) => {
+  // Modifier un rôle
+  const handleUpdateRole = async () => {
+    if (!editRoleDialog.role || !editRoleDialog.name.trim()) {
+      showError('Erreur', 'Veuillez saisir un nom de rôle');
+      return;
+    }
+
     setLoading(true);
     try {
-      const result = await ConsumApi.removeRolePermission(role, permission);
+      const result = await ConsumApi.updateRole(editRoleDialog.role.id, editRoleDialog.name);
       const processed = showApiResponse(result, {
-        successTitle: 'Permission retirée',
+        successTitle: 'Rôle modifié',
+        errorTitle: 'Erreur de modification',
+      });
+      if (processed.success) {
+        showSuccess('Succès', 'Le rôle a été modifié avec succès');
+        setEditRoleDialog({ open: false, role: null, name: '' });
+        loadRoles();
+      }
+    } catch (error) {
+      console.error('Error updating role:', error);
+      showError('Erreur', 'Impossible de modifier le rôle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Supprimer un rôle
+  const handleDeleteRole = async () => {
+    if (!deleteRoleDialog.role) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.deleteRole(deleteRoleDialog.role.id);
+      const processed = showApiResponse(result, {
+        successTitle: 'Rôle supprimé',
         errorTitle: 'Erreur de suppression',
       });
       if (processed.success) {
-        showSuccess('Succès', 'La fonctionnalité a été retirée du rôle avec succès');
-        loadPermissionsMatrix();
+        showSuccess('Succès', 'Le rôle a été supprimé avec succès');
+        setDeleteRoleDialog({ open: false, role: null });
+        loadRoles();
       }
     } catch (error) {
-      console.error('Error removing permission:', error);
-      showError('Erreur', 'Impossible de retirer la fonctionnalité');
+      console.error('Error deleting role:', error);
+      showError('Erreur', 'Impossible de supprimer le rôle');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderPermissionsMatrixSection = () => (
+  // Charger les permissions d'un rôle
+  const loadRolePermissions = useCallback(async (roleUuid) => {
+    setLoadingRolePermissions(true);
+    try {
+      const result = await ConsumApi.getRoleGlobalPermissions(roleUuid);
+      if (result.success) {
+        setRolePermissions(result.data);
+      } else {
+        showError('Erreur', result.message || 'Impossible de charger les permissions');
+        setRolePermissions(null);
+      }
+    } catch (error) {
+      console.error('Error loading role permissions:', error);
+      showError('Erreur', 'Impossible de charger les permissions du rôle');
+      setRolePermissions(null);
+    } finally {
+      setLoadingRolePermissions(false);
+    }
+  }, []);
+
+  // Ouvrir le dialog de gestion des permissions
+  const handleOpenManagePermissions = async (role) => {
+    setManageRolePermissionsDialog({ open: true, role });
+    // Charger les permissions du rôle (qui contient déjà toutes les permissions disponibles)
+    await loadRolePermissions(role.id);
+  };
+
+  // Toggle une permission pour un rôle
+  const handleToggleRolePermission = async (permissionUuid) => {
+    setLoading(true);
+    try {
+      const result = await ConsumApi.toggleRolePermissionStatus(permissionUuid);
+      const processed = showApiResponse(result, {
+        successTitle: 'Permission modifiée',
+        errorTitle: 'Erreur de modification',
+      });
+      if (processed.success) {
+        // Recharger les permissions du rôle
+        if (manageRolePermissionsDialog.role) {
+          await loadRolePermissions(manageRolePermissionsDialog.role.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling permission:', error);
+      showError('Erreur', 'Impossible de modifier la permission');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Générer toutes les permissions pour un rôle
+  const handleGenerateRolePermissions = async () => {
+    if (!manageRolePermissionsDialog.role) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await ConsumApi.generateRolePermissions(manageRolePermissionsDialog.role.id);
+      const processed = showApiResponse(result, {
+        successTitle: 'Permissions générées',
+        errorTitle: 'Erreur de génération',
+      });
+      if (processed.success) {
+        showSuccess('Succès', 'Toutes les permissions ont été générées pour ce rôle');
+        await loadRolePermissions(manageRolePermissionsDialog.role.id);
+      }
+    } catch (error) {
+      console.error('Error generating permissions:', error);
+      showError('Erreur', 'Impossible de générer les permissions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper pour organiser les permissions en deux groupes : celles du rôle et les autres
+  const organizePermissions = () => {
+    if (!rolePermissions || !rolePermissions.modules) {
+      return { rolePermissions: [], otherPermissions: [] };
+    }
+
+    // Séparer les permissions
+    const rolePerms = [];
+    const otherPerms = [];
+
+    // Organiser les permissions par module
+    rolePermissions.modules.forEach((module) => {
+      if (module.permissions && module.permissions.length > 0) {
+        // Permissions assignées au rôle (avec role_permission_uuid)
+        const assignedPerms = module.permissions.filter((p) => p.role_permission_uuid !== null);
+        // Permissions non assignées (sans role_permission_uuid)
+        const unassignedPerms = module.permissions.filter((p) => p.role_permission_uuid === null);
+
+        // Ajouter les permissions assignées dans la section "Permissions du Rôle"
+        if (assignedPerms.length > 0) {
+          rolePerms.push({
+            ...module,
+            permissions: assignedPerms,
+          });
+        }
+
+        // Ajouter les permissions non assignées dans la section "Autres Permissions Disponibles"
+        if (unassignedPerms.length > 0) {
+          otherPerms.push({
+            ...module,
+            permissions: unassignedPerms,
+          });
+        }
+      }
+    });
+
+    return { rolePermissions: rolePerms, otherPermissions: otherPerms };
+  };
+
+  // Rendre la section Modules (tableau simple)
+  const renderModulesSection = () => (
       <Stack spacing={3}>
         <Alert severity="info">
-          Visualisez la hiérarchie des rôles et leurs permissions respectives.
+        Gérez les modules de permissions du système.
         </Alert>
 
         <Card sx={{ p: 3 }}>
           <Stack spacing={2}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">Matrice des Permissions</Typography>
+            <Typography variant="h6">Modules de Permissions</Typography>
+            <Stack direction="row" spacing={2}>
               <LoadingButton
-                variant="contained"
-                onClick={loadPermissionsMatrix}
-                loading={loading}
+                variant="outlined"
+                onClick={() => loadModules()}
+                loading={loadingModules}
                 startIcon={<Iconify icon="eva:refresh-outline" />}
               >
-                Charger
+                Actualiser
               </LoadingButton>
+              <Button
+                variant="contained"
+                startIcon={<Iconify icon="eva:plus-outline" />}
+                onClick={() => setCreateModuleDialog({ open: true, name: '', description: '', statut: 'ACTIF' })}
+              >
+                Créer un Module
+              </Button>
+            </Stack>
             </Box>
             <Divider />
-          </Stack>
-        </Card>
 
-        {!permissionsMatrix || !hierarchy ? (
-          <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-            {loading ? 'Chargement...' : 'Cliquez sur "Charger" pour afficher la matrice'}
+          {modules.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Nom</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Statut</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Date de création</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {modules.map((module) => (
+                    <TableRow key={module.id}>
+                      <TableCell>
+                        <Typography variant="subtitle2">{module.name}</Typography>
+                      </TableCell>
+                      <TableCell>{module.description || '-'}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {module.slug || module.id}
           </Typography>
-        ) : (
-          renderPermissionsMatrixContent()
-        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={module.statut || 'ACTIF'}
+                          color={module.statut === 'ACTIF' ? 'success' : 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {module.createdAt
+                          ? new Date(module.createdAt).toLocaleDateString('fr-FR')
+                          : '-'}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Tooltip title="Modifier">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                // TODO: Implémenter la modification
+                                showError('Info', 'Fonctionnalité à venir');
+                              }}
+                            >
+                              <Iconify icon="solar:pen-bold" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Supprimer">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={async () => {
+                                if (window.confirm(`Êtes-vous sûr de vouloir supprimer le module "${module.name}" ?`)) {
+                                  setLoading(true);
+                                  try {
+                                    const result = await ConsumApi.deletePermissionModule(module.id);
+                                    const processed = showApiResponse(result, {
+                                      successTitle: 'Module supprimé',
+                                      errorTitle: 'Erreur de suppression',
+                                    });
+                                    if (processed.success) {
+                                      loadModules();
+                                    }
+                                  } catch (error) {
+                                    console.error('Error deleting module:', error);
+                                    showError('Erreur', 'Impossible de supprimer le module');
+                                  } finally {
+                                    setLoading(false);
+                                  }
+                                }
+                              }}
+                            >
+                              <Iconify icon="solar:trash-bin-trash-bold" />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              {loadingModules ? 'Chargement...' : 'Aucun module trouvé'}
+            </Typography>
+          )}
+
+          {modules.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {modules.length} module(s) affiché(s)
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </Card>
       </Stack>
     );
 
-  const renderPermissionsMatrixContent = () => {
-    if (!permissionsMatrix || !hierarchy) {
-      return null;
-    }
+  // Rendre la section Permissions (tableau avec module associé)
+  const renderPermissionsSection = () => (
+    <Stack spacing={3}>
+      <Alert severity="info">
+        Gérez les permissions liées aux modules du système.
+      </Alert>
 
-    const roles = Object.keys(permissionsMatrix).sort((a, b) => (permissionsMatrix[b].level || 0) - (permissionsMatrix[a].level || 0));
+      <Card sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Permissions</Typography>
+            <Stack direction="row" spacing={2}>
+              <LoadingButton
+                variant="outlined"
+                onClick={() => loadAllPermissions()}
+                loading={loadingPermissions}
+                startIcon={<Iconify icon="eva:refresh-outline" />}
+              >
+                Actualiser
+              </LoadingButton>
+              <Button
+                variant="contained"
+                startIcon={<Iconify icon="eva:plus-outline" />}
+                onClick={() => {
+                  // Charger les modules d'abord si nécessaire
+                  if (modules.length === 0) {
+                    loadModules();
+                  }
+                  setCreatePermissionDialog({ open: true, moduleId: '', name: '', description: '' });
+                }}
+              >
+                Créer une Permission
+              </Button>
+            </Stack>
+          </Box>
+          <Divider />
 
+          {loadingPermissions ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <Typography color="text.secondary">Chargement des permissions...</Typography>
+            </Box>
+          ) : allPermissions.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Nom</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Module</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Date de création</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {allPermissions.map((permission) => {
+                    console.log('Rendering permission:', permission);
     return (
-      <>
-        {roles.map((role) => {
-          const roleData = permissionsMatrix[role];
-          const subRoles = hierarchy[role] || [];
+                      <TableRow key={permission.id || permission.slug}>
+                        <TableCell>
+                          <Typography variant="subtitle2">{permission.name}</Typography>
+                        </TableCell>
+                        <TableCell>{permission.description || '-'}</TableCell>
+                        <TableCell>
+                          {permission.module ? (
+                            <Chip
+                              label={permission.module.name || permission.module.slug || permission.module}
+                              color="primary"
+                              size="small"
+                              title={permission.module.description || ''}
+                            />
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              -
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {permission.slug || permission.id}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {permission.createdAt
+                            ? new Date(permission.createdAt).toLocaleDateString('fr-FR')
+                            : '-'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Tooltip title="Modifier">
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  // TODO: Implémenter la modification
+                                  showError('Info', 'Fonctionnalité à venir');
+                                }}
+                              >
+                                <Iconify icon="solar:pen-bold" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Supprimer">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={async () => {
+                                  if (window.confirm(`Êtes-vous sûr de vouloir supprimer la permission "${permission.name}" ?`)) {
+                                    setLoading(true);
+                                    try {
+                                      const result = await ConsumApi.deletePermission(permission.id);
+                                      const processed = showApiResponse(result, {
+                                        successTitle: 'Permission supprimée',
+                                        errorTitle: 'Erreur de suppression',
+                                      });
+                                      if (processed.success) {
+                                        loadAllPermissions();
+                                      }
+                                    } catch (error) {
+                                      console.error('Error deleting permission:', error);
+                                      showError('Erreur', 'Impossible de supprimer la permission');
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }
+                                }}
+                              >
+                                <Iconify icon="solar:trash-bin-trash-bold" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ py: 4 }}>
+              <Typography color="text.secondary" align="center" sx={{ mb: 2 }}>
+                Aucune permission trouvée
+              </Typography>
+              <Typography variant="body2" color="text.secondary" align="center">
+                État: {allPermissions.length} permission(s) chargée(s)
+              </Typography>
+            </Box>
+          )}
 
-          return (
-            <Card key={role} sx={{ p: 3 }}>
+          {allPermissions.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {allPermissions.length} permission(s) affichée(s)
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  // Rendre la section Modules (ancienne version avec accordéons - à supprimer ou garder pour référence)
+  const renderModulesSectionOld = () => (
+      <Stack spacing={3}>
+        <Alert severity="info">
+        Gérez les modules de permissions, leurs permissions associées et les rôles assignés.
+        </Alert>
+
+        <Card sx={{ p: 3 }}>
               <Stack spacing={2}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6">Modules de Permissions</Typography>
+            <Stack direction="row" spacing={2}>
+              <LoadingButton
+                variant="outlined"
+                onClick={() => loadModules()}
+                loading={loadingModules}
+                startIcon={<Iconify icon="eva:refresh-outline" />}
+              >
+                Actualiser
+              </LoadingButton>
+              <Button
+                variant="contained"
+                startIcon={<Iconify icon="eva:plus-outline" />}
+                onClick={() => setCreateModuleDialog({ open: true, name: '', description: '', statut: 'ACTIF' })}
+              >
+                Créer un Module
+              </Button>
+            </Stack>
+            </Box>
+            <Divider />
+
+          {modules.length > 0 ? (
+            <Stack spacing={2}>
+              {modules.map((module) => {
+                const permissions = permissionsByModule[module.id] || [];
+                const assignedRoles = moduleRoles[module.id] || [];
+
+    return (
+                  <Accordion 
+                    key={module.id}
+                    onChange={(event, expanded) => {
+                      if (expanded) {
+                        // Charger les permissions et rôles quand l'accordéon s'ouvre
+                        if (!permissionsByModule[module.id]) {
+                          loadPermissionsForModule(module.id);
+                        }
+                        if (!moduleRoles[module.id]) {
+                          loadRolesForModule(module.id);
+                        }
+                      }
+                    }}
+                  >
+                    <AccordionSummary expandIcon={<Iconify icon="eva:arrow-ios-downward-fill" />}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                        <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                          {module.name}
+                        </Typography>
                     <Chip
-                      label={ROLE_LABELS[role] || role}
-                      color={ROLE_COLORS[role] || 'default'}
-                      size="large"
+                          label={module.statut || 'ACTIF'}
+                          color={module.statut === 'ACTIF' ? 'success' : 'default'}
+                          size="small"
                     />
                     <Typography variant="body2" color="text.secondary">
-                      Niveau {roleData.level || 0}
+                          {permissions.length} permission(s) • {assignedRoles.length} rôle(s)
                     </Typography>
                   </Box>
-                  {subRoles.length > 0 && (
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Stack spacing={3}>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Description: {module.description || 'Aucune description'}
+                          </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Peut gérer:
+                            Slug: {module.slug || module.id}
                       </Typography>
-                      {subRoles.map((subRole) => (
-                        <Chip
-                          key={subRole}
-                          label={subRole}
+                        </Box>
+
+                        <Divider />
+
+                        <Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="subtitle2">Permissions ({permissions.length})</Typography>
+                            <Button
                           size="small"
                           variant="outlined"
-                          color={ROLE_COLORS[subRole] || 'default'}
-                        />
-                      ))}
+                              startIcon={<Iconify icon="eva:plus-outline" />}
+                              onClick={() => setCreatePermissionDialog({ open: true, moduleId: module.id, name: '', description: '' })}
+                            >
+                              Ajouter une Permission
+                            </Button>
                     </Box>
+                          {permissions.length > 0 ? (
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Nom</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {permissions.map((permission) => (
+                                    <TableRow key={permission.id}>
+                                      <TableCell>{permission.name}</TableCell>
+                                      <TableCell>{permission.description || '-'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                              Aucune permission pour ce module
+                            </Typography>
                   )}
                 </Box>
 
                 <Divider />
 
                 <Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      Fonctionnalités ({roleData.permissions.length}):
-                    </Typography>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<Iconify icon="eva:plus-outline" />}
-                      onClick={() => setAddPermissionDialog({ open: true, role, newPermission: '' })}
-                    >
-                      Ajouter
-                    </Button>
-                  </Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="subtitle2">Rôles Assignés ({assignedRoles.length})</Typography>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Iconify icon="eva:plus-outline" />}
+                              onClick={() => setAssignRoleDialog({ open: true, moduleId: module.id, roleId: '' })}
+                            >
+                              Assigner un Rôle
+                            </Button>
+                          </Box>
+                          {assignedRoles.length > 0 ? (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {roleData.permissions.map((permission, index) => (
+                              {assignedRoles.map((role) => (
                       <Chip
-                        key={index}
-                        label={permission}
-                        size="small"
-                        sx={{ bgcolor: 'primary.lighter' }}
-                        onDelete={() => handleRemovePermission(role, permission)}
-                        deleteIcon={<Iconify icon="eva:close-outline" />}
+                                  key={role.id || role.roleId}
+                                  label={ROLE_LABELS[role.name || role.roleName] || role.name || role.roleName}
+                                  color={ROLE_COLORS[role.name || role.roleName] || 'default'}
+                                  onDelete={() => handleRemoveRoleFromModule(module.id, role.id || role.roleId)}
+                                  deleteIcon={<Iconify icon="eva:close-outline" />}
                       />
                     ))}
                   </Box>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                              Aucun rôle assigné à ce module
+                            </Typography>
+                          )}
                 </Box>
               </Stack>
-            </Card>
+                    </AccordionDetails>
+                  </Accordion>
           );
         })}
-      </>
-    );
-  };
+            </Stack>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              {loadingModules ? 'Chargement...' : 'Aucun module trouvé'}
+            </Typography>
+          )}
 
+          {/* Information sur le nombre de modules */}
+          {modules.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 3 }}>
+              <Typography variant="body2" color="text.secondary">
+                {modules.length} module(s) affiché(s)
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  // Rendre la section Rôles
+  const renderRolesSection = () => (
+    <Stack spacing={3}>
+      <Alert severity="info">
+        Gérez tous les rôles disponibles dans le système et leurs permissions.
+      </Alert>
+
+      <Card sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Rôles</Typography>
+            <Stack direction="row" spacing={2}>
+              <Button
+                variant="contained"
+                startIcon={<Iconify icon="eva:plus-outline" />}
+                onClick={() => setCreateRoleDialog({ open: true, name: '' })}
+              >
+                Créer un Rôle
+              </Button>
+              <LoadingButton
+                variant="outlined"
+                onClick={loadRoles}
+                loading={loadingRoles}
+                startIcon={<Iconify icon="eva:refresh-outline" />}
+              >
+                Actualiser
+              </LoadingButton>
+            </Stack>
+          </Box>
+          <Divider />
+
+          {roles.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Nom</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Slug</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Date de Création</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {roles.map((role) => (
+                    <TableRow key={role.id}>
+                      <TableCell>
+                        <Chip
+                          label={ROLE_LABELS[role.name] || role.name}
+                          color={ROLE_COLORS[role.name] || 'default'}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{role.slug}</TableCell>
+                      <TableCell>
+                        {role.createdAt
+                          ? new Date(role.createdAt).toLocaleDateString('fr-FR')
+                          : '-'}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Tooltip title="Gérer les permissions">
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={() => handleOpenManagePermissions(role)}
+                            >
+                              <Iconify icon="eva:settings-outline" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Modifier">
+                            <IconButton
+                              size="small"
+                              color="warning"
+                              onClick={() => setEditRoleDialog({ open: true, role, name: role.name })}
+                            >
+                              <Iconify icon="eva:edit-outline" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Supprimer">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => setDeleteRoleDialog({ open: true, role })}
+                            >
+                              <Iconify icon="eva:trash-2-outline" />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              {loadingRoles ? 'Chargement...' : 'Aucun rôle trouvé'}
+            </Typography>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  // Rendre la section Utilisateurs
   const renderUsersSection = () => (
       <Stack spacing={3}>
         <Alert severity="info">
@@ -434,8 +1520,8 @@ export default function RolesPermissionsView() {
                         <TableCell>{user.phone || '-'}</TableCell>
                         <TableCell>
                           <Chip
-                            label={user.role}
-                            color={ROLE_COLORS[user.role] || 'default'}
+                          label={user.role?.name || user.role || '-'}
+                          color={ROLE_COLORS[user.role?.name || user.role] || 'default'}
                             size="small"
                           />
                         </TableCell>
@@ -456,8 +1542,7 @@ export default function RolesPermissionsView() {
                             <Tooltip title="Modifier le rôle">
                               <IconButton
                                 size="small"
-                                onClick={() => setChangeRoleDialog({ open: true, user, newRole: user.role })}
-                                disabled={user.role === 'SUPERADMIN'}
+                              onClick={() => setChangeRoleDialog({ open: true, user, newRole: user.role?.id || user.role })}
                               >
                                 <Iconify icon="solar:user-id-bold" />
                               </IconButton>
@@ -509,7 +1594,7 @@ export default function RolesPermissionsView() {
           <Box>
             <Typography variant="h4">Rôles & Permissions</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Gérez les rôles, permissions et utilisateurs du système
+              Gérez les modules de permissions, les rôles et les utilisateurs du système
             </Typography>
           </Box>
 
@@ -522,8 +1607,20 @@ export default function RolesPermissionsView() {
                   scrollButtons="auto"
                 >
                   <Tab
-                    label="Matrice des Permissions"
-                    value="matrix"
+                    label="Modules"
+                    value="modules"
+                    icon={<Iconify icon="solar:folder-bold" />}
+                    iconPosition="start"
+                  />
+                  <Tab
+                    label="Permissions"
+                    value="permissions"
+                    icon={<Iconify icon="solar:key-bold" />}
+                    iconPosition="start"
+                  />
+                  <Tab
+                    label="Rôles"
+                    value="roles"
                     icon={<Iconify icon="solar:shield-check-bold" />}
                     iconPosition="start"
                   />
@@ -537,8 +1634,14 @@ export default function RolesPermissionsView() {
               </Box>
 
               <Box sx={{ p: 3 }}>
-                <TabPanel value="matrix" sx={{ p: 0 }}>
-                  {renderPermissionsMatrixSection()}
+                <TabPanel value="modules" sx={{ p: 0 }}>
+                  {renderModulesSection()}
+                </TabPanel>
+                <TabPanel value="permissions" sx={{ p: 0 }}>
+                  {renderPermissionsSection()}
+                </TabPanel>
+                <TabPanel value="roles" sx={{ p: 0 }}>
+                  {renderRolesSection()}
                 </TabPanel>
                 <TabPanel value="users" sx={{ p: 0 }}>
                   {renderUsersSection()}
@@ -548,6 +1651,190 @@ export default function RolesPermissionsView() {
           </Card>
         </Stack>
       </Container>
+
+      {/* Dialog pour créer un module */}
+      <Dialog
+        open={createModuleDialog.open}
+        onClose={() => setCreateModuleDialog({ open: false, name: '', description: '', statut: 'ACTIF' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Créer un Module de Permissions
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          <Stack spacing={3}>
+            <TextField
+              fullWidth
+              label="Nom du Module"
+              value={createModuleDialog.name}
+              onChange={(e) => setCreateModuleDialog({ ...createModuleDialog, name: e.target.value })}
+              required
+            />
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Description"
+              value={createModuleDialog.description}
+              onChange={(e) => setCreateModuleDialog({ ...createModuleDialog, description: e.target.value })}
+              required
+            />
+            <FormControl fullWidth>
+              <InputLabel>Statut</InputLabel>
+              <Select
+                value={createModuleDialog.statut}
+                label="Statut"
+                onChange={(e) => setCreateModuleDialog({ ...createModuleDialog, statut: e.target.value })}
+              >
+                <MenuItem value="ACTIF">Actif</MenuItem>
+                <MenuItem value="INACTIF">Inactif</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+              <Button
+                onClick={() => setCreateModuleDialog({ open: false, name: '', description: '', statut: 'ACTIF' })}
+                variant="outlined"
+              >
+                Annuler
+              </Button>
+              <LoadingButton
+                variant="contained"
+                onClick={handleCreateModule}
+                loading={loading}
+                disabled={!createModuleDialog.name || !createModuleDialog.description}
+              >
+                Créer
+              </LoadingButton>
+            </Box>
+          </Stack>
+        </Box>
+      </Dialog>
+
+      {/* Dialog pour créer une permission */}
+      <Dialog
+        open={createPermissionDialog.open}
+        onClose={() => setCreatePermissionDialog({ open: false, moduleId: '', name: '', description: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Créer une Permission
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Module</InputLabel>
+              <Select
+                value={createPermissionDialog.moduleId}
+                label="Module"
+                onChange={(e) => setCreatePermissionDialog({ ...createPermissionDialog, moduleId: e.target.value })}
+              >
+                {modules.map((module) => (
+                  <MenuItem key={module.id} value={module.id}>
+                    {module.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              label="Nom de la Permission"
+              value={createPermissionDialog.name}
+              onChange={(e) => setCreatePermissionDialog({ ...createPermissionDialog, name: e.target.value })}
+              required
+            />
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Description"
+              value={createPermissionDialog.description}
+              onChange={(e) => setCreatePermissionDialog({ ...createPermissionDialog, description: e.target.value })}
+            />
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+              <Button
+                onClick={() => setCreatePermissionDialog({ open: false, moduleId: '', name: '', description: '' })}
+                variant="outlined"
+              >
+                Annuler
+              </Button>
+              <LoadingButton
+                variant="contained"
+                onClick={handleCreatePermission}
+                loading={loading}
+                disabled={!createPermissionDialog.moduleId || !createPermissionDialog.name}
+              >
+                Créer
+              </LoadingButton>
+            </Box>
+          </Stack>
+        </Box>
+      </Dialog>
+
+      {/* Dialog pour assigner un rôle à un module */}
+      <Dialog
+        open={assignRoleDialog.open}
+        onClose={() => setAssignRoleDialog({ open: false, moduleId: '', roleId: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Assigner un Rôle au Module
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Rôle</InputLabel>
+              <Select
+                value={assignRoleDialog.roleId}
+                label="Rôle"
+                onChange={(e) => setAssignRoleDialog({ ...assignRoleDialog, roleId: e.target.value })}
+              >
+                {roles
+                  .filter((role) => {
+                    const assigned = moduleRoles[assignRoleDialog.moduleId] || [];
+                    return !assigned.some((r) => (r.id || r.roleId) === role.id);
+                  })
+                  .map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      {ROLE_LABELS[role.name] || role.name}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+
+            <Alert severity="info">
+              Ce rôle aura accès à toutes les permissions de ce module.
+            </Alert>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+              <Button
+                onClick={() => setAssignRoleDialog({ open: false, moduleId: '', roleId: '' })}
+                variant="outlined"
+              >
+                Annuler
+              </Button>
+              <LoadingButton
+                variant="contained"
+                onClick={handleAssignRoleToModule}
+                loading={loading}
+                disabled={!assignRoleDialog.roleId}
+              >
+                Assigner
+              </LoadingButton>
+            </Box>
+          </Stack>
+        </Box>
+      </Dialog>
 
       {/* Dialog pour changer le rôle */}
       <Dialog
@@ -572,7 +1859,7 @@ export default function RolesPermissionsView() {
                   {changeRoleDialog.user.firstName} {changeRoleDialog.user.lastName} ({changeRoleDialog.user.email})
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Rôle actuel: <Chip label={changeRoleDialog.user.role} size="small" color={ROLE_COLORS[changeRoleDialog.user.role]} />
+                  Rôle actuel: <Chip label={changeRoleDialog.user.role?.name || changeRoleDialog.user.role} size="small" color={ROLE_COLORS[changeRoleDialog.user.role?.name || changeRoleDialog.user.role]} />
                 </Typography>
               </Box>
 
@@ -583,16 +1870,11 @@ export default function RolesPermissionsView() {
                   label="Nouveau Rôle"
                   onChange={(e) => setChangeRoleDialog({ ...changeRoleDialog, newRole: e.target.value })}
                 >
-                  <MenuItem value="DIRECTEUR">Directeur</MenuItem>
-                  <MenuItem value="ADMINISTRATEUR">Administrateur</MenuItem>
-                  <MenuItem value="RH">RH</MenuItem>
-                  <MenuItem value="COMPTABLE">Comptable</MenuItem>
-                  <MenuItem value="ACHAT">Achat</MenuItem>
-                  <MenuItem value="ASSURANCE">Assurance</MenuItem>
-                  <MenuItem value="LABORANTIN">Laborantin</MenuItem>
-                  <MenuItem value="MEDECIN">Médecin</MenuItem>
-                  <MenuItem value="INFIRMIER">Infirmier</MenuItem>
-                  <MenuItem value="AIDE_SOIGNANT">Aide-soignant</MenuItem>
+                  {roles.map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      {ROLE_LABELS[role.name] || role.name}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
 
@@ -732,80 +2014,381 @@ export default function RolesPermissionsView() {
         </Box>
       </Dialog>
 
-      {/* Dialog pour ajouter une permission */}
+      {/* Dialog pour créer un rôle */}
       <Dialog
-        open={addPermissionDialog.open}
-        onClose={() => setAddPermissionDialog({ open: false, role: '', newPermission: '' })}
+        open={createRoleDialog.open}
+        onClose={() => setCreateRoleDialog({ open: false, name: '' })}
         maxWidth="sm"
         fullWidth
       >
         <Box sx={{ p: 3 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Ajouter une Fonctionnalité
+            Créer un Rôle
           </Typography>
           <Divider sx={{ mb: 3 }} />
 
           <Stack spacing={3}>
-            <FormControl fullWidth>
-              <InputLabel>Rôle</InputLabel>
-              <Select
-                value={addPermissionDialog.role}
-                label="Rôle"
-                onChange={(e) => setAddPermissionDialog({ ...addPermissionDialog, role: e.target.value })}
-              >
-                {permissionsMatrix && Object.keys(permissionsMatrix).map((role) => (
-                  <MenuItem key={role} value={role}>
-                    {ROLE_LABELS[role] || role}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth>
-              <InputLabel>Fonctionnalité</InputLabel>
-              <Select
-                value={addPermissionDialog.newPermission}
-                label="Fonctionnalité"
-                onChange={(e) => setAddPermissionDialog({ ...addPermissionDialog, newPermission: e.target.value })}
-              >
-                {allFunctionalities
-                  .filter((func) => {
-                    if (!addPermissionDialog.role || !permissionsMatrix) return true;
-                    const rolePermissions = permissionsMatrix[addPermissionDialog.role]?.permissions || [];
-                    return !rolePermissions.includes(func);
-                  })
-                  .map((func) => (
-                    <MenuItem key={func} value={func}>
-                      {func}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-
-            <Alert severity="info">
-              Sélectionnez un rôle et une fonctionnalité à ajouter. Les fonctionnalités déjà assignées ne seront pas affichées.
-            </Alert>
+            <TextField
+              fullWidth
+              label="Nom du Rôle"
+              value={createRoleDialog.name}
+              onChange={(e) => setCreateRoleDialog({ ...createRoleDialog, name: e.target.value })}
+              required
+              placeholder="Ex: ADMINISTRATEUR"
+            />
 
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
               <Button
-                onClick={() => setAddPermissionDialog({ open: false, role: '', newPermission: '' })}
+                onClick={() => setCreateRoleDialog({ open: false, name: '' })}
                 variant="outlined"
               >
                 Annuler
               </Button>
               <LoadingButton
                 variant="contained"
-                onClick={handleAddPermission}
+                onClick={handleCreateRole}
                 loading={loading}
-                disabled={!addPermissionDialog.role || !addPermissionDialog.newPermission}
+                disabled={!createRoleDialog.name.trim()}
               >
-                Ajouter
+                Créer
               </LoadingButton>
             </Box>
           </Stack>
         </Box>
       </Dialog>
+
+      {/* Dialog pour modifier un rôle */}
+      <Dialog
+        open={editRoleDialog.open}
+        onClose={() => setEditRoleDialog({ open: false, role: null, name: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Modifier un Rôle
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          {editRoleDialog.role && (
+            <Stack spacing={3}>
+              <TextField
+                fullWidth
+                label="Nom du Rôle"
+                value={editRoleDialog.name}
+                onChange={(e) => setEditRoleDialog({ ...editRoleDialog, name: e.target.value })}
+                required
+              />
+
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+                <Button
+                  onClick={() => setEditRoleDialog({ open: false, role: null, name: '' })}
+                  variant="outlined"
+                >
+                  Annuler
+                </Button>
+                <LoadingButton
+                  variant="contained"
+                  onClick={handleUpdateRole}
+                  loading={loading}
+                  disabled={!editRoleDialog.name.trim()}
+                >
+                  Modifier
+                </LoadingButton>
+              </Box>
+            </Stack>
+          )}
+        </Box>
+      </Dialog>
+
+      {/* Dialog pour supprimer un rôle */}
+      <Dialog
+        open={deleteRoleDialog.open}
+        onClose={() => setDeleteRoleDialog({ open: false, role: null })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Supprimer un Rôle
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          {deleteRoleDialog.role && (
+            <Stack spacing={3}>
+              <Alert severity="warning">
+                Êtes-vous sûr de vouloir supprimer ce rôle ? Cette action est irréversible.
+              </Alert>
+
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Rôle:
+                </Typography>
+                <Typography variant="subtitle1">
+                  {deleteRoleDialog.role.name} ({deleteRoleDialog.role.slug})
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+                <Button
+                  onClick={() => setDeleteRoleDialog({ open: false, role: null })}
+                  variant="outlined"
+                >
+                  Annuler
+                </Button>
+                <LoadingButton
+                  variant="contained"
+                  onClick={handleDeleteRole}
+                  loading={loading}
+                  color="error"
+                >
+                  Supprimer
+                </LoadingButton>
+              </Box>
+            </Stack>
+          )}
+        </Box>
+      </Dialog>
+
+      {/* Dialog pour gérer les permissions d'un rôle */}
+      <Dialog
+        open={manageRolePermissionsDialog.open}
+        onClose={() => {
+          setManageRolePermissionsDialog({ open: false, role: null });
+          setRolePermissions(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Gérer les Permissions - {manageRolePermissionsDialog.role?.name}
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          {manageRolePermissionsDialog.role && (
+            <Stack spacing={3}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Gérez les permissions pour le rôle: <strong>{manageRolePermissionsDialog.role.name}</strong>
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Iconify icon="eva:refresh-outline" />}
+                  onClick={() => loadRolePermissions(manageRolePermissionsDialog.role.id)}
+                  disabled={loadingRolePermissions}
+                >
+                  Actualiser
+                </Button>
+              </Box>
+
+              {loadingRolePermissions ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <Typography color="text.secondary">Chargement des permissions...</Typography>
+                </Box>
+              ) : rolePermissions && rolePermissions.modules ? (
+                <Stack spacing={4}>
+                  {(() => {
+                    const { rolePermissions: rolePerms, otherPermissions: otherPerms } = organizePermissions();
+                    
+                    return (
+                      <>
+                        {/* Section 1: Permissions du Rôle */}
+                        <Box>
+                          <Typography variant="h6" sx={{ mb: 2 }}>
+                            Permissions du Rôle
+                          </Typography>
+                          <Divider sx={{ mb: 2 }} />
+                          
+                          {rolePerms.length > 0 ? (
+                            <Stack spacing={2}>
+                              {rolePerms.map((module) => (
+                                <Accordion key={module.uuid}>
+                                  <AccordionSummary expandIcon={<Iconify icon="eva:arrow-ios-downward-fill" />}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                                      <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                                        {module.name}
+                                      </Typography>
+                                      <Chip
+                                        label={`${module.permissions?.filter(p => p.status).length || 0}/${module.permissions?.length || 0} activées`}
+                                        size="small"
+                                        color="primary"
+                                      />
+                                    </Box>
+                                  </AccordionSummary>
+                                  <AccordionDetails>
+                                    {module.permissions && module.permissions.length > 0 ? (
+                                      <TableContainer component={Paper} variant="outlined">
+                                        <Table size="small">
+                                          <TableHead>
+                                            <TableRow>
+                                              <TableCell sx={{ fontWeight: 'bold' }}>Permission</TableCell>
+                                              <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                                              <TableCell align="center" sx={{ fontWeight: 'bold' }}>Statut</TableCell>
+                                              <TableCell align="center" sx={{ fontWeight: 'bold' }}>Action</TableCell>
+                                            </TableRow>
+                                          </TableHead>
+                                          <TableBody>
+                                            {module.permissions.map((permission) => (
+                                              <TableRow key={permission.id}>
+                                                <TableCell>{permission.name}</TableCell>
+                                                <TableCell>{permission.description || '-'}</TableCell>
+                                                <TableCell align="center">
+                                                  <Chip
+                                                    label={permission.status ? 'Activée' : 'Non activée'}
+                                                    color={permission.status ? 'success' : 'default'}
+                                                    size="small"
+                                                  />
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                  <FormControlLabel
+                                                    control={
+                                                      <Checkbox
+                                                        checked={permission.status || false}
+                                                        onChange={() => handleToggleRolePermission(permission.role_permission_uuid)}
+                                                        disabled={loading}
+                                                      />
+                                                    }
+                                                    label=""
+                                                  />
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                          </TableBody>
+                                        </Table>
+                                      </TableContainer>
+                                    ) : (
+                                      <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                                        Aucune permission pour ce module
+                                      </Typography>
+                                    )}
+                                  </AccordionDetails>
+                                </Accordion>
+                              ))}
+                            </Stack>
+                          ) : (
+                            <Alert severity="info" sx={{ mt: 2 }}>
+                              Ce rôle n'a aucune permission assignée pour le moment.
+                            </Alert>
+                          )}
+                        </Box>
+
+                        {/* Section 2: Autres Permissions Disponibles */}
+                        <Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6">
+                              Autres Permissions Disponibles
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<Iconify icon="eva:plus-outline" />}
+                              onClick={handleGenerateRolePermissions}
+                              disabled={loading}
+                            >
+                              Générer Toutes les Permissions
+                            </Button>
+                          </Box>
+                          <Divider sx={{ mb: 2 }} />
+                          
+                          {otherPerms.length > 0 ? (
+                            <Stack spacing={2}>
+                              {otherPerms.map((module) => (
+                                <Accordion key={module.uuid}>
+                                  <AccordionSummary expandIcon={<Iconify icon="eva:arrow-ios-downward-fill" />}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                                      <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                                        {module.name}
+                                      </Typography>
+                                      <Chip
+                                        label={`${module.permissions?.length || 0} permission(s) disponible(s)`}
+                                        size="small"
+                                        color="info"
+                                      />
+                                    </Box>
+                                  </AccordionSummary>
+                                  <AccordionDetails>
+                                    {module.permissions && module.permissions.length > 0 ? (
+                                      <TableContainer component={Paper} variant="outlined">
+                                        <Table size="small">
+                                          <TableHead>
+                                            <TableRow>
+                                              <TableCell sx={{ fontWeight: 'bold' }}>Permission</TableCell>
+                                              <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                                              <TableCell align="center" sx={{ fontWeight: 'bold' }}>Action</TableCell>
+                                            </TableRow>
+                                          </TableHead>
+                                          <TableBody>
+                                            {module.permissions.map((permission) => (
+                                              <TableRow key={permission.id}>
+                                                <TableCell>{permission.name}</TableCell>
+                                                <TableCell>{permission.description || '-'}</TableCell>
+                                                <TableCell align="center">
+                                                  <Button
+                                                    size="small"
+                                                    variant="outlined"
+                                                    startIcon={<Iconify icon="eva:plus-outline" />}
+                                                    onClick={async () => {
+                                                      // Générer les permissions pour activer cette permission
+                                                      await handleGenerateRolePermissions();
+                                                      // Recharger pour mettre à jour l'affichage
+                                                      await loadRolePermissions(manageRolePermissionsDialog.role.id);
+                                                    }}
+                                                    disabled={loading}
+                                                  >
+                                                    Ajouter
+                                                  </Button>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                          </TableBody>
+                                        </Table>
+                                      </TableContainer>
+                                    ) : (
+                                      <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                                        Aucune permission disponible pour ce module
+                                      </Typography>
+                                    )}
+                                  </AccordionDetails>
+                                </Accordion>
+                              ))}
+                            </Stack>
+                          ) : (
+                            <Alert severity="success" sx={{ mt: 2 }}>
+                              Toutes les permissions disponibles sont déjà assignées à ce rôle.
+                            </Alert>
+                          )}
+                        </Box>
+                      </>
+                    );
+                  })()}
+                </Stack>
+              ) : rolePermissions ? (
+                <Alert severity="info">
+                  Aucune permission trouvée. Cliquez sur "Générer Toutes les Permissions" pour créer toutes les permissions disponibles.
+                </Alert>
+              ) : (
+                <Alert severity="error">
+                  Impossible de charger les permissions. Veuillez réessayer.
+                </Alert>
+              )}
+
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+                <Button
+                  onClick={() => {
+                    setManageRolePermissionsDialog({ open: false, role: null });
+                    setRolePermissions(null);
+                  }}
+                  variant="outlined"
+                >
+                  Fermer
+                </Button>
+              </Box>
+            </Stack>
+          )}
+        </Box>
+      </Dialog>
     </>
   );
 }
-

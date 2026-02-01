@@ -20,7 +20,7 @@ const navConfig = [
       routesName.adminMultiClinics,
     ],
     icon: icon('ic_lock'),
-    protected: ['ADMIN'], // Administrateur uniquement
+    protected: ['ADMIN', 'DIRECTEUR'], // Administrateur et Directeur
   },
   {
     title: 'Gestion des Patients',
@@ -38,7 +38,7 @@ const navConfig = [
       // sont accessibles uniquement depuis la vue de détails d'un patient
     ],
     icon: icon('ic_user'),
-    protected: ['ADMIN', 'MEDECIN', 'INFIRMIER'], // Administrateur, Médecin, Infirmier
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER'], // Administrateur, Directeur, Médecin, Infirmier
   },
   {
     title: 'Médecins',
@@ -55,7 +55,7 @@ const navConfig = [
       routesName.doctorsMessagerie,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'MEDECIN'], // Administrateur, Médecin
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN'], // Administrateur, Directeur, Médecin
   },
   {
     title: 'Infirmiers',
@@ -70,7 +70,7 @@ const navConfig = [
       routesName.nursesAlertes,
     ],
     icon: icon('ic_user'), // You may want to use a medical icon
-    protected: ['ADMIN', 'INFIRMIER'], // Administrateur, Infirmier
+    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER'], // Administrateur, Directeur, Infirmier
   },
   {
     title: 'Aides-soignantes',
@@ -84,7 +84,7 @@ const navConfig = [
       routesName.aidesSoignantesHistorique,
     ],
     icon: icon('ic_user'), // You may want to use a medical icon
-    protected: ['ADMIN', 'INFIRMIER', 'AIDE_SOIGNANTE'], // Administrateur, Infirmier, Aide-soignante
+    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER', 'AIDE_SOIGNANTE'], // Administrateur, Directeur, Infirmier, Aide-soignante
   },
   {
     title: 'Laboratoire',
@@ -100,7 +100,7 @@ const navConfig = [
       routesName.laboratoryStatistiques,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'LABORATOIRE', 'MEDECIN'], // Administrateur, Laboratoire, Médecin
+    protected: ['ADMIN', 'DIRECTEUR', 'LABORATOIRE', 'MEDECIN'], // Administrateur, Directeur, Laboratoire, Médecin
   },
   {
     title: 'Pharmacie',
@@ -116,7 +116,7 @@ const navConfig = [
       routesName.pharmacyInventaire,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'PHARMACIE', 'MEDECIN'], // Administrateur, Pharmacie, Médecin
+    protected: ['ADMIN', 'DIRECTEUR', 'PHARMACIE', 'MEDECIN'], // Administrateur, Directeur, Pharmacie, Médecin
   },
   {
     title: 'Caisse / Facturation',
@@ -132,7 +132,7 @@ const navConfig = [
       routesName.caisseHistorique,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'CAISSE', 'COMPTABILITE'], // Administrateur, Caisse, Comptabilité
+    protected: ['ADMIN', 'DIRECTEUR', 'CAISSE', 'COMPTABILITE'], // Administrateur, Directeur, Caisse, Comptabilité
   },
   {
     title: 'Gestionnaire / Direction',
@@ -147,7 +147,7 @@ const navConfig = [
       routesName.managerAudit,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'GESTIONNAIRE', 'DIRECTION'], // Administrateur, Gestionnaire, Direction
+    protected: ['ADMIN', 'DIRECTEUR', 'GESTIONNAIRE', 'DIRECTION'], // Administrateur, Directeur, Gestionnaire, Direction
   },
   {
     title: 'Rendez-vous & Planning',
@@ -160,7 +160,7 @@ const navConfig = [
       routesName.appointmentsUrgences,
     ],
     icon: icon('ic_user'), // You may want to use a medical icon
-    protected: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE'], // Administrateur, Médecin, Infirmier, Secrétaire
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE'], // Administrateur, Directeur, Médecin, Infirmier, Secrétaire
   },
   {
     title: 'Notifications & Communication',
@@ -174,7 +174,7 @@ const navConfig = [
       routesName.notificationsHistorique,
     ],
     icon: icon('ic_user'), // You may want to use a medical icon
-    protected: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE'], // Tous les utilisateurs peuvent accéder
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE'], // Tous les utilisateurs peuvent accéder
   },
   {
     title: 'Documents & Impressions',
@@ -189,7 +189,7 @@ const navConfig = [
       routesName.documentsExport,
     ],
     icon: icon('ic_lock'), // You may want to use a document icon
-    protected: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE', 'PHARMACIE', 'LABORATOIRE'], // Plusieurs rôles peuvent accéder
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER', 'SECRETAIRE', 'PHARMACIE', 'LABORATOIRE'], // Plusieurs rôles peuvent accéder
   },
   {
     title: 'Sécurité & Conformité',
@@ -203,7 +203,7 @@ const navConfig = [
       routesName.securiteConformiteReglementaire,
     ],
     icon: icon('ic_lock'), // Lock icon for security
-    protected: ['ADMIN'], // Seuls les administrateurs peuvent accéder
+    protected: ['ADMIN', 'DIRECTEUR'], // Administrateur et Directeur
   },
   {
     title: 'Technique (Transversal)',
@@ -217,7 +217,7 @@ const navConfig = [
       routesName.techniqueIntegrations,
     ],
     icon: icon('ic_lock'), // You may want to use a technical icon
-    protected: ['ADMIN'], // Seuls les administrateurs peuvent accéder
+    protected: ['ADMIN', 'DIRECTEUR'], // Administrateur et Directeur
   },
 ];
 

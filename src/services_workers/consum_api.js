@@ -5,6 +5,7 @@ import { pdf } from '@react-pdf/renderer';
 import { apiUrl } from 'src/constants/apiUrl';
 import { useAdminStore } from 'src/store/useAdminStore';
 import { AdminStorage } from 'src/storages/admins_storage';
+import ApiClient from 'src/services_workers/apiClient';
 
 import { FacturePdfDocument } from 'src/components/generator-facture';
 import { BonDeSortiePdfDocument } from 'src/components/generator-bon-de-sortie';
@@ -38,63 +39,72 @@ export default class ConsumApi {
   // ========== AUTHENTICATION ==========
 
   static async login({ email, password }) {
-    // Simuler un délai réseau
-    await new Promise(resolve => setTimeout(resolve, 300));
+    try {
+      // Appel direct à l'API avec axios pour gérer la structure de réponse spécifique
+      const response = await this.api.post(apiUrl.authentication, { email, password });
 
-    // MODE FAKE DATA - Accepte n'importe quels identifiants
-    // Identifiants par défaut recommandés :
-    // Email: admin@example.com ou n'importe quel email
-    // Password: n'importe quel mot de passe (peut être vide)
-    
-    // Déterminer le rôle/service basé sur l'email (optionnel)
-    let service = 'Administrateur';
-    let firstname = 'Admin';
-    let lastname = 'User';
-    
-    if (email) {
-      const emailLower = email.toLowerCase();
-      if (emailLower.includes('commercial')) {
-        service = 'Commercial';
-        firstname = 'Commercial';
-        lastname = 'User';
-      } else if (emailLower.includes('comptable')) {
-        service = 'Comptable';
-        firstname = 'Comptable';
-        lastname = 'User';
-      } else if (emailLower.includes('gerant')) {
-        service = 'Gerant';
-        firstname = 'Gérant';
-        lastname = 'User';
+      // La réponse de l'API est : { access_token, data: { id, email, first_name, last_name, role: { name, slug }, ... } }
+      // Status 201 = Created (succès)
+      if (response.status === 201 && response.data) {
+        const { access_token, data } = response.data;
+        
+        if (!access_token || !data) {
+          return { 
+            success: false,
+            message: 'Réponse invalide du serveur',
+            errors: ['Token ou données utilisateur manquants'],
+          };
+        }
+
+        // Mapper la réponse de l'API vers le format attendu par updateClientInfo
+        const userData = {
+          id: data.id,
+          email: data.email,
+          firstname: data.first_name || data.firstName || null,
+          lastname: data.last_name || data.lastName || null,
+          service: data.role?.name || data.role || 'USER', // Utiliser le nom du rôle
+        };
+
+        // Sauvegarder le token et les informations utilisateur
+        updateClientInfo(userData, access_token);
+
+        console.log('✅ Connexion réussie');
+        console.log('📧 Email:', data.email);
+        console.log('👤 Rôle:', userData.service);
+        console.log('🔑 Token:', access_token.substring(0, 20) + '...');
+
+        return { 
+          success: true, 
+          data: userData,
+          message: 'Connexion réussie',
+        };
       }
-    }
-
-    // Données factices pour la connexion
-    const accessToken = `fake_token_${  Date.now()}`;
-    
-    // Sauvegarder le token
-    AdminStorage.saveTokenAdmin(accessToken);
-    
-    // Récupérer les informations de l'utilisateur (fake)
-    const userData = {
-      id: '1',
-      email: email || 'admin@example.com',
-      firstname,
-      lastname,
-      service
-    };
-    
-    updateClientInfo(userData, accessToken);
-    
-    console.log('✅ Connexion réussie (MODE FAKE DATA)');
-    console.log('📧 Email utilisé:', email || 'admin@example.com');
-    console.log('👤 Rôle:', service);
-    console.log('🔑 Token:', accessToken);
-    
+      
+      // Si le statut n'est pas 201
+      return { 
+        success: false, 
+        message: 'Erreur de connexion',
+        errors: ['Réponse inattendue du serveur'],
+      };
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Gérer les erreurs de l'API
+      if (error.response?.data) {
+        const { message, error: errorMsg } = error.response.data;
     return { 
-      data: userData, 
-      success: true, 
-      message: 'Connexion réussie (mode fake data)' 
-    };
+      success: false, 
+          message: message || errorMsg || 'Erreur de connexion',
+          errors: [message || errorMsg || 'Identifiants invalides'],
+        };
+      }
+      
+      return {
+        success: false,
+        message: error.message || 'Une erreur est survenue lors de la connexion',
+        errors: [error.message || 'Erreur de connexion au serveur'],
+      };
+    }
   }
 
   static async register({ email, password, firstname, lastname, service }) {
@@ -103,10 +113,10 @@ export default class ConsumApi {
 
     // Données factices pour l'inscription
     const accessToken = `fake_token_${  Date.now()}`;
-    
-    // Sauvegarder le token
-    AdminStorage.saveTokenAdmin(accessToken);
-    
+        
+        // Sauvegarder le token
+        AdminStorage.saveTokenAdmin(accessToken);
+        
     // Récupérer les informations de l'utilisateur (fake)
     const userData = {
       id: Date.now().toString(),
@@ -117,10 +127,10 @@ export default class ConsumApi {
     };
     
     updateClientInfo(userData, accessToken);
-    
-    return { 
+        
+        return { 
       data: userData, 
-      success: true, 
+          success: true, 
       message: 'Inscription réussie (mode fake data)' 
     };
   }
@@ -129,14 +139,14 @@ export default class ConsumApi {
     // Simuler un délai réseau
     await new Promise(resolve => setTimeout(resolve, 200));
 
-    const token = AdminStorage.getTokenAdmin();
-    if (!token) {
-      return {
-        success: false,
-        message: 'Aucun token trouvé',
-        errors: []
-      };
-    }
+      const token = AdminStorage.getTokenAdmin();
+      if (!token) {
+        return {
+          success: false,
+          message: 'Aucun token trouvé',
+          errors: []
+        };
+      }
 
     // Retourner des données factices
     const userData = {
@@ -147,35 +157,54 @@ export default class ConsumApi {
       service: 'Administrateur'
     };
 
-    return {
-      success: true,
+      return {
+        success: true,
       data: userData,
       message: 'Utilisateur récupéré avec succès (mode fake data)',
-      errors: []
-    };
+          errors: []
+        };
   }
 
   static async resetPassword({ email }) {
     // Simuler un délai réseau
     await new Promise(resolve => setTimeout(resolve, 300));
-
+      
     // Retourner un succès factice
-    return {
-      success: true,
+        return {
+          success: true,
       data: { email },
       message: 'Email de réinitialisation envoyé (mode fake data)',
-      errors: []
-    };
+          errors: []
+        };
   }
 
   // ========== CLIENTS ==========
 
-  // Helper pour les requêtes authentifiées - MODE FAKE DATA
+  // Helper pour les requêtes authentifiées
   static async _authenticatedRequest(method, url, data = null) {
-    // Simuler un délai réseau
+    const urlLower = url.toLowerCase();
+    
+    // Pour les endpoints de modules de permissions, utiliser l'API réelle
+    if (urlLower.includes('/module-permission') || 
+        urlLower.includes('/permission') || 
+        urlLower.includes('/permissions') || 
+        (urlLower.includes('/role') && !urlLower.includes('/roles-permissions/matrix'))) {
+      // Utiliser ApiClient pour les vraies requêtes
+      if (method === 'GET') {
+        return ApiClient.get(url, true);
+      } else if (method === 'POST') {
+        return ApiClient.post(url, data, true);
+      } else if (method === 'PUT') {
+        return ApiClient.put(url, data, true);
+      } else if (method === 'PATCH') {
+        return ApiClient.request('PATCH', url, data, true);
+      } else if (method === 'DELETE') {
+        return ApiClient.delete(url, true);
+      }
+    }
+    
+    // Pour les autres endpoints, utiliser le mode fake data (temporaire)
     await new Promise(resolve => setTimeout(resolve, 200));
-
-    // Retourner des données factices selon l'URL et la méthode
     return this._getFakeDataForUrl(method, url, data);
   }
 
@@ -614,8 +643,8 @@ export default class ConsumApi {
       access_token: `fake_token_${  Date.now()}`
     };
 
-    return {
-      success: true,
+        return {
+          success: true,
       data: userData,
       message: 'Utilisateur créé avec succès (mode fake data)',
       errors: []
@@ -685,7 +714,7 @@ export default class ConsumApi {
 
   // ========== ROLES & PERMISSIONS ==========
 
-  // Obtenir la matrice des permissions
+  // Obtenir la matrice des permissions (legacy)
   static async getRolesPermissionsMatrix() {
     return this._authenticatedRequest('GET', apiUrl.rolesPermissionsMatrix);
   }
@@ -710,14 +739,181 @@ export default class ConsumApi {
     return this._authenticatedRequest('POST', apiUrl.disconnectUser(userId));
   }
 
-  // Ajouter une permission à un rôle
+  // Ajouter une permission à un rôle (legacy)
   static async addRolePermission(role, permission) {
     return this._authenticatedRequest('POST', apiUrl.addRolePermission(role), { permission });
   }
 
-  // Retirer une permission d'un rôle
+  // Retirer une permission d'un rôle (legacy)
   static async removeRolePermission(role, permission) {
     return this._authenticatedRequest('DELETE', apiUrl.removeRolePermission(role, permission));
+  }
+
+  // ========== MODULES DE PERMISSIONS ==========
+
+  // Obtenir tous les modules de permissions
+  static async getPermissionModules() {
+    console.log('Calling getPermissionModules with URL:', apiUrl.permissionModules);
+    const result = await this._authenticatedRequest('GET', apiUrl.permissionModules);
+    console.log('getPermissionModules result:', result);
+    return result;
+  }
+
+  // Obtenir les modules de permissions avec pagination
+  static async getPermissionModulesPaginated(page = 1, limit = 10) {
+    const url = `${apiUrl.permissionModulesPaginated}?page=${page}&limit=${limit}`;
+    console.log('Calling getPermissionModulesPaginated with URL:', url);
+    const result = await this._authenticatedRequest('GET', url);
+    console.log('getPermissionModulesPaginated result:', result);
+    return result;
+  }
+
+  // Obtenir un module par ID
+  static async getPermissionModuleById(moduleId) {
+    return this._authenticatedRequest('GET', apiUrl.permissionModuleById(moduleId));
+  }
+
+  // Créer un module de permissions
+  static async createPermissionModule(data) {
+    return this._authenticatedRequest('POST', apiUrl.permissionModules, data);
+  }
+
+  // Mettre à jour un module de permissions
+  static async updatePermissionModule(moduleId, data) {
+    return this._authenticatedRequest('PUT', apiUrl.permissionModuleById(moduleId), data);
+  }
+
+  // Supprimer un module de permissions
+  static async deletePermissionModule(moduleId) {
+    return this._authenticatedRequest('DELETE', apiUrl.permissionModuleById(moduleId));
+  }
+
+  // ========== PERMISSIONS ==========
+
+  // Obtenir toutes les permissions
+  static async getPermissions() {
+    console.log('=== GET PERMISSIONS DEBUG ===');
+    console.log('Calling getPermissions with URL:', apiUrl.permissions);
+    console.log('Full URL:', apiUrl.permissions);
+    const result = await this._authenticatedRequest('GET', apiUrl.permissions);
+    console.log('getPermissions result:', result);
+    console.log('getPermissions result type:', typeof result);
+    console.log('getPermissions is array:', Array.isArray(result));
+    console.log('getPermissions result.data:', result?.data);
+    console.log('getPermissions result.data type:', typeof result?.data);
+    console.log('getPermissions result.data is array:', Array.isArray(result?.data));
+    if (result?.data && Array.isArray(result.data)) {
+      console.log('getPermissions result.data length:', result.data.length);
+      console.log('getPermissions result.data[0]:', result.data[0]);
+    }
+    return result;
+  }
+
+  // Obtenir les permissions avec pagination
+  static async getPermissionsPaginated(page = 1, limit = 10) {
+    const url = `${apiUrl.permissionsPaginated}?page=${page}&limit=${limit}`;
+    console.log('Calling getPermissionsPaginated with URL:', url);
+    const result = await this._authenticatedRequest('GET', url);
+    console.log('getPermissionsPaginated result:', result);
+    return result;
+  }
+
+  // Obtenir les permissions d'un module
+  static async getPermissionsByModule(moduleId) {
+    return this._authenticatedRequest('GET', apiUrl.permissionsByModule(moduleId));
+  }
+
+  // Obtenir les permissions d'un module avec pagination
+  static async getPermissionsByModulePaginated(moduleId, page = 1, limit = 10) {
+    const url = `${apiUrl.permissionsByModulePaginated(moduleId)}?page=${page}&limit=${limit}`;
+    console.log('Calling getPermissionsByModulePaginated with URL:', url);
+    const result = await this._authenticatedRequest('GET', url);
+    console.log('getPermissionsByModulePaginated result:', result);
+    return result;
+  }
+
+  // Obtenir une permission par ID
+  static async getPermissionById(permissionId) {
+    return this._authenticatedRequest('GET', apiUrl.permissionById(permissionId));
+  }
+
+  // Créer une permission
+  static async createPermission(data) {
+    return this._authenticatedRequest('POST', apiUrl.permissions, data);
+  }
+
+  // Mettre à jour une permission
+  static async updatePermission(permissionId, data) {
+    return this._authenticatedRequest('PUT', apiUrl.permissionById(permissionId), data);
+  }
+
+  // Supprimer une permission
+  static async deletePermission(permissionId) {
+    return this._authenticatedRequest('DELETE', apiUrl.permissionById(permissionId));
+  }
+
+  // ========== RÔLES ==========
+
+  // Créer un rôle
+  static async createRole(name) {
+    return this._authenticatedRequest('POST', apiUrl.role, { name });
+  }
+
+  // Obtenir tous les rôles
+  static async getRoles() {
+    return this._authenticatedRequest('GET', apiUrl.role);
+  }
+
+  // Obtenir un rôle par ID
+  static async getRoleById(roleId) {
+    return this._authenticatedRequest('GET', apiUrl.roleById(roleId));
+  }
+
+  // Mettre à jour un rôle
+  static async updateRole(roleId, name) {
+    return this._authenticatedRequest('PUT', apiUrl.roleById(roleId), { name });
+  }
+
+  // Supprimer un rôle
+  static async deleteRole(roleId) {
+    return this._authenticatedRequest('DELETE', apiUrl.roleById(roleId));
+  }
+
+  // Obtenir tous les rôles avec pagination
+  static async getRolesPaginated(page = 1, limit = 10) {
+    return this._authenticatedRequest('GET', `${apiUrl.rolePaginated}?page=${page}&limit=${limit}`);
+  }
+
+  // Obtenir toutes les permissions d'un rôle (groupées par modules)
+  static async getRoleGlobalPermissions(roleUuid) {
+    return this._authenticatedRequest('GET', apiUrl.roleGlobalPermissions(roleUuid));
+  }
+
+  // Toggle le statut d'une permission pour un rôle
+  static async toggleRolePermissionStatus(permissionUuid) {
+    return this._authenticatedRequest('PUT', apiUrl.roleTogglePermissionStatus(permissionUuid));
+  }
+
+  // Générer toutes les permissions pour un rôle
+  static async generateRolePermissions(roleUuid) {
+    return this._authenticatedRequest('POST', apiUrl.roleGeneratePermissions(roleUuid));
+  }
+
+  // ========== ASSIGNATION RÔLES AUX MODULES ==========
+
+  // Assigner un rôle à un module
+  static async assignRoleToModule(moduleId, roleId) {
+    return this._authenticatedRequest('POST', apiUrl.assignRoleToModule(moduleId, roleId));
+  }
+
+  // Retirer un rôle d'un module
+  static async removeRoleFromModule(moduleId, roleId) {
+    return this._authenticatedRequest('DELETE', apiUrl.removeRoleFromModule(moduleId, roleId));
+  }
+
+  // Obtenir les rôles assignés à un module
+  static async getModuleRoles(moduleId) {
+    return this._authenticatedRequest('GET', apiUrl.moduleRoles(moduleId));
   }
 
   // Créer un commercial (utilise createUser avec conversion du rôle en service)
@@ -1250,12 +1446,12 @@ export default class ConsumApi {
   // Uploader une image pour un slide - MODE FAKE DATA
   static async uploadSiteAdminSlideImage(file) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      success: true,
+        return {
+          success: true,
       data: { url: `/uploads/slide_${  Date.now()  }.jpg`, id: Date.now().toString() },
       message: 'Image uploadée avec succès (mode fake data)',
-      errors: []
-    };
+          errors: []
+        };
   }
 
   // ========== SITE ADMINISTRATION - SERVICES ==========
@@ -1296,12 +1492,12 @@ export default class ConsumApi {
   // Uploader une image pour un service - MODE FAKE DATA
   static async uploadSiteAdminServiceImage(file) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      success: true,
+        return {
+          success: true,
       data: { url: `/uploads/service_${  Date.now()  }.jpg`, id: Date.now().toString() },
       message: 'Image uploadée avec succès (mode fake data)',
-      errors: []
-    };
+          errors: []
+        };
   }
 
   // ========== SITE ADMINISTRATION - PARTNER LOGOS ==========
@@ -1342,13 +1538,13 @@ export default class ConsumApi {
   // Uploader un logo partenaire - MODE FAKE DATA
   static async uploadSiteAdminPartnerLogo(file) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    return {
+      return {
       success: true,
       data: { url: `/uploads/partner_${  Date.now()  }.png`, id: Date.now().toString() },
       message: 'Logo uploadé avec succès (mode fake data)',
-      errors: []
-    };
-  }
+        errors: []
+      };
+    }
 
   // ========== CLIENT DOCUMENTS ==========
 
@@ -1360,8 +1556,8 @@ export default class ConsumApi {
   // Uploader un document pour un client - MODE FAKE DATA
   static async uploadClientDocument(clientId, file, title) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      success: true,
+        return {
+          success: true,
       data: { 
         id: Date.now().toString(), 
         url: `/documents/doc_${  Date.now()  }.pdf`, 
@@ -1370,9 +1566,9 @@ export default class ConsumApi {
         uploadedAt: new Date().toISOString()
       },
       message: 'Document uploadé avec succès (mode fake data)',
-      errors: []
-    };
-  }
+          errors: []
+        };
+      }
 
   // Uploader plusieurs documents pour un client - MODE FAKE DATA
   static async uploadClientDocumentsMultiple(clientId, files, titles) {
@@ -1558,7 +1754,7 @@ export default class ConsumApi {
   }
 
   static _generateFakeClient(id) {
-    return {
+      return {
       id,
       nom: 'Jean Dupont',
       numero: '+225 07 12345678',
@@ -1932,9 +2128,9 @@ export default class ConsumApi {
         },
       },
       message: 'Journal chargé avec succès',
-      errors: []
-    };
-  }
+        errors: []
+      };
+    }
 
   static async exportActivityLogs(params = {}) {
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1961,8 +2157,8 @@ export default class ConsumApi {
 
   static async createBackup(data) {
     await new Promise(resolve => setTimeout(resolve, 800));
-    return {
-      success: true,
+        return {
+          success: true,
       data: {
         id: Date.now().toString(),
         name: data.name || `Sauvegarde ${  new Date().toLocaleString()}`,
@@ -1972,13 +2168,13 @@ export default class ConsumApi {
         createdAt: new Date().toISOString(),
       },
       message: 'Sauvegarde créée avec succès',
-      errors: []
-    };
-  }
+          errors: []
+        };
+      }
 
   static async restoreBackup(backupId) {
     await new Promise(resolve => setTimeout(resolve, 2000));
-    return {
+      return {
       success: true,
       data: { id: backupId },
       message: 'Restauration réussie',
@@ -1988,7 +2184,7 @@ export default class ConsumApi {
 
   static async deleteBackup(backupId) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    return {
+      return {
       success: true,
       data: null,
       message: 'Sauvegarde supprimée',
@@ -2010,7 +2206,7 @@ export default class ConsumApi {
 
   static async getAutoBackupSettings() {
     await new Promise(resolve => setTimeout(resolve, 200));
-    return {
+      return {
       success: true,
       data: {
         enabled: false,
@@ -2019,13 +2215,13 @@ export default class ConsumApi {
         keepLast: 30,
       },
       message: 'Paramètres chargés',
-      errors: []
-    };
-  }
+        errors: []
+      };
+    }
 
   static async updateAutoBackupSettings(settings) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    return {
+      return {
       success: true,
       data: settings,
       message: 'Paramètres sauvegardés',
@@ -2036,7 +2232,7 @@ export default class ConsumApi {
   // ========== MULTI-CLINICS ==========
   static async getClinics() {
     await new Promise(resolve => setTimeout(resolve, 300));
-    return {
+      return {
       success: true,
       data: this._generateFakeClinics(3),
       message: 'Cliniques chargées',
@@ -2155,8 +2351,8 @@ export default class ConsumApi {
     const start = (page - 1) * limit;
     const end = start + limit;
 
-    return {
-      success: true,
+        return {
+          success: true,
       data: {
         patients: filtered.slice(start, end),
         total: filtered.length,
@@ -2164,15 +2360,15 @@ export default class ConsumApi {
         limit,
       },
       message: 'Patients récupérés avec succès',
-      errors: []
-    };
-  }
+          errors: []
+        };
+      }
 
   static async getPatientById(patientId) {
     await new Promise(resolve => setTimeout(resolve, 200));
     const patients = this._generateFakePatients(10);
     const patient = patients.find(p => p.id === patientId) || patients[0];
-    return {
+      return {
       success: true,
       data: patient,
       message: 'Patient récupéré avec succès',
@@ -2188,7 +2384,7 @@ export default class ConsumApi {
       patientId: `PAT${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
-    return {
+      return {
       success: true,
       data: newPatient,
       message: 'Patient créé avec succès',
