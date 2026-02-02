@@ -19,7 +19,7 @@ import { bgGradient } from 'src/theme/css';
 import ConsumApi from 'src/services_workers/consum_api';
 // import { localStorageKey } from 'src/constants/localStorageKey';
 
-import Logo from 'src/assets/logo.jpg';
+import Logo from 'src/assets/logo.jpeg';
 // ----------------------------------------------------------------------
 
 const Alert = forwardRef((props, ref) => (
