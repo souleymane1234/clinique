@@ -74,6 +74,57 @@ export const apiUrl = {
   reprogrammerRendezVous: (id) => `${base_url}/rendez-vous/${id}/reprogrammer`,
   prendreRendezVous: (id) => `${base_url}/rendez-vous/${id}/prendre`,
   
+  // Patients
+  patients: `${base_url}/api/patient`,
+  patientById: (id) => `${base_url}/api/patient/${id}`,
+  updatePatient: (id) => `${base_url}/api/patient/${id}`,
+  deletePatient: (id) => `${base_url}/api/patient/${id}`,
+  // Patient helpers
+  patientsPaginated: `${base_url}/api/patient/paginated`,
+  patientByNumber: (numero) => `${base_url}/api/patient/${numero}`,
+  
+  // Antécédents (new endpoints)
+  antecedents: `${base_url}/api/antecedent`,
+  antecedentById: (id) => `${base_url}/api/antecedent/${id}`,
+  updateAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
+  deleteAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
+  antecedentsPaginated: `${base_url}/api/antecedent/paginated`,
+  patientAntecedents: (patientId) => `${base_url}/api/antecedent/patient/${patientId}`,
+  
+  // Deprecated (kept for backward compatibility)
+  patientAntecedents_old: `${base_url}/api/antecedent`,
+  addPatientAntecedent: `${base_url}/api/antecedent`,
+  deletePatientAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
+  
+  // Allergies (new endpoints)
+  allergies: `${base_url}/api/allergy`,
+  allergyById: (id) => `${base_url}/api/allergy/${id}`,
+  updateAllergy: (id) => `${base_url}/api/allergy/${id}`,
+  deleteAllergy: (id) => `${base_url}/api/allergy/${id}`,
+  allergiesPaginated: `${base_url}/api/allergy/paginated`,
+  patientAllergies: (patientId) => `${base_url}/api/allergy/patient/${patientId}`,
+  
+  // Deprecated (kept for backward compatibility)
+  patientAllergies_old: `${base_url}/api/allergie`,
+  addPatientAllergy: `${base_url}/api/allergie`,
+  deletePatientAllergy: (id) => `${base_url}/api/allergie/${id}`,
+  
+  // Documents
+  patientDocuments: `${base_url}/api/documents`,
+  uploadPatientDocument: `${base_url}/api/documents/upload`,
+  deletePatientDocument: (id) => `${base_url}/api/documents/${id}`,
+  
+  // Consultations
+  patientConsultations: `${base_url}/api/consultation`,
+  
+  // Historique Médical
+  patientMedicalHistory: `${base_url}/api/medical-history`,
+  
+  // File d'attente
+  patientQueue: `${base_url}/api/queue`,
+  updatePatientTriage: (id) => `${base_url}/api/queue/${id}`,
+  removeFromQueue: (id) => `${base_url}/api/queue/${id}`,
+  
   // Site Administration - Slides
   slides: `${base_url}/api/slides`,
   siteAdminSlides: `${base_url}/api/site-admin/slides`,

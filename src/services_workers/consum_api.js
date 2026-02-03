@@ -184,10 +184,11 @@ export default class ConsumApi {
   static async _authenticatedRequest(method, url, data = null) {
     const urlLower = url.toLowerCase();
     
-    // Pour les endpoints de modules de permissions, utiliser l'API réelle
+    // Pour les endpoints de modules de permissions ET PATIENTS, utiliser l'API réelle
     if (urlLower.includes('/module-permission') || 
         urlLower.includes('/permission') || 
         urlLower.includes('/permissions') || 
+        urlLower.includes('/patients') ||
         (urlLower.includes('/role') && !urlLower.includes('/roles-permissions/matrix'))) {
       // Utiliser ApiClient pour les vraies requêtes
       if (method === 'GET') {
@@ -2316,240 +2317,400 @@ export default class ConsumApi {
   // ========== PATIENTS ==========
 
   static async getPatients(filters = {}) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const patients = this._generateFakePatients(50);
-    let filtered = [...patients];
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(p => 
-        (p.firstName || p.firstname || '').toLowerCase().includes(searchLower) ||
-        (p.lastName || p.lastname || '').toLowerCase().includes(searchLower) ||
-        (p.phone || '').includes(searchLower) ||
-        (p.email || '').toLowerCase().includes(searchLower)
-      );
+    let url = apiUrl.patients;
+    
+    const params = new URLSearchParams();
+    if (filters.search) params.append('search', filters.search);
+    if (filters.gender) params.append('gender', filters.gender);
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
     }
-
-    if (filters.gender) {
-      filtered = filtered.filter(p => p.gender === filters.gender);
-    }
-
-    if (filters.age) {
-      filtered = filtered.filter(p => {
-        const age = this._calculateAge(p.dateOfBirth);
-        if (filters.age === '0-18') return age >= 0 && age <= 18;
-        if (filters.age === '19-35') return age >= 19 && age <= 35;
-        if (filters.age === '36-50') return age >= 36 && age <= 50;
-        if (filters.age === '51-65') return age >= 51 && age <= 65;
-        if (filters.age === '65+') return age >= 65;
-        return true;
-      });
-    }
-
-    const page = filters.page || 1;
-    const limit = filters.limit || 10;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-
-        return {
-          success: true,
-      data: {
-        patients: filtered.slice(start, end),
-        total: filtered.length,
-        page,
-        limit,
-      },
-      message: 'Patients récupérés avec succès',
-          errors: []
-        };
+    
+    const result = await this._authenticatedRequest('GET', url);
+    
+    // Mapper les champs si différents
+    if (result.success && result.data) {
+      if (Array.isArray(result.data)) {
+        result.data = result.data.map(p => this._mapPatientFields(p));
+      } else if (result.data.patients) {
+        result.data.patients = result.data.patients.map(p => this._mapPatientFields(p));
       }
+    }
+    
+    return result;
+  }
+
+  static async getPatientsPaginated(page = 1, limit = 10, filters = {}) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.gender) params.append('gender', filters.gender);
+    const url = `${apiUrl.patientsPaginated}?${params.toString()}`;
+
+    const result = await this._authenticatedRequest('GET', url);
+
+    // Normalize items if present
+    if (result.success && result.data) {
+      // common shapes: { items: [], total, page, limit } or { patients: [], total }
+      if (Array.isArray(result.data)) {
+        result.data = {
+          items: result.data.map(p => this._mapPatientFields(p)),
+          total: result.data.length,
+          page,
+          limit
+        };
+      } else if (result.data.items) {
+        result.data.items = result.data.items.map(p => this._mapPatientFields(p));
+      } else if (result.data.patients) {
+        result.data.patients = result.data.patients.map(p => this._mapPatientFields(p));
+      }
+    }
+
+    return result;
+  }
 
   static async getPatientById(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const patients = this._generateFakePatients(10);
-    const patient = patients.find(p => p.id === patientId) || patients[0];
-      return {
-      success: true,
-      data: patient,
-      message: 'Patient récupéré avec succès',
-      errors: []
-    };
+    const result = await this._authenticatedRequest('GET', apiUrl.patientById(patientId));
+    
+    if (result.success && result.data) {
+      result.data = this._mapPatientFields(result.data);
+    }
+    
+    return result;
+  }
+
+  // Alias: récupérer un patient par son numéro (ex: PAT-2026-00001)
+  static async getPatientByNumber(patientNumber) {
+    const result = await this._authenticatedRequest('GET', apiUrl.patientByNumber(patientNumber));
+    if (result.success && result.data) {
+      result.data = this._mapPatientFields(result.data);
+    }
+    return result;
   }
 
   static async createPatient(data) {
-    await new Promise(resolve => setTimeout(resolve, 400));
-    const newPatient = {
-      id: Date.now().toString(),
-      ...data,
-      patientId: `PAT${Date.now()}`,
-      createdAt: new Date().toISOString(),
+    // Normaliser les données selon la structure API réelle
+    const normalizeGender = (gender) => {
+      if (!gender) return 'MALE';
+      if (gender === 'M') return 'MALE';
+      if (gender === 'F') return 'FEMALE';
+      return gender.toUpperCase();
     };
-      return {
-      success: true,
-      data: newPatient,
-      message: 'Patient créé avec succès',
-      errors: []
+    
+    const normalizedData = {
+      // Identité
+      patientNumber: data.patientNumber || data.patientId || `PAT-${Date.now()}`,
+      firstName: data.firstName || data.firstname || '',
+      lastName: data.lastName || data.lastname || '',
+      
+      // Informations personnelles
+      dateOfBirth: data.dateOfBirth || data.date_of_birth || '',
+      placeOfBirth: data.placeOfBirth || data.place_of_birth || '',
+      nationality: data.nationality || '',
+      gender: normalizeGender(data.gender),
+      maritalStatus: data.maritalStatus || data.marital_status || 'SINGLE',
+      
+      // Contact
+      phone: data.phone || data.telephone || '',
+      email: data.email || '',
+      address: data.address || data.adresse || '',
+      city: data.city || data.ville || '',
+      country: data.country || data.pays || '',
+      
+      // Médical
+      bloodGroup: data.bloodGroup || data.blood_group || '',
+      height: data.height ? parseInt(data.height) : null,
+      weight: data.weight ? parseFloat(data.weight) : null,
+      
+      // Profession
+      occupation: data.occupation || data.profession || data.metier || '',
+      
+      // Contact d'urgence (structure plate pour API)
+      emergencyContactName: data.emergencyContactName || (data.emergencyContact?.name || ''),
+      emergencyContactPhone: data.emergencyContactPhone || (data.emergencyContact?.phone || ''),
+      emergencyContactRelationship: data.emergencyContactRelationship || (data.emergencyContact?.relationship || ''),
+      
+      // Assurance
+      insuranceType: data.insuranceType || data.insurance?.type || 'NONE',
+      insuranceCompany: data.insuranceCompany || data.insurance?.company || '',
+      insuranceNumber: data.insuranceNumber || data.insurance?.number || '',
+      insuranceValidUntil: data.insuranceValidUntil || data.insurance?.validUntil || '',
+      
+      // Statut
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      
+      // Autres
+      photo: data.photo || '',
+      notes: data.notes || ''
     };
+    
+    return this._authenticatedRequest('POST', apiUrl.patients, normalizedData);
   }
 
   static async updatePatient(patientId, data) {
-    await new Promise(resolve => setTimeout(resolve, 400));
-    return {
-      success: true,
-      data: { id: patientId, ...data },
-      message: 'Patient mis à jour avec succès',
-      errors: []
+    // Normaliser les données - similiaire à createPatient
+    // IMPORTANT: PUT requiert TOUS les champs, donc on doit fournir des valeurs par défaut
+    const normalizeGender = (gender) => {
+      if (!gender) return 'MALE';
+      if (gender === 'M') return 'MALE';
+      if (gender === 'F') return 'FEMALE';
+      return gender.toUpperCase();
     };
+    
+    const normalizedData = {
+      // Identité - REQUIS
+      patientNumber: data.patientNumber || data.patientId || patientId || '',
+      firstName: data.firstName || data.firstname || '',
+      lastName: data.lastName || data.lastname || '',
+      
+      // Informations personnelles
+      dateOfBirth: data.dateOfBirth || data.date_of_birth || '',
+      placeOfBirth: data.placeOfBirth || data.place_of_birth || '',
+      nationality: data.nationality || '',
+      gender: normalizeGender(data.gender),
+      maritalStatus: data.maritalStatus || data.marital_status || 'SINGLE',
+      
+      // Contact
+      phone: data.phone || data.telephone || '',
+      email: data.email || '',
+      address: data.address || data.adresse || '',
+      city: data.city || data.ville || '',
+      country: data.country || data.pays || '',
+      
+      // Médical
+      bloodGroup: data.bloodGroup || data.blood_group || '',
+      height: data.height ? parseInt(data.height) : null,
+      weight: data.weight ? parseFloat(data.weight) : null,
+      
+      // Profession
+      occupation: data.occupation || data.profession || data.metier || '',
+      
+      // Contact d'urgence (structure plate pour API)
+      emergencyContactName: data.emergencyContactName || (data.emergencyContact?.name || ''),
+      emergencyContactPhone: data.emergencyContactPhone || (data.emergencyContact?.phone || ''),
+      emergencyContactRelationship: data.emergencyContactRelationship || (data.emergencyContact?.relationship || ''),
+      
+      // Assurance
+      insuranceType: data.insuranceType || data.insurance?.type || 'NONE',
+      insuranceCompany: data.insuranceCompany || data.insurance?.company || '',
+      insuranceNumber: data.insuranceNumber || data.insurance?.number || '',
+      insuranceValidUntil: data.insuranceValidUntil || data.insurance?.validUntil || '',
+      
+      // Statut
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      
+      // Autres
+      photo: data.photo || '',
+      notes: data.notes || ''
+    };
+    
+    // PUT requiert l'ID du patient - utiliser patientNumber si disponible
+    const updateUrl = apiUrl.updatePatient(data.patientNumber || patientId);
+    
+    return this._authenticatedRequest('PUT', updateUrl, normalizedData);
   }
 
   static async deletePatient(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: null,
-      message: 'Patient supprimé avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('DELETE', apiUrl.deletePatient(patientId));
+  }
+
+  // Alias: supprimer par numéro de patient
+  static async deletePatientByNumber(patientNumber) {
+    return this._authenticatedRequest('DELETE', apiUrl.deletePatient(patientNumber));
   }
 
   static async getPatientMedicalHistory(patientId, filters = {}) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const history = this._generateFakeMedicalHistory(20);
-    let filtered = history.filter(h => h.patientId === patientId || !patientId);
-
-    if (filters.type) {
-      filtered = filtered.filter(h => h.type === filters.type);
+    let url = apiUrl.patientMedicalHistory(patientId);
+    
+    const params = new URLSearchParams();
+    if (filters.type) params.append('type', filters.type);
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
     }
+    
+    return this._authenticatedRequest('GET', url);
+  }
 
-    return {
-      success: true,
-      data: { history: filtered, total: filtered.length },
-      message: 'Historique récupéré avec succès',
-      errors: []
+  // ========== ANTECEDENTS (new endpoints) ==========
+
+  static async createAntecedent(data) {
+    const normalizedData = {
+      patientId: data.patientId || data.patient_id || '',
+      type: data.type || 'Médical', // Médical, Chirurgical, Familial, etc.
+      description: data.description || '',
+      diagnosedDate: data.diagnosedDate || data.diagnosed_date || data.date || '',
+      notes: data.notes || '',
+      isActive: data.isActive !== undefined ? data.isActive : true
     };
+    
+    return this._authenticatedRequest('POST', apiUrl.antecedents, normalizedData);
+  }
+
+  static async getAntecedents(filters = {}) {
+    let url = apiUrl.antecedents;
+    const params = new URLSearchParams();
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.type) params.append('type', filters.type);
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    return this._authenticatedRequest('GET', url);
+  }
+
+  static async getAntecedentById(antecedentId) {
+    return this._authenticatedRequest('GET', apiUrl.antecedentById(antecedentId));
+  }
+
+  static async updateAntecedent(antecedentId, data) {
+    const normalizedData = {
+      type: data.type || 'Médical',
+      description: data.description || '',
+      diagnosedDate: data.diagnosedDate || data.diagnosed_date || data.date || '',
+      notes: data.notes || '',
+      isActive: data.isActive !== undefined ? data.isActive : true
+    };
+    
+    return this._authenticatedRequest('PUT', apiUrl.updateAntecedent(antecedentId), normalizedData);
+  }
+
+  static async deleteAntecedent(antecedentId) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteAntecedent(antecedentId));
+  }
+
+  static async getAntecedentsPaginated(page = 1, limit = 10, filters = {}) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.type) params.append('type', filters.type);
+    const url = `${apiUrl.antecedentsPaginated}?${params.toString()}`;
+    
+    return this._authenticatedRequest('GET', url);
   }
 
   static async getPatientAntecedents(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const antecedents = this._generateFakeAntecedents(5);
-    return {
-      success: true,
-      data: antecedents,
-      message: 'Antécédents récupérés avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('GET', apiUrl.patientAntecedents(patientId));
   }
 
+  // Deprecated (backward compatibility)
   static async addPatientAntecedent(patientId, data) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: { id: Date.now().toString(), patientId, ...data, createdAt: new Date().toISOString() },
-      message: 'Antécédent ajouté avec succès',
-      errors: []
-    };
+    return this.createAntecedent({ ...data, patientId });
   }
 
   static async deletePatientAntecedent(antecedentId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return {
-      success: true,
-      data: null,
-      message: 'Antécédent supprimé avec succès',
-      errors: []
+    return this.deleteAntecedent(antecedentId);
+  }
+
+  // ========== ALLERGIES (new endpoints) ==========
+
+  static async createAllergy(data) {
+    // Normaliser les données pour l'API
+    const normalizedData = {
+      patientId: data.patientId || data.patient_id || '',
+      allergen: data.allergen || '',
+      type: data.type || 'Aliment', // Aliment, Médicament, Environnement, etc.
+      severity: data.severity || 'Modérée', // Légère, Modérée, Sévère
+      reaction: data.reaction || data.reactions || '',
+      discoveredDate: data.discoveredDate || data.discovered_date || '',
+      isActive: data.isActive !== undefined ? data.isActive : true
     };
+    
+    return this._authenticatedRequest('POST', apiUrl.allergies, normalizedData);
+  }
+
+  static async getAllergies(filters = {}) {
+    let url = apiUrl.allergies;
+    const params = new URLSearchParams();
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.type) params.append('type', filters.type);
+    if (filters.severity) params.append('severity', filters.severity);
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    return this._authenticatedRequest('GET', url);
+  }
+
+  static async getAllergyById(allergyId) {
+    return this._authenticatedRequest('GET', apiUrl.allergyById(allergyId));
+  }
+
+  static async updateAllergy(allergyId, data) {
+    const normalizedData = {
+      allergen: data.allergen || '',
+      type: data.type || 'Aliment',
+      severity: data.severity || 'Modérée',
+      reaction: data.reaction || data.reactions || '',
+      discoveredDate: data.discoveredDate || data.discovered_date || '',
+      isActive: data.isActive !== undefined ? data.isActive : true
+    };
+    
+    return this._authenticatedRequest('PUT', apiUrl.updateAllergy(allergyId), normalizedData);
+  }
+
+  static async deleteAllergy(allergyId) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteAllergy(allergyId));
+  }
+
+  static async getAllergiesPaginated(page = 1, limit = 10, filters = {}) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.type) params.append('type', filters.type);
+    if (filters.severity) params.append('severity', filters.severity);
+    const url = `${apiUrl.allergiesPaginated}?${params.toString()}`;
+    
+    return this._authenticatedRequest('GET', url);
   }
 
   static async getPatientAllergies(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    const allergies = this._generateFakeAllergies(3);
-    return {
-      success: true,
-      data: allergies,
-      message: 'Allergies récupérées avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('GET', apiUrl.patientAllergies(patientId));
   }
 
+  // Deprecated (backward compatibility)
   static async addPatientAllergy(patientId, data) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: { id: Date.now().toString(), patientId, ...data, createdAt: new Date().toISOString() },
-      message: 'Allergie ajoutée avec succès',
-      errors: []
-    };
+    // Wrapper vers createAllergy avec patientId
+    return this.createAllergy({ ...data, patientId });
   }
 
   static async deletePatientAllergy(allergyId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return {
-      success: true,
-      data: null,
-      message: 'Allergie supprimée avec succès',
-      errors: []
-    };
+    return this.deleteAllergy(allergyId);
   }
 
   static async getPatientDocuments(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const documents = this._generateFakeDocuments(10);
-    return {
-      success: true,
-      data: documents,
-      message: 'Documents récupérés avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('GET', apiUrl.patientDocuments(patientId));
   }
 
   static async uploadPatientDocument(patientId, file, title, type) {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    return {
-      success: true,
-      data: {
-        id: Date.now().toString(),
-        patientId,
-        title,
-        type,
-        fileName: file.name,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-        url: '#',
-      },
-      message: 'Document uploadé avec succès',
-      errors: []
-    };
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', title);
+    formData.append('type', type);
+    
+    return this._authenticatedRequest('POST', apiUrl.uploadPatientDocument(patientId), formData);
   }
 
   static async downloadPatientDocument(documentId) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: { url: '#', id: documentId },
-      message: 'Document téléchargé avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('GET', apiUrl.patientDocuments(documentId));
   }
 
   static async deletePatientDocument(documentId) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return {
-      success: true,
-      data: null,
-      message: 'Document supprimé avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('DELETE', apiUrl.deletePatientDocument(documentId));
   }
 
   static async getPatientConsultations(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const consultations = this._generateFakeConsultations(15);
-    return {
-      success: true,
-      data: consultations.filter(c => c.patientId === patientId || !patientId),
-      message: 'Consultations récupérées avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('GET', apiUrl.patientConsultations(patientId));
   }
 
   static async getAppointments(filters = {}) {
@@ -2601,39 +2762,27 @@ export default class ConsumApi {
   }
 
   static async getPatientQueue(filters = {}) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    let queue = this._generateFakeQueue(15);
-
-    if (filters.priority) {
-      queue = queue.filter(q => q.priority === filters.priority);
+    let url = apiUrl.patientQueue;
+    
+    const params = new URLSearchParams();
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
     }
-
-    return {
-      success: true,
-      data: queue,
-      message: 'File d\'attente récupérée avec succès',
-      errors: []
-    };
+    
+    return this._authenticatedRequest('GET', url);
   }
 
   static async updatePatientTriage(patientId, data) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: { id: patientId, ...data },
-      message: 'Triage mis à jour avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('PATCH', apiUrl.updatePatientTriage(patientId), data);
   }
 
   static async removeFromQueue(patientId) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      success: true,
-      data: null,
-      message: 'Patient retiré de la file avec succès',
-      errors: []
-    };
+    return this._authenticatedRequest('DELETE', apiUrl.removeFromQueue(patientId));
   }
 
   // ========== FAKE DATA GENERATORS FOR PATIENTS ==========
@@ -3461,3 +3610,157 @@ const updateClientInfo = (userData, accessToken) => {
 
   console.log('Admin data saved:', adminData);
 };
+
+// ========== MAPPING DES CHAMPS ==========
+
+// Mapper les champs patient API → Frontend
+ConsumApi.prototype._mapPatientFields = function(patient) {
+  if (!patient) return patient;
+  
+  // Normaliser le genre (MALE/FEMALE → M/F ou vice versa)
+  const normalizeGender = (gender) => {
+    if (!gender) return '';
+    if (gender === 'MALE' || gender === 'M') return 'M';
+    if (gender === 'FEMALE' || gender === 'F') return 'F';
+    return gender;
+  };
+  
+  // Reconstruire l'objet contact d'urgence depuis les champs plats
+  const emergencyContact = patient.emergencyContact || {
+    name: patient.emergencyContactName || '',
+    phone: patient.emergencyContactPhone || '',
+    relationship: patient.emergencyContactRelationship || ''
+  };
+  
+  // Reconstruire l'objet assurance
+  const insurance = patient.insurance || {
+    type: patient.insuranceType || 'NONE',
+    company: patient.insuranceCompany || '',
+    number: patient.insuranceNumber || '',
+    validUntil: patient.insuranceValidUntil || ''
+  };
+  
+  return {
+    // Identifiants
+    id: patient.id || patient._id || patient.uuid || patient.patientNumber,
+    patientId: patient.patientNumber || patient.patientId || patient.id,
+    patientNumber: patient.patientNumber || '',
+    
+    // Identité
+    firstName: patient.firstName || patient.first_name || patient.prenom || '',
+    firstname: patient.firstName || patient.first_name || patient.prenom || '',
+    lastName: patient.lastName || patient.last_name || patient.nom || '',
+    lastname: patient.lastName || patient.last_name || patient.nom || '',
+    
+    // Informations personnelles
+    dateOfBirth: patient.dateOfBirth || patient.date_of_birth || patient.dateNaissance || '',
+    placeOfBirth: patient.placeOfBirth || patient.place_of_birth || patient.lieuNaissance || '',
+    nationality: patient.nationality || patient.nationalité || '',
+    gender: normalizeGender(patient.gender || patient.sexe || ''),
+    maritalStatus: patient.maritalStatus || patient.marital_status || patient.etatCivil || '',
+    
+    // Contact
+    phone: patient.phone || patient.telephone || '',
+    email: patient.email || '',
+    address: patient.address || patient.adresse || '',
+    city: patient.city || patient.ville || '',
+    country: patient.country || patient.pays || '',
+    
+    // Informations médicales
+    bloodGroup: patient.bloodGroup || patient.blood_group || patient.groupeSanguin || '',
+    height: patient.height || patient.taille || null,
+    weight: patient.weight || patient.poids || null,
+    
+    // Profession
+    profession: patient.occupation || patient.profession || patient.metier || '',
+    occupation: patient.occupation || patient.profession || '',
+    
+    // Contact d'urgence
+    emergencyContact,
+    emergencyContactName: patient.emergencyContactName || emergencyContact.name || '',
+    emergencyContactPhone: patient.emergencyContactPhone || emergencyContact.phone || '',
+    emergencyContactRelationship: patient.emergencyContactRelationship || emergencyContact.relationship || '',
+    
+    // Assurance
+    insurance,
+    insuranceType: patient.insuranceType || insurance.type || 'NONE',
+    insuranceCompany: patient.insuranceCompany || insurance.company || '',
+    insuranceNumber: patient.insuranceNumber || insurance.number || '',
+    insuranceValidUntil: patient.insuranceValidUntil || insurance.validUntil || '',
+    
+    // Statut et autres
+    status: patient.status || 'ACTIVE',
+    isActive: patient.isActive !== undefined ? patient.isActive : true,
+    photo: patient.photo || '',
+    notes: patient.notes || patient.remarques || '',
+    
+    // Dates
+    createdAt: patient.createdAt || patient.created_at || new Date().toISOString(),
+    updatedAt: patient.updatedAt || patient.updated_at || new Date().toISOString(),
+    
+    // Garder les champs supplémentaires
+    ...patient
+  };
+};
+
+
+// Convertir données Frontend (format affichage) → API (format stockage)
+ConsumApi.prototype._normalizePatientForApi = function(patientData) {
+  const normalizeGender = (gender) => {
+    if (!gender) return 'MALE';
+    if (gender === 'M') return 'MALE';
+    if (gender === 'F') return 'FEMALE';
+    return gender.toUpperCase();
+  };
+  
+  return {
+    patientNumber: patientData.patientNumber || patientData.patientId,
+    firstName: patientData.firstName || patientData.firstname,
+    lastName: patientData.lastName || patientData.lastname,
+    dateOfBirth: patientData.dateOfBirth,
+    placeOfBirth: patientData.placeOfBirth,
+    nationality: patientData.nationality,
+    gender: normalizeGender(patientData.gender),
+    maritalStatus: patientData.maritalStatus,
+    phone: patientData.phone,
+    email: patientData.email,
+    address: patientData.address,
+    city: patientData.city,
+    country: patientData.country,
+    bloodGroup: patientData.bloodGroup,
+    height: patientData.height ? parseInt(patientData.height) : null,
+    weight: patientData.weight ? parseFloat(patientData.weight) : null,
+    occupation: patientData.occupation || patientData.profession,
+    emergencyContactName: patientData.emergencyContactName || patientData.emergencyContact?.name,
+    emergencyContactPhone: patientData.emergencyContactPhone || patientData.emergencyContact?.phone,
+    emergencyContactRelationship: patientData.emergencyContactRelationship || patientData.emergencyContact?.relationship,
+    insuranceType: patientData.insuranceType || patientData.insurance?.type || 'NONE',
+    insuranceCompany: patientData.insuranceCompany || patientData.insurance?.company,
+    insuranceNumber: patientData.insuranceNumber || patientData.insurance?.number,
+    insuranceValidUntil: patientData.insuranceValidUntil || patientData.insurance?.validUntil,
+    status: patientData.status || 'ACTIVE',
+    isActive: patientData.isActive !== undefined ? patientData.isActive : true,
+    photo: patientData.photo,
+    notes: patientData.notes
+  };
+};
+
+// Mapper les champs antécédent API → Frontend
+ConsumApi.prototype._mapAntecedentFields = function(antecedent) {
+  if (!antecedent) return antecedent;
+  
+  return {
+    id: antecedent.id || antecedent._id || antecedent.uuid,
+    type: antecedent.type || 'medical',
+    description: antecedent.description || '',
+    date: antecedent.diagnosedDate || antecedent.date || antecedent.dateAntecedent || '',
+    diagnosedDate: antecedent.diagnosedDate || antecedent.date || '',
+    notes: antecedent.notes || antecedent.remarques || '',
+    severity: antecedent.severity || 'moderate',
+    isActive: antecedent.isActive !== undefined ? antecedent.isActive : true,
+    patientId: antecedent.patientId || antecedent.patient_id || '',
+    createdAt: antecedent.createdAt || antecedent.created_at || new Date().toISOString(),
+    ...antecedent
+  };
+};
+
