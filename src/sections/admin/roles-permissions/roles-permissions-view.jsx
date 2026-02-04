@@ -815,9 +815,21 @@ export default function RolesPermissionsView() {
 
   // Toggle une permission pour un rôle
   const handleToggleRolePermission = async (permissionUuid) => {
+    if (!permissionUuid) {
+      console.error('Permission UUID is missing');
+      showError('Erreur', 'UUID de permission manquant');
+      return;
+    }
+
+    console.log('=== TOGGLE PERMISSION DEBUG ===');
+    console.log('Permission UUID:', permissionUuid);
+    console.log('Role:', manageRolePermissionsDialog.role);
+
     setLoading(true);
     try {
       const result = await ConsumApi.toggleRolePermissionStatus(permissionUuid);
+      console.log('Toggle result:', result);
+      
       const processed = showApiResponse(result, {
         successTitle: 'Permission modifiée',
         errorTitle: 'Erreur de modification',
@@ -830,7 +842,11 @@ export default function RolesPermissionsView() {
       }
     } catch (error) {
       console.error('Error toggling permission:', error);
-      showError('Erreur', 'Impossible de modifier la permission');
+      console.error('Error details:', error.response?.data || error.message);
+      // Ne pas afficher d'erreur si c'est une redirection (401)
+      if (error.response?.status !== 401) {
+        showError('Erreur', 'Impossible de modifier la permission');
+      }
     } finally {
       setLoading(false);
     }
@@ -856,6 +872,70 @@ export default function RolesPermissionsView() {
     } catch (error) {
       console.error('Error generating permissions:', error);
       showError('Erreur', 'Impossible de générer les permissions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Ajouter une permission à un rôle (utilise toggle)
+  const handleAddPermissionToRole = async (permission) => {
+    if (!manageRolePermissionsDialog.role) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let permissionUuid = permission.role_permission_uuid;
+      
+      // Si la permission n'a pas encore de role_permission_uuid, générer toutes les permissions d'abord
+      if (!permissionUuid) {
+        const generateResult = await ConsumApi.generateRolePermissions(manageRolePermissionsDialog.role.id);
+        const generateProcessed = showApiResponse(generateResult, {
+          successTitle: 'Permissions générées',
+          errorTitle: 'Erreur de génération',
+        });
+        
+        if (!generateProcessed.success) {
+          return;
+        }
+        
+        // Recharger les permissions pour obtenir les nouveaux role_permission_uuid
+        const reloadResult = await ConsumApi.getRoleGlobalPermissions(manageRolePermissionsDialog.role.id);
+        if (reloadResult.success && reloadResult.data && reloadResult.data.modules) {
+          // Chercher la permission mise à jour avec son role_permission_uuid
+          for (const module of reloadResult.data.modules) {
+            if (module.permissions) {
+              const found = module.permissions.find(p => p.id === permission.id);
+              if (found && found.role_permission_uuid) {
+                permissionUuid = found.role_permission_uuid;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (!permissionUuid) {
+          showError('Erreur', 'Impossible de récupérer l\'UUID de la permission après génération');
+          // Recharger quand même pour mettre à jour l'affichage
+          await loadRolePermissions(manageRolePermissionsDialog.role.id);
+          return;
+        }
+      }
+      
+      // Utiliser toggle pour activer/ajouter la permission
+      const toggleResult = await ConsumApi.toggleRolePermissionStatus(permissionUuid);
+      const toggleProcessed = showApiResponse(toggleResult, {
+        successTitle: 'Permission ajoutée',
+        errorTitle: 'Erreur d\'ajout',
+      });
+      
+      if (toggleProcessed.success) {
+        showSuccess('Succès', 'La permission a été ajoutée au rôle');
+        await loadRolePermissions(manageRolePermissionsDialog.role.id);
+      }
+    } catch (error) {
+      console.error('Error adding permission:', error);
+      showError('Erreur', 'Impossible d\'ajouter la permission');
     } finally {
       setLoading(false);
     }
@@ -2329,12 +2409,7 @@ export default function RolesPermissionsView() {
                                                     size="small"
                                                     variant="outlined"
                                                     startIcon={<Iconify icon="eva:plus-outline" />}
-                                                    onClick={async () => {
-                                                      // Générer les permissions pour activer cette permission
-                                                      await handleGenerateRolePermissions();
-                                                      // Recharger pour mettre à jour l'affichage
-                                                      await loadRolePermissions(manageRolePermissionsDialog.role.id);
-                                                    }}
+                                                    onClick={() => handleAddPermissionToRole(permission)}
                                                     disabled={loading}
                                                   >
                                                     Ajouter

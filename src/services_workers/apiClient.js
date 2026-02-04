@@ -14,15 +14,37 @@ class ApiClient {
       const config = {};
 
       const token = AdminStorage.getTokenAdmin();
+      console.log('=== API CLIENT REQUEST DEBUG ===');
+      console.log('Method:', method);
+      console.log('URL:', url);
+      console.log('Data:', data);
+      console.log('RequiresAuth:', requiresAuth);
+      console.log('Token exists:', !!token);
+      console.log('Token (first 20 chars):', token ? token.substring(0, 20) + '...' : 'N/A');
+      
       if (token) {
         const authToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
         config.headers = { Authorization: authToken };
+      } else if (requiresAuth) {
+        console.error('No token found but auth is required!');
       }
       let response;
       if (method === 'GET' || method === 'DELETE') {
         response = await api[method.toLowerCase()](url, config);
       } else {
-        response = await api[method.toLowerCase()](url, data, config);
+        // Pour PUT/POST/PATCH, gérer le body selon la méthode
+        if (data === null || data === undefined) {
+          // Pour PUT, certains serveurs n'acceptent pas de body vide
+          // Essayer d'abord avec un body vide, sinon sans body
+          if (method === 'PUT') {
+            // Pour PUT, essayer avec un objet vide dans le body
+            response = await api.put(url, {}, config);
+          } else {
+            response = await api[method.toLowerCase()](url, {}, config);
+          }
+        } else {
+          response = await api[method.toLowerCase()](url, data, config);
+        }
       }
       console.log('=== API CLIENT DEBUG ===');
       console.log('URL:', url);
@@ -130,16 +152,36 @@ class ApiClient {
         errors: [],
       };
     } catch (error) {
-      console.error('API Error:', error);
+      console.error('=== API CLIENT ERROR ===');
+      console.error('Error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
+      console.error('Error message:', error.message);
+      
       if (error.response?.data) {
-        console.error('API Error:', error.response.data);
+        console.error('API Error details:', error.response.data);
         const { message, error: errorMsg, errors } = error.response.data;
+        
+        // Ne rediriger que si c'est vraiment une erreur 401
+        if (error.response?.status === 401) {
+          console.error('401 Unauthorized - Redirecting to login');
+          AdminStorage.clearStokage();
+          window.location.href = '/login';
+          return {
+            success: false,
+            message: 'Session expirée, veuillez vous reconnecter',
+            errors: [],
+          };
+        }
+        
         if (
           message?.toLowerCase().includes('token') ||
           message?.toLowerCase().includes('unauthorized')
         ) {
-           AdminStorage.clearStokage();
-           window.location.href = '/login';
+          console.error('Token/Unauthorized error detected - Redirecting to login');
+          AdminStorage.clearStokage();
+          window.location.href = '/login';
           return {
             success: false,
             message: 'Session expirée, veuillez vous reconnecter',
