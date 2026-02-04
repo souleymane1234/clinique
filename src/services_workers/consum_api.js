@@ -892,7 +892,15 @@ export default class ConsumApi {
 
   // Toggle le statut d'une permission pour un rôle
   static async toggleRolePermissionStatus(permissionUuid) {
-    return this._authenticatedRequest('PUT', apiUrl.roleTogglePermissionStatus(permissionUuid));
+    // Pour une requête PUT de type toggle, utiliser directement ApiClient
+    // Certaines APIs préfèrent ne pas avoir de body pour les requêtes PUT de type toggle
+    const url = apiUrl.roleTogglePermissionStatus(permissionUuid);
+    console.log('=== TOGGLE PERMISSION API CALL ===');
+    console.log('URL:', url);
+    console.log('Permission UUID:', permissionUuid);
+    
+    // Utiliser ApiClient directement pour avoir plus de contrôle
+    return ApiClient.put(url, null, true);
   }
 
   // Générer toutes les permissions pour un rôle
