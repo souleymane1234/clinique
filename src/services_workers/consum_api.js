@@ -71,7 +71,7 @@ export default class ConsumApi {
         console.log('✅ Connexion réussie');
         console.log('📧 Email:', data.email);
         console.log('👤 Rôle:', userData.service);
-        console.log('🔑 Token:', access_token.substring(0, 20) + '...');
+        console.log('🔑 Token:', `${access_token.substring(0, 20)}...`);
 
         return { 
           success: true, 
@@ -193,13 +193,17 @@ export default class ConsumApi {
       // Utiliser ApiClient pour les vraies requêtes
       if (method === 'GET') {
         return ApiClient.get(url, true);
-      } else if (method === 'POST') {
+      }
+      if (method === 'POST') {
         return ApiClient.post(url, data, true);
-      } else if (method === 'PUT') {
+      }
+      if (method === 'PUT') {
         return ApiClient.put(url, data, true);
-      } else if (method === 'PATCH') {
+      }
+      if (method === 'PATCH') {
         return ApiClient.request('PATCH', url, data, true);
-      } else if (method === 'DELETE') {
+      }
+      if (method === 'DELETE') {
         return ApiClient.delete(url, true);
       }
     }
@@ -2431,7 +2435,7 @@ export default class ConsumApi {
       
       // Médical
       bloodGroup: data.bloodGroup || data.blood_group || '',
-      height: data.height ? parseInt(data.height) : null,
+      height: data.height ? parseInt(data.height, 10) : null,
       weight: data.weight ? parseFloat(data.weight) : null,
       
       // Profession
@@ -2492,7 +2496,7 @@ export default class ConsumApi {
       
       // Médical
       bloodGroup: data.bloodGroup || data.blood_group || '',
-      height: data.height ? parseInt(data.height) : null,
+      height: data.height ? parseInt(data.height, 10) : null,
       weight: data.weight ? parseFloat(data.weight) : null,
       
       // Profession
@@ -3736,7 +3740,7 @@ ConsumApi.prototype._normalizePatientForApi = function(patientData) {
     city: patientData.city,
     country: patientData.country,
     bloodGroup: patientData.bloodGroup,
-    height: patientData.height ? parseInt(patientData.height) : null,
+    height: patientData.height ? parseInt(patientData.height, 10) : null,
     weight: patientData.weight ? parseFloat(patientData.weight) : null,
     occupation: patientData.occupation || patientData.profession,
     emergencyContactName: patientData.emergencyContactName || patientData.emergencyContact?.name,

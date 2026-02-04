@@ -20,7 +20,7 @@ class ApiClient {
       console.log('Data:', data);
       console.log('RequiresAuth:', requiresAuth);
       console.log('Token exists:', !!token);
-      console.log('Token (first 20 chars):', token ? token.substring(0, 20) + '...' : 'N/A');
+      console.log('Token (first 20 chars):', token ? `${token.substring(0, 20)}...` : 'N/A');
       
       if (token) {
         const authToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
@@ -31,20 +31,18 @@ class ApiClient {
       let response;
       if (method === 'GET' || method === 'DELETE') {
         response = await api[method.toLowerCase()](url, config);
-      } else {
+      } else if (data === null || data === undefined) {
         // Pour PUT/POST/PATCH, gérer le body selon la méthode
-        if (data === null || data === undefined) {
-          // Pour PUT, certains serveurs n'acceptent pas de body vide
-          // Essayer d'abord avec un body vide, sinon sans body
-          if (method === 'PUT') {
-            // Pour PUT, essayer avec un objet vide dans le body
-            response = await api.put(url, {}, config);
-          } else {
-            response = await api[method.toLowerCase()](url, {}, config);
-          }
+        // Pour PUT, certains serveurs n'acceptent pas de body vide
+        // Essayer d'abord avec un body vide, sinon sans body
+        if (method === 'PUT') {
+          // Pour PUT, essayer avec un objet vide dans le body
+          response = await api.put(url, {}, config);
         } else {
-          response = await api[method.toLowerCase()](url, data, config);
+          response = await api[method.toLowerCase()](url, {}, config);
         }
+      } else {
+        response = await api[method.toLowerCase()](url, data, config);
       }
       console.log('=== API CLIENT DEBUG ===');
       console.log('URL:', url);

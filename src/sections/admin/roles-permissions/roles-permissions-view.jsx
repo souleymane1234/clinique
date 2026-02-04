@@ -129,7 +129,6 @@ export default function RolesPermissionsView() {
       loadUsers();
       loadRoles();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab]);
 
   // Charger tous les modules
@@ -218,22 +217,22 @@ export default function RolesPermissionsView() {
         
         // Filtrer les permissions par module
         if (result && (result.success || result.data)) {
-          let allPermissions = [];
+          let permissionsList = [];
           
           if (Array.isArray(result.data)) {
-            allPermissions = result.data;
+            permissionsList = result.data;
           } else if (result.data && typeof result.data === 'object') {
             if (Array.isArray(result.data.data)) {
-              allPermissions = result.data.data;
+              permissionsList = result.data.data;
             } else if (Array.isArray(result.data.items)) {
-              allPermissions = result.data.items;
+              permissionsList = result.data.items;
             } else if (Array.isArray(result.data.results)) {
-              allPermissions = result.data.results;
+              permissionsList = result.data.results;
             }
           }
           
           // Filtrer par module (le module peut être dans permission.module.id ou permission.module_uuid)
-          const filteredPermissions = allPermissions.filter(permission => {
+          const filteredPermissions = permissionsList.filter(permission => {
             const moduleIdMatch = permission.module?.id === moduleId || 
                                   permission.module_uuid === moduleId ||
                                   permission.moduleId === moduleId;
@@ -307,22 +306,22 @@ export default function RolesPermissionsView() {
           console.log(`All permissions result (fallback):`, allPermissionsResult);
           
           if (allPermissionsResult && (allPermissionsResult.success || allPermissionsResult.data)) {
-            let allPermissions = [];
+            let permissionsList = [];
             
             if (Array.isArray(allPermissionsResult.data)) {
-              allPermissions = allPermissionsResult.data;
+              permissionsList = allPermissionsResult.data;
             } else if (allPermissionsResult.data && typeof allPermissionsResult.data === 'object') {
               if (Array.isArray(allPermissionsResult.data.data)) {
-                allPermissions = allPermissionsResult.data.data;
+                permissionsList = allPermissionsResult.data.data;
               } else if (Array.isArray(allPermissionsResult.data.items)) {
-                allPermissions = allPermissionsResult.data.items;
+                permissionsList = allPermissionsResult.data.items;
               } else if (Array.isArray(allPermissionsResult.data.results)) {
-                allPermissions = allPermissionsResult.data.results;
+                permissionsList = allPermissionsResult.data.results;
               }
             }
             
             // Filtrer par module
-            const filteredPermissions = allPermissions.filter(permission => {
+            const filteredPermissions = permissionsList.filter(permission => {
               const moduleIdMatch = permission.module?.id === moduleId || 
                                     permission.module_uuid === moduleId ||
                                     permission.moduleId === moduleId;
@@ -903,15 +902,16 @@ export default function RolesPermissionsView() {
         const reloadResult = await ConsumApi.getRoleGlobalPermissions(manageRolePermissionsDialog.role.id);
         if (reloadResult.success && reloadResult.data && reloadResult.data.modules) {
           // Chercher la permission mise à jour avec son role_permission_uuid
-          for (const module of reloadResult.data.modules) {
+          const foundModule = reloadResult.data.modules.find((module) => {
             if (module.permissions) {
               const found = module.permissions.find(p => p.id === permission.id);
               if (found && found.role_permission_uuid) {
                 permissionUuid = found.role_permission_uuid;
-                break;
+                return true;
               }
             }
-          }
+            return false;
+          });
         }
         
         if (!permissionUuid) {
@@ -1151,11 +1151,12 @@ export default function RolesPermissionsView() {
           </Box>
           <Divider />
 
-          {loadingPermissions ? (
+          {loadingPermissions && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <Typography color="text.secondary">Chargement des permissions...</Typography>
             </Box>
-          ) : allPermissions.length > 0 ? (
+          )}
+          {!loadingPermissions && allPermissions.length > 0 && (
             <TableContainer component={Paper} variant="outlined">
               <Table>
                 <TableHead>
@@ -1250,7 +1251,8 @@ export default function RolesPermissionsView() {
                 </TableBody>
               </Table>
             </TableContainer>
-          ) : (
+          )}
+          {!loadingPermissions && allPermissions.length === 0 && (
             <Box sx={{ py: 4 }}>
               <Typography color="text.secondary" align="center" sx={{ mb: 2 }}>
                 Aucune permission trouvée
@@ -2263,11 +2265,12 @@ export default function RolesPermissionsView() {
                 </Button>
               </Box>
 
-              {loadingRolePermissions ? (
+              {loadingRolePermissions && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                   <Typography color="text.secondary">Chargement des permissions...</Typography>
                 </Box>
-              ) : rolePermissions && rolePermissions.modules ? (
+              )}
+              {!loadingRolePermissions && rolePermissions && rolePermissions.modules && (
                 <Stack spacing={4}>
                   {(() => {
                     const { rolePermissions: rolePerms, otherPermissions: otherPerms } = organizePermissions();
@@ -2349,7 +2352,7 @@ export default function RolesPermissionsView() {
                             </Stack>
                           ) : (
                             <Alert severity="info" sx={{ mt: 2 }}>
-                              Ce rôle n'a aucune permission assignée pour le moment.
+                              Ce rôle n&apos;a aucune permission assignée pour le moment.
                             </Alert>
                           )}
                         </Box>
@@ -2439,11 +2442,13 @@ export default function RolesPermissionsView() {
                     );
                   })()}
                 </Stack>
-              ) : rolePermissions ? (
+              )}
+              {!loadingRolePermissions && rolePermissions && !rolePermissions.modules && (
                 <Alert severity="info">
-                  Aucune permission trouvée. Cliquez sur "Générer Toutes les Permissions" pour créer toutes les permissions disponibles.
+                  Aucune permission trouvée. Cliquez sur &quot;Générer Toutes les Permissions&quot; pour créer toutes les permissions disponibles.
                 </Alert>
-              ) : (
+              )}
+              {!loadingRolePermissions && !rolePermissions && (
                 <Alert severity="error">
                   Impossible de charger les permissions. Veuillez réessayer.
                 </Alert>
