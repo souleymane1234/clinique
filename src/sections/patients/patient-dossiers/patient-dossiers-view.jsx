@@ -70,20 +70,33 @@ export default function PatientDossiersView() {
 
   // Form data
   const [formData, setFormData] = useState({
+    patientNumber: '',
     firstName: '',
     lastName: '',
     dateOfBirth: '',
+    placeOfBirth: '',
+    nationality: '',
     gender: '',
+    maritalStatus: 'SINGLE',
     phone: '',
     email: '',
     address: '',
     city: '',
+    country: '',
+    bloodGroup: '',
+    height: '',
+    weight: '',
     profession: '',
     emergencyContact: {
       name: '',
       phone: '',
       relationship: '',
     },
+    insuranceType: 'NONE',
+    insuranceCompany: '',
+    insuranceNumber: '',
+    insuranceValidUntil: '',
+    notes: '',
   });
 
   const loadPatients = useCallback(async () => {
@@ -106,7 +119,15 @@ export default function PatientDossiersView() {
       });
 
       if (processed.success) {
-        setPatients(Array.isArray(processed.data?.patients) ? processed.data.patients : processed.data || []);
+        const patientsList = Array.isArray(processed.data?.patients) ? processed.data.patients : processed.data || [];
+        console.log('=== LOAD PATIENTS DEBUG ===');
+        console.log('Patients loaded:', patientsList.length);
+        if (patientsList.length > 0) {
+          console.log('First patient sample:', patientsList[0]);
+          console.log('First patient gender:', patientsList[0].gender);
+          console.log('First patient gender type:', typeof patientsList[0].gender);
+        }
+        setPatients(patientsList);
       } else {
         setPatients([]);
       }
@@ -138,29 +159,46 @@ export default function PatientDossiersView() {
       });
 
       if (processed.success) {
-        setCreateDialog({ open: false, loading: false });
+        // Réinitialiser le formulaire
         setFormData({
+          patientNumber: '',
           firstName: '',
           lastName: '',
           dateOfBirth: '',
+          placeOfBirth: '',
+          nationality: '',
           gender: '',
+          maritalStatus: 'SINGLE',
           phone: '',
           email: '',
           address: '',
           city: '',
+          country: '',
+          bloodGroup: '',
+          height: '',
+          weight: '',
           profession: '',
           emergencyContact: {
             name: '',
             phone: '',
             relationship: '',
           },
+          insuranceType: 'NONE',
+          insuranceCompany: '',
+          insuranceNumber: '',
+          insuranceValidUntil: '',
+          notes: '',
         });
+        // Fermer le modal et recharger les patients
+        setCreateDialog({ open: false, loading: false });
         await loadPatients();
+      } else {
+        // En cas d'erreur, garder le modal ouvert mais arrêter le chargement
+        setCreateDialog({ ...createDialog, loading: false });
       }
     } catch (error) {
       console.error('Error creating patient:', error);
       showError('Erreur', 'Impossible de créer le patient');
-    } finally {
       setCreateDialog({ ...createDialog, loading: false });
     }
   };
@@ -214,24 +252,57 @@ export default function PatientDossiersView() {
     }
   };
 
-  const handleEditOpen = (patient) => {
-    setFormData({
-      firstName: patient.firstName || patient.firstname || '',
-      lastName: patient.lastName || patient.lastname || '',
-      dateOfBirth: patient.dateOfBirth || patient.dateOfBirth || '',
-      gender: patient.gender || '',
-      phone: patient.phone || '',
-      email: patient.email || '',
-      address: patient.address || '',
-      city: patient.city || '',
-      profession: patient.profession || '',
-      emergencyContact: patient.emergencyContact || {
-        name: '',
-        phone: '',
-        relationship: '',
-      },
-    });
-    setEditDialog({ open: true, patient, loading: false });
+  const handleEditOpen = async (patient) => {
+    // Charger les données complètes du patient depuis l'API
+    setEditDialog({ open: true, patient, loading: true });
+    try {
+      const result = await ConsumApi.getPatientById(patient.id);
+      if (result.success && result.data) {
+        const patientData = result.data;
+        setFormData({
+          patientNumber: patientData.patientNumber || patientData.patientId || '',
+          firstName: patientData.firstName || patientData.firstname || '',
+          lastName: patientData.lastName || patientData.lastname || '',
+          dateOfBirth: patientData.dateOfBirth || '',
+          placeOfBirth: patientData.placeOfBirth || '',
+          nationality: patientData.nationality || '',
+          gender: (() => {
+            if (patientData.gender === 'MALE' || patientData.gender === 'M') return 'M';
+            if (patientData.gender === 'FEMALE' || patientData.gender === 'F') return 'F';
+            return patientData.gender || '';
+          })(),
+          maritalStatus: patientData.maritalStatus || 'SINGLE',
+          phone: patientData.phone || '',
+          email: patientData.email || '',
+          address: patientData.address || '',
+          city: patientData.city || '',
+          country: patientData.country || '',
+          bloodGroup: patientData.bloodGroup || '',
+          height: patientData.height ? patientData.height.toString() : '',
+          weight: patientData.weight ? patientData.weight.toString() : '',
+          profession: patientData.profession || patientData.occupation || '',
+          emergencyContact: patientData.emergencyContact || {
+            name: patientData.emergencyContactName || '',
+            phone: patientData.emergencyContactPhone || '',
+            relationship: patientData.emergencyContactRelationship || '',
+          },
+          insuranceType: patientData.insuranceType || patientData.insurance?.type || 'NONE',
+          insuranceCompany: patientData.insuranceCompany || patientData.insurance?.company || '',
+          insuranceNumber: patientData.insuranceNumber || patientData.insurance?.number || '',
+          insuranceValidUntil: patientData.insuranceValidUntil || patientData.insurance?.validUntil || '',
+          notes: patientData.notes || '',
+        });
+      } else {
+        showError('Erreur', 'Impossible de charger les données du patient');
+        setEditDialog({ open: false, patient: null, loading: false });
+      }
+    } catch (error) {
+      console.error('Error loading patient data:', error);
+      showError('Erreur', 'Impossible de charger les données du patient');
+      setEditDialog({ open: false, patient: null, loading: false });
+    } finally {
+      setEditDialog({ ...editDialog, loading: false });
+    }
   };
 
   const calculateAge = (dateOfBirth) => {
@@ -353,7 +424,6 @@ export default function PatientDossiersView() {
                       <TableCell>Âge</TableCell>
                       <TableCell>Genre</TableCell>
                       <TableCell>Téléphone</TableCell>
-                      <TableCell>Email</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -362,7 +432,7 @@ export default function PatientDossiersView() {
                       if (loading && patients.length === 0) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                            <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                               Chargement...
                             </TableCell>
                           </TableRow>
@@ -371,7 +441,7 @@ export default function PatientDossiersView() {
                       if (patients.length === 0) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                            <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                               Aucun patient trouvé
                             </TableCell>
                           </TableRow>
@@ -400,16 +470,21 @@ export default function PatientDossiersView() {
                           <TableCell>
                             <Chip
                               label={(() => {
-                                if (patient.gender === 'M') return 'Masculin';
-                                if (patient.gender === 'F') return 'Féminin';
-                                return 'N/A';
+                                const gender = patient.gender || patient.sexe || '';
+                                if (gender === 'M' || gender === 'MALE' || gender?.toUpperCase() === 'MALE') return 'Masculin';
+                                if (gender === 'F' || gender === 'FEMALE' || gender?.toUpperCase() === 'FEMALE') return 'Féminin';
+                                return gender || 'N/A';
                               })()}
-                              color={GENDER_COLORS[patient.gender] || 'default'}
+                              color={(() => {
+                                const gender = patient.gender || patient.sexe || '';
+                                if (gender === 'M' || gender === 'MALE' || gender?.toUpperCase() === 'MALE') return 'info';
+                                if (gender === 'F' || gender === 'FEMALE' || gender?.toUpperCase() === 'FEMALE') return 'error';
+                                return 'default';
+                              })()}
                               size="small"
                             />
                           </TableCell>
                           <TableCell>{patient.phone || 'N/A'}</TableCell>
-                          <TableCell>{patient.email || 'N/A'}</TableCell>
                           <TableCell>
                             <Stack direction="row" spacing={1}>
                               <IconButton
@@ -503,6 +578,17 @@ export default function PatientDossiersView() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Lieu de naissance"
+                  value={formData.placeOfBirth}
+                  onChange={(e) => setFormData({ ...formData, placeOfBirth: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
                   <InputLabel>Genre *</InputLabel>
                   <Select
@@ -512,6 +598,52 @@ export default function PatientDossiersView() {
                   >
                     <MenuItem value="M">Masculin</MenuItem>
                     <MenuItem value="F">Féminin</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>État civil</InputLabel>
+                  <Select
+                    value={formData.maritalStatus}
+                    label="État civil"
+                    onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
+                  >
+                    <MenuItem value="SINGLE">Célibataire</MenuItem>
+                    <MenuItem value="MARRIED">Marié(e)</MenuItem>
+                    <MenuItem value="DIVORCED">Divorcé(e)</MenuItem>
+                    <MenuItem value="WIDOWED">Veuf(ve)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Nationalité"
+                  value={formData.nationality}
+                  onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Groupe sanguin</InputLabel>
+                  <Select
+                    value={formData.bloodGroup}
+                    label="Groupe sanguin"
+                    onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                  >
+                    <MenuItem value="">Non spécifié</MenuItem>
+                    <MenuItem value="A+">A+</MenuItem>
+                    <MenuItem value="A-">A-</MenuItem>
+                    <MenuItem value="B+">B+</MenuItem>
+                    <MenuItem value="B-">B-</MenuItem>
+                    <MenuItem value="AB+">AB+</MenuItem>
+                    <MenuItem value="AB-">AB-</MenuItem>
+                    <MenuItem value="O+">O+</MenuItem>
+                    <MenuItem value="O-">O-</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -558,9 +690,40 @@ export default function PatientDossiersView() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  label="Pays"
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
                   label="Profession"
                   value={formData.profession}
                   onChange={(e) => setFormData({ ...formData, profession: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Taille (cm)"
+                  value={formData.height}
+                  onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                  inputProps={{ min: 0, max: 300 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Poids (kg)"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                  inputProps={{ min: 0, step: 0.1 }}
                 />
               </Grid>
             </Grid>
@@ -610,6 +773,69 @@ export default function PatientDossiersView() {
                 />
               </Grid>
             </Grid>
+
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>
+              Assurance
+            </Typography>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Type d&apos;assurance</InputLabel>
+                  <Select
+                    value={formData.insuranceType}
+                    label="Type d'assurance"
+                    onChange={(e) => setFormData({ ...formData, insuranceType: e.target.value })}
+                  >
+                    <MenuItem value="NONE">Aucune</MenuItem>
+                    <MenuItem value="PUBLIC">Publique</MenuItem>
+                    <MenuItem value="PRIVATE">Privée</MenuItem>
+                    <MenuItem value="MIXED">Mixte</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Compagnie d&apos;assurance"
+                  value={formData.insuranceCompany}
+                  onChange={(e) => setFormData({ ...formData, insuranceCompany: e.target.value })}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Numéro d&apos;assurance"
+                  value={formData.insuranceNumber}
+                  onChange={(e) => setFormData({ ...formData, insuranceNumber: e.target.value })}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Date de validité de l&apos;assurance"
+                  value={formData.insuranceValidUntil}
+                  onChange={(e) => setFormData({ ...formData, insuranceValidUntil: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              fullWidth
+              label="Notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              multiline
+              rows={3}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -659,6 +885,17 @@ export default function PatientDossiersView() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Lieu de naissance"
+                  value={formData.placeOfBirth}
+                  onChange={(e) => setFormData({ ...formData, placeOfBirth: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
                   <InputLabel>Genre *</InputLabel>
                   <Select
@@ -668,6 +905,52 @@ export default function PatientDossiersView() {
                   >
                     <MenuItem value="M">Masculin</MenuItem>
                     <MenuItem value="F">Féminin</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>État civil</InputLabel>
+                  <Select
+                    value={formData.maritalStatus}
+                    label="État civil"
+                    onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value })}
+                  >
+                    <MenuItem value="SINGLE">Célibataire</MenuItem>
+                    <MenuItem value="MARRIED">Marié(e)</MenuItem>
+                    <MenuItem value="DIVORCED">Divorcé(e)</MenuItem>
+                    <MenuItem value="WIDOWED">Veuf(ve)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Nationalité"
+                  value={formData.nationality}
+                  onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Groupe sanguin</InputLabel>
+                  <Select
+                    value={formData.bloodGroup}
+                    label="Groupe sanguin"
+                    onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                  >
+                    <MenuItem value="">Non spécifié</MenuItem>
+                    <MenuItem value="A+">A+</MenuItem>
+                    <MenuItem value="A-">A-</MenuItem>
+                    <MenuItem value="B+">B+</MenuItem>
+                    <MenuItem value="B-">B-</MenuItem>
+                    <MenuItem value="AB+">AB+</MenuItem>
+                    <MenuItem value="AB-">AB-</MenuItem>
+                    <MenuItem value="O+">O+</MenuItem>
+                    <MenuItem value="O-">O-</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -714,9 +997,40 @@ export default function PatientDossiersView() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  label="Pays"
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
                   label="Profession"
                   value={formData.profession}
                   onChange={(e) => setFormData({ ...formData, profession: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Taille (cm)"
+                  value={formData.height}
+                  onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+                  inputProps={{ min: 0, max: 300 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Poids (kg)"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                  inputProps={{ min: 0, step: 0.1 }}
                 />
               </Grid>
             </Grid>
@@ -766,6 +1080,69 @@ export default function PatientDossiersView() {
                 />
               </Grid>
             </Grid>
+
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>
+              Assurance
+            </Typography>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Type d&apos;assurance</InputLabel>
+                  <Select
+                    value={formData.insuranceType}
+                    label="Type d'assurance"
+                    onChange={(e) => setFormData({ ...formData, insuranceType: e.target.value })}
+                  >
+                    <MenuItem value="NONE">Aucune</MenuItem>
+                    <MenuItem value="PUBLIC">Publique</MenuItem>
+                    <MenuItem value="PRIVATE">Privée</MenuItem>
+                    <MenuItem value="MIXED">Mixte</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Compagnie d&apos;assurance"
+                  value={formData.insuranceCompany}
+                  onChange={(e) => setFormData({ ...formData, insuranceCompany: e.target.value })}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+            </Grid>
+
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Numéro d&apos;assurance"
+                  value={formData.insuranceNumber}
+                  onChange={(e) => setFormData({ ...formData, insuranceNumber: e.target.value })}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Date de validité de l&apos;assurance"
+                  value={formData.insuranceValidUntil}
+                  onChange={(e) => setFormData({ ...formData, insuranceValidUntil: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  disabled={formData.insuranceType === 'NONE'}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              fullWidth
+              label="Notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              multiline
+              rows={3}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

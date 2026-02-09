@@ -184,11 +184,15 @@ export default class ConsumApi {
   static async _authenticatedRequest(method, url, data = null) {
     const urlLower = url.toLowerCase();
     
-    // Pour les endpoints de modules de permissions ET PATIENTS, utiliser l'API réelle
+    // Pour les endpoints de modules de permissions, PATIENTS, ALLERGIES et ANTECEDENTS, utiliser l'API réelle
     if (urlLower.includes('/module-permission') || 
         urlLower.includes('/permission') || 
         urlLower.includes('/permissions') || 
+        urlLower.includes('/patient') ||
         urlLower.includes('/patients') ||
+        urlLower.includes('/allergy') ||
+        urlLower.includes('/allergie') ||
+        urlLower.includes('/antecedent') ||
         (urlLower.includes('/role') && !urlLower.includes('/roles-permissions/matrix'))) {
       // Utiliser ApiClient pour les vraies requêtes
       if (method === 'GET') {
@@ -2346,9 +2350,9 @@ export default class ConsumApi {
     // Mapper les champs si différents
     if (result.success && result.data) {
       if (Array.isArray(result.data)) {
-        result.data = result.data.map(p => this._mapPatientFields(p));
+        result.data = result.data.map(p => ConsumApi._mapPatientFields(p));
       } else if (result.data.patients) {
-        result.data.patients = result.data.patients.map(p => this._mapPatientFields(p));
+        result.data.patients = result.data.patients.map(p => ConsumApi._mapPatientFields(p));
       }
     }
     
@@ -2370,15 +2374,15 @@ export default class ConsumApi {
       // common shapes: { items: [], total, page, limit } or { patients: [], total }
       if (Array.isArray(result.data)) {
         result.data = {
-          items: result.data.map(p => this._mapPatientFields(p)),
+          items: result.data.map(p => ConsumApi._mapPatientFields(p)),
           total: result.data.length,
           page,
           limit
         };
       } else if (result.data.items) {
-        result.data.items = result.data.items.map(p => this._mapPatientFields(p));
+        result.data.items = result.data.items.map(p => ConsumApi._mapPatientFields(p));
       } else if (result.data.patients) {
-        result.data.patients = result.data.patients.map(p => this._mapPatientFields(p));
+        result.data.patients = result.data.patients.map(p => ConsumApi._mapPatientFields(p));
       }
     }
 
@@ -2389,7 +2393,7 @@ export default class ConsumApi {
     const result = await this._authenticatedRequest('GET', apiUrl.patientById(patientId));
     
     if (result.success && result.data) {
-      result.data = this._mapPatientFields(result.data);
+      result.data = ConsumApi._mapPatientFields(result.data);
     }
     
     return result;
@@ -2399,7 +2403,7 @@ export default class ConsumApi {
   static async getPatientByNumber(patientNumber) {
     const result = await this._authenticatedRequest('GET', apiUrl.patientByNumber(patientNumber));
     if (result.success && result.data) {
-      result.data = this._mapPatientFields(result.data);
+      result.data = ConsumApi._mapPatientFields(result.data);
     }
     return result;
   }
@@ -2434,9 +2438,9 @@ export default class ConsumApi {
       country: data.country || data.pays || '',
       
       // Médical
-      bloodGroup: data.bloodGroup || data.blood_group || '',
-      height: data.height ? parseInt(data.height, 10) : null,
-      weight: data.weight ? parseFloat(data.weight) : null,
+      bloodGroup: data.bloodGroup && data.bloodGroup.trim() !== '' ? data.bloodGroup : null,
+      height: data.height && data.height.toString().trim() !== '' ? parseInt(data.height, 10) : null,
+      weight: data.weight && data.weight.toString().trim() !== '' ? parseFloat(data.weight) : null,
       
       // Profession
       occupation: data.occupation || data.profession || data.metier || '',
@@ -2450,7 +2454,9 @@ export default class ConsumApi {
       insuranceType: data.insuranceType || data.insurance?.type || 'NONE',
       insuranceCompany: data.insuranceCompany || data.insurance?.company || '',
       insuranceNumber: data.insuranceNumber || data.insurance?.number || '',
-      insuranceValidUntil: data.insuranceValidUntil || data.insurance?.validUntil || '',
+      insuranceValidUntil: (data.insuranceType === 'NONE' || !data.insuranceValidUntil || data.insuranceValidUntil.trim() === '') 
+        ? null 
+        : (data.insuranceValidUntil || data.insurance?.validUntil || null),
       
       // Statut
       status: data.status || 'ACTIVE',
@@ -2461,7 +2467,45 @@ export default class ConsumApi {
       notes: data.notes || ''
     };
     
-    return this._authenticatedRequest('POST', apiUrl.patients, normalizedData);
+    console.log('=== CREATE PATIENT DEBUG ===');
+    console.log('URL:', apiUrl.patients);
+    console.log('Normalized data:', normalizedData);
+    
+    const result = await this._authenticatedRequest('POST', apiUrl.patients, normalizedData);
+    
+    console.log('=== CREATE PATIENT RESULT ===');
+    console.log('Result:', result);
+    console.log('Result success:', result.success);
+    console.log('Result data:', result.data);
+    console.log('Result data type:', typeof result.data);
+    console.log('Result data keys:', result.data && typeof result.data === 'object' ? Object.keys(result.data) : 'N/A');
+    
+    // L'API retourne { patient: {...}, message: "..." }
+    // Extraire le champ patient et le mapper
+    if (result.success && result.data) {
+      // Sauvegarder le message avant de modifier result.data
+      const apiMessage = result.message || (result.data.message || 'Patient créé avec succès');
+      
+      if (result.data.patient) {
+        // L'API retourne { patient: {...}, message: "..." }
+        console.log('Extracting patient from result.data.patient');
+        result.data = ConsumApi._mapPatientFields(result.data.patient);
+        result.message = apiMessage;
+      } else if (result.data.id || result.data.patientNumber) {
+        // Si c'est déjà un patient directement
+        console.log('Patient data is already in result.data');
+        result.data = ConsumApi._mapPatientFields(result.data);
+        result.message = apiMessage;
+      } else {
+        console.log('Warning: Unexpected response structure');
+        console.log('Result.data structure:', JSON.stringify(result.data, null, 2));
+      }
+    } else {
+      console.log('Error: result.success is false or result.data is missing');
+      console.log('Result:', JSON.stringify(result, null, 2));
+    }
+    
+    return result;
   }
 
   static async updatePatient(patientId, data) {
@@ -2476,7 +2520,7 @@ export default class ConsumApi {
     
     const normalizedData = {
       // Identité - REQUIS
-      patientNumber: data.patientNumber || data.patientId || patientId || '',
+      patientNumber: data.patientNumber || data.patientId || '',
       firstName: data.firstName || data.firstname || '',
       lastName: data.lastName || data.lastname || '',
       
@@ -2495,9 +2539,9 @@ export default class ConsumApi {
       country: data.country || data.pays || '',
       
       // Médical
-      bloodGroup: data.bloodGroup || data.blood_group || '',
-      height: data.height ? parseInt(data.height, 10) : null,
-      weight: data.weight ? parseFloat(data.weight) : null,
+      bloodGroup: data.bloodGroup && data.bloodGroup.trim() !== '' ? data.bloodGroup : null,
+      height: data.height && data.height.toString().trim() !== '' ? parseInt(data.height, 10) : null,
+      weight: data.weight && data.weight.toString().trim() !== '' ? parseFloat(data.weight) : null,
       
       // Profession
       occupation: data.occupation || data.profession || data.metier || '',
@@ -2511,7 +2555,9 @@ export default class ConsumApi {
       insuranceType: data.insuranceType || data.insurance?.type || 'NONE',
       insuranceCompany: data.insuranceCompany || data.insurance?.company || '',
       insuranceNumber: data.insuranceNumber || data.insurance?.number || '',
-      insuranceValidUntil: data.insuranceValidUntil || data.insurance?.validUntil || '',
+      insuranceValidUntil: (data.insuranceType === 'NONE' || !data.insuranceValidUntil || data.insuranceValidUntil.trim() === '') 
+        ? null 
+        : (data.insuranceValidUntil || data.insurance?.validUntil || null),
       
       // Statut
       status: data.status || 'ACTIVE',
@@ -2522,8 +2568,8 @@ export default class ConsumApi {
       notes: data.notes || ''
     };
     
-    // PUT requiert l'ID du patient - utiliser patientNumber si disponible
-    const updateUrl = apiUrl.updatePatient(data.patientNumber || patientId);
+    // PUT requiert l'ID du patient (UUID)
+    const updateUrl = apiUrl.updatePatient(patientId);
     
     return this._authenticatedRequest('PUT', updateUrl, normalizedData);
   }
@@ -2564,7 +2610,24 @@ export default class ConsumApi {
       isActive: data.isActive !== undefined ? data.isActive : true
     };
     
-    return this._authenticatedRequest('POST', apiUrl.antecedents, normalizedData);
+    const result = await this._authenticatedRequest('POST', apiUrl.antecedents, normalizedData);
+    
+    // L'API retourne { antecedent: {...}, message: "..." }
+    // Extraire le champ antecedent et le message
+    if (result.success && result.data) {
+      const apiMessage = result.message || (result.data.message || 'Antécédent créé avec succès');
+      
+      if (result.data.antecedent) {
+        // L'API retourne { antecedent: {...}, message: "..." }
+        result.data = result.data.antecedent;
+        result.message = apiMessage;
+      } else if (result.data.id || result.data.description) {
+        // Si c'est déjà un antécédent directement, message déjà défini
+        result.message = apiMessage;
+      }
+    }
+    
+    return result;
   }
 
   static async getAntecedents(filters = {}) {
@@ -2630,14 +2693,31 @@ export default class ConsumApi {
     const normalizedData = {
       patientId: data.patientId || data.patient_id || '',
       allergen: data.allergen || '',
-      type: data.type || 'Aliment', // Aliment, Médicament, Environnement, etc.
-      severity: data.severity || 'Modérée', // Légère, Modérée, Sévère
+      type: data.type || 'Médicament', // Aliment, Médicament, Environnement, etc.
+      severity: data.severity || 'Sévère', // Légère, Modérée, Sévère
       reaction: data.reaction || data.reactions || '',
       discoveredDate: data.discoveredDate || data.discovered_date || '',
       isActive: data.isActive !== undefined ? data.isActive : true
     };
     
-    return this._authenticatedRequest('POST', apiUrl.allergies, normalizedData);
+    const result = await this._authenticatedRequest('POST', apiUrl.allergies, normalizedData);
+    
+    // L'API retourne { allergy: {...}, message: "..." }
+    // Extraire le champ allergy et le message
+    if (result.success && result.data) {
+      const apiMessage = result.message || (result.data.message || 'Allergie créée avec succès');
+      
+      if (result.data.allergy) {
+        // L'API retourne { allergy: {...}, message: "..." }
+        result.data = result.data.allergy;
+        result.message = apiMessage;
+      } else if (result.data.id || result.data.allergen) {
+        // Si c'est déjà une allergie directement, message déjà défini
+        result.message = apiMessage;
+      }
+    }
+    
+    return result;
   }
 
   static async getAllergies(filters = {}) {
@@ -2660,8 +2740,8 @@ export default class ConsumApi {
   static async updateAllergy(allergyId, data) {
     const normalizedData = {
       allergen: data.allergen || '',
-      type: data.type || 'Aliment',
-      severity: data.severity || 'Modérée',
+      type: data.type || 'Médicament',
+      severity: data.severity || 'Sévère',
       reaction: data.reaction || data.reactions || '',
       discoveredDate: data.discoveredDate || data.discovered_date || '',
       isActive: data.isActive !== undefined ? data.isActive : true
@@ -2750,8 +2830,8 @@ export default class ConsumApi {
     const start = (page - 1) * limit;
     const end = start + limit;
 
-    return {
-      success: true,
+        return {
+          success: true,
       data: {
         appointments: appointments.slice(start, end),
         total: appointments.length,
@@ -2759,13 +2839,13 @@ export default class ConsumApi {
         limit,
       },
       message: 'Rendez-vous récupérés avec succès',
-      errors: []
-    };
-  }
+          errors: []
+        };
+      }
 
   static async updateAppointmentStatus(appointmentId, status) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    return {
+      return {
       success: true,
       data: { id: appointmentId, status },
       message: 'Statut du rendez-vous mis à jour avec succès',
@@ -3570,6 +3650,108 @@ export default class ConsumApi {
       createdAt: new Date(Date.now() - i * 30 * 24 * 60 * 60 * 1000).toISOString(),
     }));
   }
+
+  // ========== MAPPING DES CHAMPS ==========
+
+  // Mapper les champs patient API → Frontend
+  static _mapPatientFields(patient) {
+    if (!patient) return patient;
+    
+    // Normaliser le genre (MALE/FEMALE → M/F ou vice versa)
+    const normalizeGender = (gender) => {
+      if (!gender) return '';
+      if (gender === 'MALE' || gender === 'M') return 'M';
+      if (gender === 'FEMALE' || gender === 'F') return 'F';
+      return gender;
+    };
+    
+    // Reconstruire l'objet contact d'urgence depuis les champs plats
+    const emergencyContact = patient.emergencyContact || {
+      name: patient.emergencyContactName || '',
+      phone: patient.emergencyContactPhone || '',
+      relationship: patient.emergencyContactRelationship || ''
+    };
+    
+    // Reconstruire l'objet assurance
+    const insurance = patient.insurance || {
+      type: patient.insuranceType || 'NONE',
+      company: patient.insuranceCompany || '',
+      number: patient.insuranceNumber || '',
+      validUntil: patient.insuranceValidUntil || ''
+    };
+    
+    return {
+      // Identifiants
+      id: patient.id || patient._id || patient.uuid || patient.patientNumber,
+      patientId: patient.patientNumber || patient.patientId || patient.id,
+      patientNumber: patient.patientNumber || '',
+      
+      // Identité
+      firstName: patient.firstName || patient.first_name || patient.prenom || '',
+      firstname: patient.firstName || patient.first_name || patient.prenom || '',
+      lastName: patient.lastName || patient.last_name || patient.nom || '',
+      lastname: patient.lastName || patient.last_name || patient.nom || '',
+      
+      // Informations personnelles
+      dateOfBirth: patient.dateOfBirth || patient.date_of_birth || patient.dateNaissance || '',
+      placeOfBirth: patient.placeOfBirth || patient.place_of_birth || patient.lieuNaissance || '',
+      nationality: patient.nationality || patient.nationalité || '',
+      gender: (() => {
+        const rawGender = patient.gender || patient.sexe || '';
+        const normalized = normalizeGender(rawGender);
+        if (rawGender && !normalized) {
+          console.log('=== GENDER MAPPING DEBUG ===');
+          console.log('Raw gender:', rawGender);
+          console.log('Normalized gender:', normalized);
+          console.log('Patient ID:', patient.id || patient.patientNumber);
+        }
+        return normalized;
+      })(),
+      maritalStatus: patient.maritalStatus || patient.marital_status || patient.etatCivil || '',
+      
+      // Contact
+      phone: patient.phone || patient.telephone || '',
+      email: patient.email || '',
+      address: patient.address || patient.adresse || '',
+      city: patient.city || patient.ville || '',
+      country: patient.country || patient.pays || '',
+      
+      // Informations médicales
+      bloodGroup: patient.bloodGroup || patient.blood_group || patient.groupeSanguin || '',
+      height: patient.height || patient.taille || null,
+      weight: patient.weight || patient.poids || null,
+      
+      // Profession
+      profession: patient.occupation || patient.profession || patient.metier || '',
+      occupation: patient.occupation || patient.profession || '',
+      
+      // Contact d'urgence
+      emergencyContact,
+      emergencyContactName: patient.emergencyContactName || emergencyContact.name || '',
+      emergencyContactPhone: patient.emergencyContactPhone || emergencyContact.phone || '',
+      emergencyContactRelationship: patient.emergencyContactRelationship || emergencyContact.relationship || '',
+      
+      // Assurance
+      insurance,
+      insuranceType: patient.insuranceType || insurance.type || 'NONE',
+      insuranceCompany: patient.insuranceCompany || insurance.company || '',
+      insuranceNumber: patient.insuranceNumber || insurance.number || '',
+      insuranceValidUntil: patient.insuranceValidUntil || insurance.validUntil || '',
+      
+      // Statut et autres
+      status: patient.status || 'ACTIVE',
+      isActive: patient.isActive !== undefined ? patient.isActive : true,
+      photo: patient.photo || '',
+      notes: patient.notes || patient.remarques || '',
+      
+      // Dates
+      createdAt: patient.createdAt || patient.created_at || new Date().toISOString(),
+      updatedAt: patient.updatedAt || patient.updated_at || new Date().toISOString(),
+      
+      // Garder les champs supplémentaires
+      ...patient
+    };
+  }
 }
 
 // Fonction pour normaliser le rôle depuis l'API vers le format interne
@@ -3622,99 +3804,6 @@ const updateClientInfo = (userData, accessToken) => {
 
   console.log('Admin data saved:', adminData);
 };
-
-// ========== MAPPING DES CHAMPS ==========
-
-// Mapper les champs patient API → Frontend
-ConsumApi.prototype._mapPatientFields = function(patient) {
-  if (!patient) return patient;
-  
-  // Normaliser le genre (MALE/FEMALE → M/F ou vice versa)
-  const normalizeGender = (gender) => {
-    if (!gender) return '';
-    if (gender === 'MALE' || gender === 'M') return 'M';
-    if (gender === 'FEMALE' || gender === 'F') return 'F';
-    return gender;
-  };
-  
-  // Reconstruire l'objet contact d'urgence depuis les champs plats
-  const emergencyContact = patient.emergencyContact || {
-    name: patient.emergencyContactName || '',
-    phone: patient.emergencyContactPhone || '',
-    relationship: patient.emergencyContactRelationship || ''
-  };
-  
-  // Reconstruire l'objet assurance
-  const insurance = patient.insurance || {
-    type: patient.insuranceType || 'NONE',
-    company: patient.insuranceCompany || '',
-    number: patient.insuranceNumber || '',
-    validUntil: patient.insuranceValidUntil || ''
-  };
-  
-  return {
-    // Identifiants
-    id: patient.id || patient._id || patient.uuid || patient.patientNumber,
-    patientId: patient.patientNumber || patient.patientId || patient.id,
-    patientNumber: patient.patientNumber || '',
-    
-    // Identité
-    firstName: patient.firstName || patient.first_name || patient.prenom || '',
-    firstname: patient.firstName || patient.first_name || patient.prenom || '',
-    lastName: patient.lastName || patient.last_name || patient.nom || '',
-    lastname: patient.lastName || patient.last_name || patient.nom || '',
-    
-    // Informations personnelles
-    dateOfBirth: patient.dateOfBirth || patient.date_of_birth || patient.dateNaissance || '',
-    placeOfBirth: patient.placeOfBirth || patient.place_of_birth || patient.lieuNaissance || '',
-    nationality: patient.nationality || patient.nationalité || '',
-    gender: normalizeGender(patient.gender || patient.sexe || ''),
-    maritalStatus: patient.maritalStatus || patient.marital_status || patient.etatCivil || '',
-    
-    // Contact
-    phone: patient.phone || patient.telephone || '',
-    email: patient.email || '',
-    address: patient.address || patient.adresse || '',
-    city: patient.city || patient.ville || '',
-    country: patient.country || patient.pays || '',
-    
-    // Informations médicales
-    bloodGroup: patient.bloodGroup || patient.blood_group || patient.groupeSanguin || '',
-    height: patient.height || patient.taille || null,
-    weight: patient.weight || patient.poids || null,
-    
-    // Profession
-    profession: patient.occupation || patient.profession || patient.metier || '',
-    occupation: patient.occupation || patient.profession || '',
-    
-    // Contact d'urgence
-    emergencyContact,
-    emergencyContactName: patient.emergencyContactName || emergencyContact.name || '',
-    emergencyContactPhone: patient.emergencyContactPhone || emergencyContact.phone || '',
-    emergencyContactRelationship: patient.emergencyContactRelationship || emergencyContact.relationship || '',
-    
-    // Assurance
-    insurance,
-    insuranceType: patient.insuranceType || insurance.type || 'NONE',
-    insuranceCompany: patient.insuranceCompany || insurance.company || '',
-    insuranceNumber: patient.insuranceNumber || insurance.number || '',
-    insuranceValidUntil: patient.insuranceValidUntil || insurance.validUntil || '',
-    
-    // Statut et autres
-    status: patient.status || 'ACTIVE',
-    isActive: patient.isActive !== undefined ? patient.isActive : true,
-    photo: patient.photo || '',
-    notes: patient.notes || patient.remarques || '',
-    
-    // Dates
-    createdAt: patient.createdAt || patient.created_at || new Date().toISOString(),
-    updatedAt: patient.updatedAt || patient.updated_at || new Date().toISOString(),
-    
-    // Garder les champs supplémentaires
-    ...patient
-  };
-};
-
 
 // Convertir données Frontend (format affichage) → API (format stockage)
 ConsumApi.prototype._normalizePatientForApi = function(patientData) {

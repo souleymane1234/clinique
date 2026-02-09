@@ -84,10 +84,12 @@ class ApiClient {
           if (!('success' in response.data) && !('result' in response.data) && !('etat' in response.data)) {
             // Si c'est un format paginé ou un objet simple sans wrapper
             if (hasDataArray || hasPaginationFields || !('data' in response.data)) {
+              // Extraire le message si présent dans response.data
+              const extractedMessage = response.data.message || 'Opération réussie';
               return {
                 success: true,
                 data: response.data,
-                message: 'Opération réussie',
+                message: extractedMessage,
                 errors: [],
               };
             }
@@ -161,6 +163,21 @@ class ApiClient {
         console.error('API Error details:', error.response.data);
         const { message, error: errorMsg, errors } = error.response.data;
         
+        // Normaliser le message : peut être une chaîne, un tableau, ou undefined
+        const normalizeMessage = (msg) => {
+          if (!msg) return '';
+          if (Array.isArray(msg)) {
+            return msg.join(', ');
+          }
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          return String(msg);
+        };
+        
+        const normalizedMessage = normalizeMessage(message);
+        const normalizedErrorMsg = normalizeMessage(errorMsg);
+        
         // Ne rediriger que si c'est vraiment une erreur 401
         if (error.response?.status === 401) {
           console.error('401 Unauthorized - Redirecting to login');
@@ -174,8 +191,8 @@ class ApiClient {
         }
         
         if (
-          message?.toLowerCase().includes('token') ||
-          message?.toLowerCase().includes('unauthorized')
+          normalizedMessage.toLowerCase().includes('token') ||
+          normalizedMessage.toLowerCase().includes('unauthorized')
         ) {
           console.error('Token/Unauthorized error detected - Redirecting to login');
           AdminStorage.clearStokage();
@@ -186,10 +203,21 @@ class ApiClient {
             errors: [],
           };
         }
+        
+        // Si errors est un tableau, l'utiliser directement, sinon créer un tableau avec le message
+        let errorList = [];
+        if (Array.isArray(errors)) {
+          errorList = errors;
+        } else if (normalizedMessage) {
+          errorList = [normalizedMessage];
+        } else if (normalizedErrorMsg) {
+          errorList = [normalizedErrorMsg];
+        }
+        
         return {
           success: false,
-          message: message || errorMsg || "Une erreur s'est produite",
-          errors: errors || (errorMsg ? [errorMsg] : []),
+          message: normalizedMessage || normalizedErrorMsg || "Une erreur s'est produite",
+          errors: errorList,
         };
       }
       return {

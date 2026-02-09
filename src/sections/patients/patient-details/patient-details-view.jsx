@@ -32,6 +32,7 @@ import Iconify from 'src/components/iconify';
 // Import des composants d'onglets
 import PatientHistoryView from '../patient-history/patient-history-view';
 import PatientAntecedentsView from '../patient-antecedents/patient-antecedents-view';
+import PatientAllergiesView from '../patient-allergies/patient-allergies-view';
 import PatientDocumentsView from '../patient-documents/patient-documents-view';
 import PatientConsultationsView from '../patient-consultations/patient-consultations-view';
 
@@ -224,8 +225,14 @@ export default function PatientDetailsView() {
                 iconPosition="start"
               />
               <Tab
-                label="Antécédents & Allergies"
+                label="Antécédents"
                 value="antecedents"
+                icon={<Iconify icon="solar:heart-pulse-bold" />}
+                iconPosition="start"
+              />
+              <Tab
+                label="Allergies"
+                value="allergies"
                 icon={<Iconify icon="solar:heart-pulse-bold" />}
                 iconPosition="start"
               />
@@ -328,6 +335,12 @@ export default function PatientDetailsView() {
           {currentTab === 'antecedents' && (
             <Box sx={{ position: 'relative' }}>
               <PatientAntecedentsView patientId={id} />
+            </Box>
+          )}
+
+          {currentTab === 'allergies' && (
+            <Box sx={{ position: 'relative' }}>
+              <PatientAllergiesView patientId={id} />
             </Box>
           )}
 
