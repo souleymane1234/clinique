@@ -217,9 +217,11 @@ export default function PatientHistoryView({ patientId }) {
 
                 <LoadingButton
                   variant="outlined"
+                  size="small"
                   onClick={loadHistory}
                   loading={loading}
                   startIcon={<Iconify icon="eva:search-fill" />}
+                  sx={{ minWidth: 'auto', whiteSpace: 'nowrap' }}
                 >
                   Rechercher
                 </LoadingButton>

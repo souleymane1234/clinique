@@ -296,10 +296,11 @@ export default function UsersView() {
                 </FormControl>
                 <Stack direction="row" spacing={2} sx={{ flex: 1, justifyContent: { xs: 'stretch', sm: 'flex-end' } }}>
                   <Button 
-                    variant="outlined" 
+                    variant="outlined"
+                    size="small"
                     onClick={handleSearch} 
                     startIcon={<Iconify icon="eva:search-fill" />}
-                    sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+                    sx={{ minWidth: { xs: '100%', sm: 'auto' }, whiteSpace: 'nowrap' }}
                   >
                     Rechercher
                   </Button>

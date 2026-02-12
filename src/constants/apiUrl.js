@@ -1,11 +1,11 @@
-const base_url = import.meta.env.VITE_BASE_URL || 'http://localhost:3000';
+const base_url = import.meta.env.VITE_BASE_URL || 'http://centremedical.preventic-afric.com:3000/api';
 // const base_url = 'https://api.annour-travel.com';
 // const base_url = 'http://localhost:3010';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
   // Authentication
-  authentication: `${base_url}/api/auth/login`,
+  authentication: `${base_url}/auth/login`,
   register: `${base_url}/auth/register`,
   getCurrentUser: `${base_url}/auth`,
   resetPassword: `${base_url}/reset-passord`,
@@ -75,74 +75,74 @@ export const apiUrl = {
   prendreRendezVous: (id) => `${base_url}/rendez-vous/${id}/prendre`,
   
   // Patients
-  patients: `${base_url}/api/patient`,
-  patientById: (id) => `${base_url}/api/patient/${id}`,
-  updatePatient: (id) => `${base_url}/api/patient/${id}`,
-  deletePatient: (id) => `${base_url}/api/patient/${id}`,
+  patients: `${base_url}/patient`,
+  patientById: (id) => `${base_url}/patient/${id}`,
+  updatePatient: (id) => `${base_url}/patient/${id}`,
+  deletePatient: (id) => `${base_url}/patient/${id}`,
   // Patient helpers
-  patientsPaginated: `${base_url}/api/patient/paginated`,
-  patientByNumber: (numero) => `${base_url}/api/patient/${numero}`,
+  patientsPaginated: `${base_url}/patient/paginated`,
+  patientByNumber: (numero) => `${base_url}/patient/${numero}`,
   
   // Antécédents (new endpoints)
-  antecedents: `${base_url}/api/antecedent`,
-  antecedentById: (id) => `${base_url}/api/antecedent/${id}`,
-  updateAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
-  deleteAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
-  antecedentsPaginated: `${base_url}/api/antecedent/paginated`,
-  patientAntecedents: (patientId) => `${base_url}/api/antecedent/patient/${patientId}`,
+  antecedents: `${base_url}/antecedent`,
+  antecedentById: (id) => `${base_url}/antecedent/${id}`,
+  updateAntecedent: (id) => `${base_url}/antecedent/${id}`,
+  deleteAntecedent: (id) => `${base_url}/antecedent/${id}`,
+  antecedentsPaginated: `${base_url}/antecedent/paginated`,
+  patientAntecedents: (patientId) => `${base_url}/antecedent/patient/${patientId}`,
   
   // Deprecated (kept for backward compatibility)
-  patientAntecedents_old: `${base_url}/api/antecedent`,
-  addPatientAntecedent: `${base_url}/api/antecedent`,
-  deletePatientAntecedent: (id) => `${base_url}/api/antecedent/${id}`,
+  patientAntecedents_old: `${base_url}/antecedent`,
+  addPatientAntecedent: `${base_url}/antecedent`,
+  deletePatientAntecedent: (id) => `${base_url}/antecedent/${id}`,
   
   // Allergies (new endpoints)
-  allergies: `${base_url}/api/allergy`,
-  allergyById: (id) => `${base_url}/api/allergy/${id}`,
-  updateAllergy: (id) => `${base_url}/api/allergy/${id}`,
-  deleteAllergy: (id) => `${base_url}/api/allergy/${id}`,
-  allergiesPaginated: `${base_url}/api/allergy/paginated`,
-  patientAllergies: (patientId) => `${base_url}/api/allergy/patient/${patientId}`,
+  allergies: `${base_url}/allergy`,
+  allergyById: (id) => `${base_url}/allergy/${id}`,
+  updateAllergy: (id) => `${base_url}/allergy/${id}`,
+  deleteAllergy: (id) => `${base_url}/allergy/${id}`,
+  allergiesPaginated: `${base_url}/allergy/paginated`,
+  patientAllergies: (patientId) => `${base_url}/allergy/patient/${patientId}`,
   
   // Deprecated (kept for backward compatibility)
-  patientAllergies_old: `${base_url}/api/allergie`,
-  addPatientAllergy: `${base_url}/api/allergie`,
-  deletePatientAllergy: (id) => `${base_url}/api/allergie/${id}`,
+  patientAllergies_old: `${base_url}/allergie`,
+  addPatientAllergy: `${base_url}/allergie`,
+  deletePatientAllergy: (id) => `${base_url}/allergie/${id}`,
   
   // Documents
-  patientDocuments: `${base_url}/api/documents`,
-  uploadPatientDocument: `${base_url}/api/documents/upload`,
-  deletePatientDocument: (id) => `${base_url}/api/documents/${id}`,
+  patientDocuments: `${base_url}/documents`,
+  uploadPatientDocument: `${base_url}/documents/upload`,
+  deletePatientDocument: (id) => `${base_url}/documents/${id}`,
   
   // Consultations
-  patientConsultations: `${base_url}/api/consultation`,
+  patientConsultations: `${base_url}/consultation`,
   
   // Historique Médical
-  patientMedicalHistory: `${base_url}/api/medical-history`,
+  patientMedicalHistory: `${base_url}/medical-history`,
   
   // File d'attente
-  patientQueue: `${base_url}/api/queue`,
-  updatePatientTriage: (id) => `${base_url}/api/queue/${id}`,
-  removeFromQueue: (id) => `${base_url}/api/queue/${id}`,
+  patientQueue: `${base_url}/queue`,
+  updatePatientTriage: (id) => `${base_url}/queue/${id}`,
+  removeFromQueue: (id) => `${base_url}/queue/${id}`,
   
   // Site Administration - Slides
-  slides: `${base_url}/api/slides`,
-  siteAdminSlides: `${base_url}/api/site-admin/slides`,
-  siteAdminSlideById: (id) => `${base_url}/api/site-admin/slides/${id}`,
-  siteAdminSlideUploadImage: `${base_url}/api/site-admin/slides/upload-image`,
-  siteAdminSlideToggleActive: (id) => `${base_url}/api/site-admin/slides/${id}/toggle-active`,
+  slides: `${base_url}/slides`,
+  siteAdminSlides: `${base_url}/site-admin/slides`,
+  siteAdminSlideById: (id) => `${base_url}/site-admin/slides/${id}`,
+  siteAdminSlideUploadImage: `${base_url}/site-admin/slides/upload-image`,
+  siteAdminSlideToggleActive: (id) => `${base_url}/site-admin/slides/${id}/toggle-active`,
   
   // Site Administration - Services
-  siteAdminServices: `${base_url}/api/site-admin/services`,
-  siteAdminServiceById: (id) => `${base_url}/api/site-admin/services/${id}`,
-  siteAdminServiceUploadImage: `${base_url}/api/site-admin/services/upload-image`,
-  siteAdminServiceToggleActive: (id) => `${base_url}/api/site-admin/services/${id}/toggle-active`,
+  siteAdminServices: `${base_url}/site-admin/services`,
+  siteAdminServiceById: (id) => `${base_url}/site-admin/services/${id}`,
+  siteAdminServiceUploadImage: `${base_url}/site-admin/services/upload-image`,
+  siteAdminServiceToggleActive: (id) => `${base_url}/site-admin/services/${id}/toggle-active`,
   
   // Site Administration - Partner Logos
-  siteAdminPartnerLogos: `${base_url}/api/site-admin/partner-logos`,
-  siteAdminPartnerLogoById: (id) => `${base_url}/api/site-admin/partner-logos/${id}`,
-  siteAdminPartnerLogoUpload: `${base_url}/api/site-admin/partner-logos/upload-logo`,
-  siteAdminPartnerLogoToggleActive: (id) => `${base_url}/api/site-admin/partner-logos/${id}/toggle-active`,
+  siteAdminPartnerLogos: `${base_url}/site-admin/partner-logos`,
+  siteAdminPartnerLogoById: (id) => `${base_url}/site-admin/partner-logos/${id}`,
+  siteAdminPartnerLogoUpload: `${base_url}/site-admin/partner-logos/upload-logo`,
+  siteAdminPartnerLogoToggleActive: (id) => `${base_url}/site-admin/partner-logos/${id}/toggle-active`,
   
   // Roles & Permissions
   rolesPermissionsMatrix: `${base_url}/roles-permissions/matrix`,
@@ -154,29 +154,29 @@ export const apiUrl = {
   removeRolePermission: (role, permission) => `${base_url}/roles-permissions/roles/${role}/permissions/${permission}`,
   
   // Modules de permissions
-  permissionModules: `${base_url}/api/module-permission`,
-  permissionModulesPaginated: `${base_url}/api/module-permission/paginated`,
-  permissionModuleById: (id) => `${base_url}/api/module-permission/${id}`,
+  permissionModules: `${base_url}/module-permission`,
+  permissionModulesPaginated: `${base_url}/module-permission/paginated`,
+  permissionModuleById: (id) => `${base_url}/module-permission/${id}`,
   
   // Permissions
-  permissions: `${base_url}/api/permission`,
-  permissionsPaginated: `${base_url}/api/permission/paginated`,
-  permissionsByModule: (moduleId) => `${base_url}/api/module-permission/${moduleId}/permissions`,
-  permissionsByModulePaginated: (moduleId) => `${base_url}/api/permission/module/${moduleId}/paginated`,
-  permissionById: (id) => `${base_url}/api/permission/${id}`,
+  permissions: `${base_url}/permission`,
+  permissionsPaginated: `${base_url}/permission/paginated`,
+  permissionsByModule: (moduleId) => `${base_url}/module-permission/${moduleId}/permissions`,
+  permissionsByModulePaginated: (moduleId) => `${base_url}/permission/module/${moduleId}/paginated`,
+  permissionById: (id) => `${base_url}/permission/${id}`,
   
   // Rôles
-  role: `${base_url}/api/role`,
-  roleById: (id) => `${base_url}/api/role/${id}`,
-  rolePaginated: `${base_url}/api/role/paginated`,
-  roleGlobalPermissions: (uuid) => `${base_url}/api/role/${uuid}/global-permissions`,
-  roleTogglePermissionStatus: (uuid) => `${base_url}/api/role/permissions/${uuid}/toggle`,
-  roleGeneratePermissions: (uuid) => `${base_url}/api/role/${uuid}/generate-permissions`,
+  role: `${base_url}/role`,
+  roleById: (id) => `${base_url}/role/${id}`,
+  rolePaginated: `${base_url}/role/paginated`,
+  roleGlobalPermissions: (uuid) => `${base_url}/role/${uuid}/global-permissions`,
+  roleTogglePermissionStatus: (uuid) => `${base_url}/role/permissions/${uuid}/toggle`,
+  roleGeneratePermissions: (uuid) => `${base_url}/role/${uuid}/generate-permissions`,
   
   // Assignation rôles aux modules
-  assignRoleToModule: (moduleId, roleId) => `${base_url}/api/module-permission/${moduleId}/roles/${roleId}`,
-  removeRoleFromModule: (moduleId, roleId) => `${base_url}/api/module-permission/${moduleId}/roles/${roleId}`,
-  moduleRoles: (moduleId) => `${base_url}/api/module-permission/${moduleId}/roles`,
+  assignRoleToModule: (moduleId, roleId) => `${base_url}/module-permission/${moduleId}/roles/${roleId}`,
+  removeRoleFromModule: (moduleId, roleId) => `${base_url}/module-permission/${moduleId}/roles/${roleId}`,
+  moduleRoles: (moduleId) => `${base_url}/module-permission/${moduleId}/roles`,
 };
 
 export const apiUrlAsset = {

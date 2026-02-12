@@ -285,9 +285,11 @@ export default function ActivityLogView() {
                 </Button>
                 <LoadingButton
                   variant="contained"
+                  size="small"
                   onClick={loadActivities}
                   loading={loading}
                   startIcon={<Iconify icon="eva:search-fill" />}
+                  sx={{ minWidth: 'auto', whiteSpace: 'nowrap' }}
                 >
                   Rechercher
                 </LoadingButton>

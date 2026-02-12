@@ -111,34 +111,65 @@ export default function PatientDossiersView() {
       if (genderFilter) filters.gender = genderFilter;
       if (ageFilter) filters.age = ageFilter;
 
+      console.log('=== LOAD PATIENTS START ===');
+      console.log('Filters:', filters);
+      
       const result = await ConsumApi.getPatients(filters);
+      
+      console.log('=== LOAD PATIENTS RESULT ===');
+      console.log('Result:', result);
+      console.log('Result.success:', result?.success);
+      console.log('Result.data:', result?.data);
+      console.log('Result.data type:', typeof result?.data);
+      console.log('Result.data is array:', Array.isArray(result?.data));
+      
       const processed = showApiResponse(result, {
         successTitle: 'Patients chargés',
         errorTitle: 'Erreur de chargement',
-        showNotification: false,
+        showNotification: true, // Afficher les notifications pour voir les erreurs
       });
 
+      console.log('=== PROCESSED RESULT ===');
+      console.log('Processed:', processed);
+      console.log('Processed.success:', processed?.success);
+      console.log('Processed.data:', processed?.data);
+
       if (processed.success) {
-        const patientsList = Array.isArray(processed.data?.patients) ? processed.data.patients : processed.data || [];
-        console.log('=== LOAD PATIENTS DEBUG ===');
+        let patientsList = [];
+        if (Array.isArray(processed.data?.patients)) {
+          patientsList = processed.data.patients;
+        } else if (Array.isArray(processed.data)) {
+          patientsList = processed.data;
+        }
+        
+        console.log('=== PATIENTS LIST ===');
         console.log('Patients loaded:', patientsList.length);
         if (patientsList.length > 0) {
           console.log('First patient sample:', patientsList[0]);
           console.log('First patient gender:', patientsList[0].gender);
           console.log('First patient gender type:', typeof patientsList[0].gender);
+        } else {
+          console.warn('No patients found in response');
         }
         setPatients(patientsList);
       } else {
+        console.error('Failed to load patients:', processed.message || 'Unknown error');
+        if (processed.message) {
+          showError('Erreur', processed.message);
+        }
         setPatients([]);
       }
     } catch (error) {
-      console.error('Error loading patients:', error);
-      showError('Erreur', 'Impossible de charger les patients');
+      console.error('=== ERROR LOADING PATIENTS ===');
+      console.error('Error:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      showError('Erreur', `Impossible de charger les patients: ${error?.message || 'Erreur inconnue'}`);
       setPatients([]);
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, genderFilter, ageFilter]);
+  }, [page, rowsPerPage, search, genderFilter, ageFilter, showApiResponse, showError]);
 
   useEffect(() => {
     loadPatients();
@@ -402,9 +433,11 @@ export default function PatientDossiersView() {
 
                 <LoadingButton
                   variant="outlined"
+                  size="small"
                   onClick={loadPatients}
                   loading={loading}
                   startIcon={<Iconify icon="eva:search-fill" />}
+                  sx={{ minWidth: 'auto', whiteSpace: 'nowrap' }}
                 >
                   Rechercher
                 </LoadingButton>

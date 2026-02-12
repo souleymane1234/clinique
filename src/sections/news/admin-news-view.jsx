@@ -381,8 +381,10 @@ export default function AdminNewsView() {
 
             <Button
               variant="contained"
+              size="small"
               onClick={handleSearch}
               startIcon={<Iconify icon="eva:search-fill" />}
+              sx={{ minWidth: 'auto', whiteSpace: 'nowrap' }}
             >
               Rechercher
             </Button>

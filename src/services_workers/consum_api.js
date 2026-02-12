@@ -2335,6 +2335,9 @@ export default class ConsumApi {
   static async getPatients(filters = {}) {
     let url = apiUrl.patients;
     
+    console.log('=== GET PATIENTS DEBUG ===');
+    console.log('Base URL from apiUrl.patients:', url);
+    
     const params = new URLSearchParams();
     if (filters.search) params.append('search', filters.search);
     if (filters.gender) params.append('gender', filters.gender);
@@ -2345,7 +2348,15 @@ export default class ConsumApi {
       url += `?${params.toString()}`;
     }
     
+    console.log('Final URL:', url);
+    console.log('Filters:', filters);
+    
     const result = await this._authenticatedRequest('GET', url);
+    
+    console.log('=== GET PATIENTS RESULT ===');
+    console.log('Result:', result);
+    console.log('Result.success:', result?.success);
+    console.log('Result.data:', result?.data);
     
     // Mapper les champs si différents
     if (result.success && result.data) {
@@ -2355,6 +2366,8 @@ export default class ConsumApi {
         result.data.patients = result.data.patients.map(p => ConsumApi._mapPatientFields(p));
       }
     }
+    
+    console.log('Result after mapping:', result);
     
     return result;
   }

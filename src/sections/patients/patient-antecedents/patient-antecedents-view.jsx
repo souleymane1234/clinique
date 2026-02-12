@@ -325,9 +325,11 @@ function PatientAntecedentsView({ patientId }) {
 
                 <LoadingButton
                   variant="outlined"
+                  size="small"
                   onClick={loadItems}
                   loading={loading}
                   startIcon={<Iconify icon="eva:search-fill" />}
+                  sx={{ minWidth: 'auto', whiteSpace: 'nowrap' }}
                 >
                   Rechercher
                 </LoadingButton>
