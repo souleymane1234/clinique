@@ -10,13 +10,12 @@ import {
   Grid,
   Tabs,
   Stack,
+  alpha,
   Avatar,
   Divider,
   Container,
   Typography,
   IconButton,
-  alpha,
-  Paper,
 } from '@mui/material';
 
 import { useRouter } from 'src/routes/hooks';
@@ -31,9 +30,9 @@ import Iconify from 'src/components/iconify';
 
 // Import des composants d'onglets
 import PatientHistoryView from '../patient-history/patient-history-view';
-import PatientAntecedentsView from '../patient-antecedents/patient-antecedents-view';
 import PatientAllergiesView from '../patient-allergies/patient-allergies-view';
 import PatientDocumentsView from '../patient-documents/patient-documents-view';
+import PatientAntecedentsView from '../patient-antecedents/patient-antecedents-view';
 import PatientConsultationsView from '../patient-consultations/patient-consultations-view';
 
 // ----------------------------------------------------------------------

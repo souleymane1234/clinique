@@ -3,9 +3,9 @@ import React from 'react';
 import { pdf } from '@react-pdf/renderer';
 
 import { apiUrl } from 'src/constants/apiUrl';
+import ApiClient from 'src/services_workers/apiClient';
 import { useAdminStore } from 'src/store/useAdminStore';
 import { AdminStorage } from 'src/storages/admins_storage';
-import ApiClient from 'src/services_workers/apiClient';
 
 import { FacturePdfDocument } from 'src/components/generator-facture';
 import { BonDeSortiePdfDocument } from 'src/components/generator-bon-de-sortie';
@@ -3819,8 +3819,8 @@ const updateClientInfo = (userData, accessToken) => {
 };
 
 // Convertir données Frontend (format affichage) → API (format stockage)
-ConsumApi.prototype._normalizePatientForApi = function(patientData) {
-  const normalizeGender = (gender) => {
+ConsumApi.prototype._normalizePatientForApi = function _normalizePatientForApi(patientData) {
+  const normalizeGender = function normalizeGender(gender) {
     if (!gender) return 'MALE';
     if (gender === 'M') return 'MALE';
     if (gender === 'F') return 'FEMALE';
@@ -3860,7 +3860,7 @@ ConsumApi.prototype._normalizePatientForApi = function(patientData) {
 };
 
 // Mapper les champs antécédent API → Frontend
-ConsumApi.prototype._mapAntecedentFields = function(antecedent) {
+ConsumApi.prototype._mapAntecedentFields = function _mapAntecedentFields(antecedent) {
   if (!antecedent) return antecedent;
   
   return {

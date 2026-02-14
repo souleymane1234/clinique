@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -12,6 +12,7 @@ import {
   Button,
   Dialog,
   Select,
+  Avatar,
   MenuItem,
   TableRow,
   TextField,
@@ -27,23 +28,24 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
-  Avatar,
+  TablePagination,
 } from '@mui/material';
 
 import { useRouter } from 'src/routes/hooks';
 
 import { useNotification } from 'src/hooks/useNotification';
 
+import { fDate } from 'src/utils/format-time';
+
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
+// eslint-disable-next-line no-unused-vars
 const GENDER_COLORS = {
   M: 'info',
   F: 'error',
@@ -51,7 +53,7 @@ const GENDER_COLORS = {
 
 export default function PatientDossiersView() {
   const router = useRouter();
-  const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+  const { contextHolder, showApiResponse, showError } = useNotification();
 
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);

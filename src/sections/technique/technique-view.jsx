@@ -6,10 +6,10 @@ import { usePathname } from 'src/routes/hooks';
 
 // Import des vues
 import ApiView from './api/api-view';
-import ApplicationsView from './applications/applications-view';
-import IntegrationsView from './integrations/integrations-view';
 import MultilingueView from './multilingue/multilingue-view';
 import SauvegardesView from './sauvegardes/sauvegardes-view';
+import ApplicationsView from './applications/applications-view';
+import IntegrationsView from './integrations/integrations-view';
 
 // ----------------------------------------------------------------------
 

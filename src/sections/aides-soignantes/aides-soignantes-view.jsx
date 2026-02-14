@@ -4,11 +4,11 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import AideSoignanteNotesView from './aide-soignante-notes/aide-soignante-notes-view';
 // Import des vues
 import AideSoignanteTachesView from './aide-soignante-taches/aide-soignante-taches-view';
 import AideSoignanteSoinsBaseView from './aide-soignante-soins-base/aide-soignante-soins-base-view';
 import AideSoignanteAssistanceView from './aide-soignante-assistance/aide-soignante-assistance-view';
-import AideSoignanteNotesView from './aide-soignante-notes/aide-soignante-notes-view';
 import AideSoignanteHistoriqueView from './aide-soignante-historique/aide-soignante-historique-view';
 
 // ----------------------------------------------------------------------

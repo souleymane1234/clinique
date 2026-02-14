@@ -6,12 +6,12 @@ import { usePathname } from 'src/routes/hooks';
 
 // Import des vues
 import UsersView from '../users/users-view';
-import RolesPermissionsView from '../roles-permissions/roles-permissions-view';
-import ConfigurationView from '../configuration/configuration-view';
 import ActivityLogView from '../activity-log/activity-log-view';
-import BackupRestoreView from '../backup-restore/backup-restore-view';
 import MultiClinicsView from '../multi-clinics/multi-clinics-view';
 import ServicesListView from '../../site-admin/services-list-view';
+import ConfigurationView from '../configuration/configuration-view';
+import BackupRestoreView from '../backup-restore/backup-restore-view';
+import RolesPermissionsView from '../roles-permissions/roles-permissions-view';
 
 // ----------------------------------------------------------------------
 

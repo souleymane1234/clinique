@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -10,25 +10,26 @@ import {
   Stack,
   Button,
   Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TableRow,
   TextField,
   TableBody,
   TableCell,
   TableHead,
   Typography,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
+  TablePagination,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
 
+import { fDate } from 'src/utils/format-time';
+
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -42,7 +43,7 @@ export default function NurseTraitementsView() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [detailsDialog, setDetailsDialog] = useState({ open: false, item: null });
-  const [administerDialog, setAdministerDialog] = useState({ open: false, item: null, loading: false });
+  const [administerDialog, setAdministerDialog] = useState({ open: false, item: null, loading: false }); // eslint-disable-line no-unused-vars
 
   const loadTraitements = useCallback(async () => {
     setLoading(true);

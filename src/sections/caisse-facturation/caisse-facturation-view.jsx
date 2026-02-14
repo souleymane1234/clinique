@@ -4,14 +4,14 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
-// Import des vues
-import CaisseFacturesView from './caisse-factures/caisse-factures-view';
-import CaisseFacturationServiceView from './caisse-facturation-service/caisse-facturation-service-view';
-import CaissePaiementsView from './caisse-paiements/caisse-paiements-view';
-import CaisseTicketsRecusView from './caisse-tickets-recus/caisse-tickets-recus-view';
 import CaisseImpayesView from './caisse-impayes/caisse-impayes-view';
 import CaisseClotureView from './caisse-cloture/caisse-cloture-view';
+// Import des vues
+import CaisseFacturesView from './caisse-factures/caisse-factures-view';
+import CaissePaiementsView from './caisse-paiements/caisse-paiements-view';
 import CaisseHistoriqueView from './caisse-historique/caisse-historique-view';
+import CaisseTicketsRecusView from './caisse-tickets-recus/caisse-tickets-recus-view';
+import CaisseFacturationServiceView from './caisse-facturation-service/caisse-facturation-service-view';
 
 // ----------------------------------------------------------------------
 

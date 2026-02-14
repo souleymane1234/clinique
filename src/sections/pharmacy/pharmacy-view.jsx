@@ -6,12 +6,12 @@ import { usePathname } from 'src/routes/hooks';
 
 // Import des vues
 import PharmacyStocksView from './pharmacy-stocks/pharmacy-stocks-view';
-import PharmacyEntreesSortiesView from './pharmacy-entrees-sorties/pharmacy-entrees-sorties-view';
 import PharmacyAlertesView from './pharmacy-alertes/pharmacy-alertes-view';
+import PharmacyInventaireView from './pharmacy-inventaire/pharmacy-inventaire-view';
 import PharmacyDispensationView from './pharmacy-dispensation/pharmacy-dispensation-view';
 import PharmacyTarificationView from './pharmacy-tarification/pharmacy-tarification-view';
 import PharmacyFournisseursView from './pharmacy-fournisseurs/pharmacy-fournisseurs-view';
-import PharmacyInventaireView from './pharmacy-inventaire/pharmacy-inventaire-view';
+import PharmacyEntreesSortiesView from './pharmacy-entrees-sorties/pharmacy-entrees-sorties-view';
 
 // ----------------------------------------------------------------------
 

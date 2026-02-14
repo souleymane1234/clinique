@@ -28,8 +28,8 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
+  TablePagination,
 } from '@mui/material';
 
 import { useRouter } from 'src/routes/hooks';

@@ -2,25 +2,23 @@ import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router-dom';
 
-import { useRouter } from 'src/routes/hooks';
-
 import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Tab,
   Card,
-  Chip,
   Grid,
   Tabs,
   Stack,
   Button,
   Divider,
   Container,
+  TextField,
   Typography,
   IconButton,
-  TextField,
-  Autocomplete,
 } from '@mui/material';
+
+import { useRouter } from 'src/routes/hooks';
 
 import { useNotification } from 'src/hooks/useNotification';
 
@@ -35,7 +33,7 @@ import Iconify from 'src/components/iconify';
 export default function DoctorConsultationDetailsView() {
   const { id: consultationId } = useParams();
   const router = useRouter();
-  const { contextHolder, showApiResponse, showSuccess, showError } = useNotification();
+  const { contextHolder, showSuccess, showError } = useNotification();
 
   const [consultation, setConsultation] = useState(null);
   const [loading, setLoading] = useState(true);

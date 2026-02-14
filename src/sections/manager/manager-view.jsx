@@ -4,13 +4,13 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import ManagerAuditView from './manager-audit/manager-audit-view';
+import ManagerStocksView from './manager-stocks/manager-stocks-view';
+import ManagerRapportsView from './manager-rapports/manager-rapports-view';
 // Import des vues
 import ManagerDashboardView from './manager-dashboard/manager-dashboard-view';
 import ManagerStatistiquesView from './manager-statistiques/manager-statistiques-view';
 import ManagerPerformancesView from './manager-performances/manager-performances-view';
-import ManagerRapportsView from './manager-rapports/manager-rapports-view';
-import ManagerStocksView from './manager-stocks/manager-stocks-view';
-import ManagerAuditView from './manager-audit/manager-audit-view';
 
 // ----------------------------------------------------------------------
 

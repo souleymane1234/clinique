@@ -179,6 +179,7 @@ export default function FactureDetailsView() {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleGeneratePdf = async () => {
     try {
       const result = await ConsumApi.generateFacturePdf(factureId);

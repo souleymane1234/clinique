@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
+
 import { LoadingButton } from '@mui/lab';
-import { Box, Card, Table, Stack, TableRow, TextField, TableBody, TableCell, TableHead, Typography, TableContainer, TablePagination, InputAdornment } from '@mui/material';
+import { Box, Card, Table, Stack, TableRow, TableBody, TableCell, TableHead, Typography, TableContainer, TablePagination } from '@mui/material';
+
 import { useNotification } from 'src/hooks/useNotification';
-import Iconify from 'src/components/iconify';
+
 import Scrollbar from 'src/components/scrollbar';
 
 export default function LaboratoryStatistiquesView() {

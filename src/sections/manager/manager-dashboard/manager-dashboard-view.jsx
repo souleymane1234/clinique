@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
+
 import { Box, Card, Grid, Stack, Typography } from '@mui/material';
 
 export default function ManagerDashboardView() {
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     patients: 1250,
     consultations: 342,
     revenus: 45230,

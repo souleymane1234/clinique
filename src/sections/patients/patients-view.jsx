@@ -4,14 +4,14 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import PatientQueueView from './patient-queue/patient-queue-view';
+import PatientHistoryView from './patient-history/patient-history-view';
 // Import des vues
 import PatientDossiersView from './patient-dossiers/patient-dossiers-view';
-import PatientHistoryView from './patient-history/patient-history-view';
-import PatientAntecedentsView from './patient-antecedents/patient-antecedents-view';
 import PatientDocumentsView from './patient-documents/patient-documents-view';
-import PatientConsultationsView from './patient-consultations/patient-consultations-view';
+import PatientAntecedentsView from './patient-antecedents/patient-antecedents-view';
 import PatientAppointmentsView from './patient-appointments/patient-appointments-view';
-import PatientQueueView from './patient-queue/patient-queue-view';
+import PatientConsultationsView from './patient-consultations/patient-consultations-view';
 
 // ----------------------------------------------------------------------
 

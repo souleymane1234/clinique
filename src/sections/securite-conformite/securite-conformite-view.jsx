@@ -4,12 +4,12 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
-// Import des vues
-import AuthentificationView from './authentification/authentification-view';
-import GestionAccesView from './gestion-acces/gestion-acces-view';
+import ConformiteView from './conformite/conformite-view';
 import ChiffrementView from './chiffrement/chiffrement-view';
 import TraçabiliteView from './traçabilite/traçabilite-view';
-import ConformiteView from './conformite/conformite-view';
+import GestionAccesView from './gestion-acces/gestion-acces-view';
+// Import des vues
+import AuthentificationView from './authentification/authentification-view';
 
 // ----------------------------------------------------------------------
 

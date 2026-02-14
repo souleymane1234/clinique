@@ -4,13 +4,13 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import ExportView from './export/export-view';
+import FacturesView from './factures/factures-view';
+import RapportsView from './rapports/rapports-view';
 // Import des vues
 import OrdonnancesView from './ordonnances/ordonnances-view';
-import ResultatsAnalysesView from './resultats-analyses/resultats-analyses-view';
-import FacturesView from './factures/factures-view';
 import CertificatsView from './certificats/certificats-view';
-import RapportsView from './rapports/rapports-view';
-import ExportView from './export/export-view';
+import ResultatsAnalysesView from './resultats-analyses/resultats-analyses-view';
 
 // ----------------------------------------------------------------------
 

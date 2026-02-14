@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { TabList, TabPanel, TabContext, LoadingButton } from '@mui/lab';
 import {
@@ -18,20 +18,20 @@ import {
   Tooltip,
   MenuItem,
   TableRow,
+  Checkbox,
   TextField,
   Container,
   TableBody,
   TableCell,
   TableHead,
+  Accordion,
   Typography,
   InputLabel,
   IconButton,
   FormControl,
   TableContainer,
-  Accordion,
   AccordionSummary,
   AccordionDetails,
-  Checkbox,
   FormControlLabel,
 } from '@mui/material';
 
@@ -553,7 +553,7 @@ export default function RolesPermissionsView() {
         errorTitle: 'Erreur de création',
       });
       if (processed.success) {
-        const moduleId = createPermissionDialog.moduleId;
+        const {moduleId} = createPermissionDialog;
         setCreatePermissionDialog({ open: false, moduleId: '', name: '', description: '' });
         // Recharger toutes les permissions et les permissions du module
         await loadAllPermissions();
@@ -902,7 +902,7 @@ export default function RolesPermissionsView() {
         const reloadResult = await ConsumApi.getRoleGlobalPermissions(manageRolePermissionsDialog.role.id);
         if (reloadResult.success && reloadResult.data && reloadResult.data.modules) {
           // Chercher la permission mise à jour avec son role_permission_uuid
-          const foundModule = reloadResult.data.modules.find((module) => {
+          reloadResult.data.modules.find((module) => {
             if (module.permissions) {
               const found = module.permissions.find(p => p.id === permission.id);
               if (found && found.role_permission_uuid) {
@@ -1276,7 +1276,8 @@ export default function RolesPermissionsView() {
   );
 
   // Rendre la section Modules (ancienne version avec accordéons - à supprimer ou garder pour référence)
-  const renderModulesSectionOld = () => (
+  // eslint-disable-next-line no-unused-vars
+  const _renderModulesSectionOld = () => (
       <Stack spacing={3}>
         <Alert severity="info">
         Gérez les modules de permissions, leurs permissions associées et les rôles assignés.

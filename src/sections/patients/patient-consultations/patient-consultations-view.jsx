@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -11,33 +11,34 @@ import {
   Stack,
   Button,
   Dialog,
+  Select,
+  Divider,
   TableRow,
+  MenuItem,
   TextField,
   TableBody,
   TableCell,
   TableHead,
   Container,
   Typography,
+  InputLabel,
   DialogTitle,
+  FormControl,
   DialogContent,
   DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
-  Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  TablePagination,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fDateTime } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -49,7 +50,7 @@ const CONSULTATION_STATUS_COLORS = {
 };
 
 export default function PatientConsultationsView() {
-  const { contextHolder, showApiResponse, showError } = useNotification();
+  const { contextHolder, showError } = useNotification();
 
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(false);

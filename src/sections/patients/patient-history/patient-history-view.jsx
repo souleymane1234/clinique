@@ -1,20 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
+  Grid,
   Table,
   Stack,
   Button,
   Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Select,
+  Divider,
   TableRow,
+  MenuItem,
   TextField,
   TableBody,
   TableCell,
@@ -22,23 +23,23 @@ import {
   Container,
   Typography,
   InputLabel,
+  DialogTitle,
   FormControl,
+  DialogContent,
+  DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
-  Select,
-  MenuItem,
-  Divider,
-  Grid,
+  TablePagination,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fDateTime } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ const HISTORY_TYPE_COLORS = {
 };
 
 export default function PatientHistoryView({ patientId }) {
-  const { contextHolder, showApiResponse, showError } = useNotification();
+  const { contextHolder, showError } = useNotification();
 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);

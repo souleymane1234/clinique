@@ -4,13 +4,13 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import NurseNotesView from './nurse-notes/nurse-notes-view';
+import NurseAlertesView from './nurse-alertes/nurse-alertes-view';
 // Import des vues
 import NursePlanningView from './nurse-planning/nurse-planning-view';
+import NurseValidationView from './nurse-validation/nurse-validation-view';
 import NurseTraitementsView from './nurse-traitements/nurse-traitements-view';
 import NurseSignesVitauxView from './nurse-signes-vitaux/nurse-signes-vitaux-view';
-import NurseNotesView from './nurse-notes/nurse-notes-view';
-import NurseValidationView from './nurse-validation/nurse-validation-view';
-import NurseAlertesView from './nurse-alertes/nurse-alertes-view';
 
 // ----------------------------------------------------------------------
 

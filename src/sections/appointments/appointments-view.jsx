@@ -4,11 +4,11 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import AppointmentsAgendaView from './appointments-agenda/appointments-agenda-view';
 // Import des vues
 import AppointmentsGestionView from './appointments-gestion/appointments-gestion-view';
-import AppointmentsAgendaView from './appointments-agenda/appointments-agenda-view';
-import AppointmentsNotificationsView from './appointments-notifications/appointments-notifications-view';
 import AppointmentsUrgencesView from './appointments-urgences/appointments-urgences-view';
+import AppointmentsNotificationsView from './appointments-notifications/appointments-notifications-view';
 
 // ----------------------------------------------------------------------
 

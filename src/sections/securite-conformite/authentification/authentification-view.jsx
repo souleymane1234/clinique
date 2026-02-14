@@ -1,21 +1,24 @@
 import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
+
 import { LoadingButton } from '@mui/lab';
 import {
-  Alert,
   Box,
   Card,
+  Alert,
   Stack,
+  Select,
+  Switch,
+  MenuItem,
   TextField,
   Typography,
-  FormControl,
   InputLabel,
-  Select,
-  MenuItem,
-  Switch,
+  FormControl,
   FormControlLabel,
 } from '@mui/material';
+
 import { useNotification } from 'src/hooks/useNotification';
+
 import Iconify from 'src/components/iconify';
 
 export default function AuthentificationView() {

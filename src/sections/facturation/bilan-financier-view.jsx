@@ -17,10 +17,10 @@ import {
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
-import { useAdminStore } from 'src/store/useAdminStore';
 
 import { fNumber } from 'src/utils/format-number';
 
+import { useAdminStore } from 'src/store/useAdminStore';
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
@@ -43,7 +43,7 @@ const MONTHS = [
 ];
 
 export default function BilanFinancierView() {
-  const { contextHolder, showError } = useNotification();
+  const { contextHolder } = useNotification();
   const { admin } = useAdminStore();
   const [currentTab, setCurrentTab] = useState('mensuel');
   const [loading, setLoading] = useState(false);

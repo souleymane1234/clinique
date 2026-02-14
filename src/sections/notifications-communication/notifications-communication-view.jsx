@@ -4,12 +4,12 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import MessagerieView from './messagerie/messagerie-view';
+import RappelsPatientsView from './rappels-patients/rappels-patients-view';
+import AlertesMedicalesView from './alertes-medicales/alertes-medicales-view';
+import HistoriqueEchangesView from './historique-echanges/historique-echanges-view';
 // Import des vues
 import NotificationsInternesView from './notifications-internes/notifications-internes-view';
-import AlertesMedicalesView from './alertes-medicales/alertes-medicales-view';
-import RappelsPatientsView from './rappels-patients/rappels-patients-view';
-import MessagerieView from './messagerie/messagerie-view';
-import HistoriqueEchangesView from './historique-echanges/historique-echanges-view';
 
 // ----------------------------------------------------------------------
 

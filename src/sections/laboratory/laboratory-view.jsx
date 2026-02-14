@@ -4,14 +4,14 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
-// Import des vues
-import LaboratoryPrescriptionsView from './laboratory-prescriptions/laboratory-prescriptions-view';
 import LaboratoryAnalysesView from './laboratory-analyses/laboratory-analyses-view';
 import LaboratoryResultatsView from './laboratory-resultats/laboratory-resultats-view';
-import LaboratoryTransmissionView from './laboratory-transmission/laboratory-transmission-view';
 import LaboratoryImpressionView from './laboratory-impression/laboratory-impression-view';
+import LaboratoryTransmissionView from './laboratory-transmission/laboratory-transmission-view';
 import LaboratoryConsommablesView from './laboratory-consommables/laboratory-consommables-view';
 import LaboratoryStatistiquesView from './laboratory-statistiques/laboratory-statistiques-view';
+// Import des vues
+import LaboratoryPrescriptionsView from './laboratory-prescriptions/laboratory-prescriptions-view';
 
 // ----------------------------------------------------------------------
 

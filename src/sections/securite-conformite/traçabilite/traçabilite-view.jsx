@@ -8,25 +8,26 @@ import {
   Chip,
   Table,
   Stack,
-  FormControl,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
   Select,
+  MenuItem,
+  TableRow,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
-  TablePagination,
-  TableRow,
   TextField,
+  InputLabel,
   Typography,
+  FormControl,
+  InputAdornment,
+  TableContainer,
+  TablePagination,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
 
-import Iconify from 'src/components/iconify';
 import { fDateTime } from 'src/utils/format-time';
+
+import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
 
 export default function TraçabiliteView() {

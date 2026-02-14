@@ -4,15 +4,15 @@ import { Container } from '@mui/material';
 
 import { usePathname } from 'src/routes/hooks';
 
+import DoctorDiagnosticView from './doctor-diagnostic/doctor-diagnostic-view';
+import DoctorMessagerieView from './doctor-messagerie/doctor-messagerie-view';
+import DoctorOrdonnancesView from './doctor-ordonnances/doctor-ordonnances-view';
+import DoctorCertificatsView from './doctor-certificats/doctor-certificats-view';
 // Import des vues
 import DoctorViewDossiersView from './doctor-view-dossiers/doctor-view-dossiers-view';
-import DoctorCreateConsultationView from './doctor-create-consultation/doctor-create-consultation-view';
-import DoctorDiagnosticView from './doctor-diagnostic/doctor-diagnostic-view';
 import DoctorPrescriptionsView from './doctor-prescriptions/doctor-prescriptions-view';
-import DoctorOrdonnancesView from './doctor-ordonnances/doctor-ordonnances-view';
 import DoctorHospitalisationView from './doctor-hospitalisation/doctor-hospitalisation-view';
-import DoctorCertificatsView from './doctor-certificats/doctor-certificats-view';
-import DoctorMessagerieView from './doctor-messagerie/doctor-messagerie-view';
+import DoctorCreateConsultationView from './doctor-create-consultation/doctor-create-consultation-view';
 
 // ----------------------------------------------------------------------
 

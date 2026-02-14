@@ -1,41 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Chip,
-  Grid,
   Table,
   Stack,
   Button,
-  Dialog,
+  Select,
   TableRow,
+  MenuItem,
   TextField,
   TableBody,
   TableCell,
   TableHead,
   Container,
   Typography,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  InputLabel,
+  FormControl,
   TableContainer,
   InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fDateTime } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -53,8 +49,8 @@ export default function PatientAppointmentsView() {
 
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [page] = useState(0); // eslint-disable-line no-unused-vars
+  const [rowsPerPage] = useState(10); // eslint-disable-line no-unused-vars
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [search, setSearch] = useState('');

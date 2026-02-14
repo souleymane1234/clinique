@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useState, useEffect, useCallback } from 'react';
 
 import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
   Grid,
+  Chip,
   Stack,
+  Table,
   Button,
   Dialog,
-  Select,
+  Divider,
   MenuItem,
   TableRow,
   TextField,
@@ -23,20 +25,18 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
-  TablePagination,
   InputAdornment,
-  Chip,
-  Table,
-  Divider,
+  TablePagination,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fDateTime } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
-import { fDate, fDateTime } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ const DOCUMENT_TYPE_COLORS = {
 };
 
 export default function PatientDocumentsView() {
-  const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+  const { contextHolder, showError, showSuccess } = useNotification();
 
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -60,8 +60,10 @@ export default function PatientDocumentsView() {
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [detailsDialog, setDetailsDialog] = useState({ open: false, document: null });
+  // eslint-disable-next-line no-unused-vars
   const [uploadDialog, setUploadDialog] = useState({ open: false, loading: false });
 
+  // eslint-disable-next-line no-unused-vars
   const [uploadForm, setUploadForm] = useState({
     title: '',
     type: 'other',
