@@ -127,7 +127,7 @@ export default function EcoleStrengthsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Points forts | AnnourTravel </title>
+        <title> Points forts | PREVENTIC </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

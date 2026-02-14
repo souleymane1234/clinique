@@ -8,7 +8,7 @@ export default function CreateAdminPage() {
   return (
     <>
       <Helmet>
-        <title> Création Admin | AnnourTravel </title>
+        <title> Création Admin | PREVENTIC </title>
       </Helmet>
 
       <CreateAdminView />

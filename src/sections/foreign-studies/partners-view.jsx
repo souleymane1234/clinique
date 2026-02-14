@@ -198,7 +198,7 @@ export default function PartnersView() {
   return (
     <>
       <Helmet>
-        <title> Partenaires Étrangers | AnnourTravel</title>
+        <title> Partenaires Étrangers | PREVENTIC</title>
       </Helmet>
 
       <Container>

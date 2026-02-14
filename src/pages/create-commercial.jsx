@@ -8,7 +8,7 @@ export default function CreateCommercialPage() {
   return (
     <>
       <Helmet>
-        <title> Créer un Commercial | AnnourTravel </title>
+        <title> Créer un Commercial | PREVENTIC </title>
       </Helmet>
 
       <CommercialCreateView />

@@ -225,7 +225,7 @@ export default function SessionsView() {
   return (
     <>
       <Helmet>
-        <title> Sessions | AnnourTravel </title>
+        <title> Sessions | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

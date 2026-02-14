@@ -75,7 +75,7 @@ export default function FileDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails du dossier | AnnourTravel</title>
+        <title> Détails du dossier | PREVENTIC</title>
       </Helmet>
 
       <Container>

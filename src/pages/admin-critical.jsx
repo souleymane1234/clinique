@@ -8,7 +8,7 @@ export default function AdminCriticalPage() {
   return (
     <>
       <Helmet>
-        <title>Actions Critiques | AnnourTravel</title>
+        <title>Actions Critiques | PREVENTIC</title>
       </Helmet>
 
       <AdminCriticalView />

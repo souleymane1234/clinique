@@ -1667,7 +1667,7 @@ export default function RolesPermissionsView() {
   return (
     <>
       <Helmet>
-        <title> Rôles & Permissions | AnnourTravel </title>
+        <title> Rôles & Permissions | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

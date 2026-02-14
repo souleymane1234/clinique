@@ -8,7 +8,7 @@ export default function ConfigurationPage() {
   return (
     <>
       <Helmet>
-        <title> Configuration Système | AnnourTravel </title>
+        <title> Configuration Système | PREVENTIC </title>
       </Helmet>
 
       <ConfigurationView />

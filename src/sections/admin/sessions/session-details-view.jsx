@@ -376,7 +376,7 @@ export default function SessionDetailsView() {
   return (
     <>
       <Helmet>
-        <title> Détails Session | AnnourTravel </title>
+        <title> Détails Session | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

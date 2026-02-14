@@ -168,7 +168,7 @@ export default function FileActiveView() {
   return (
     <>
       <Helmet>
-        <title>Gestion des Files Actives | AnnourTravel</title>
+        <title>Gestion des Files Actives | PREVENTIC</title>
       </Helmet>
 
       {contextHolder}

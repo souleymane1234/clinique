@@ -26,7 +26,7 @@ export default function AdminDashboardMainView() {
   const { contextHolder, showError } = useNotification();
 
 
-  // États pour les statistiques AnnourTravel
+  // États pour les statistiques PREVENTIC
   const [carbuGoStats, setCarbuGoStats] = useState({
     userGrowth: null,
     mostActiveStations: null,

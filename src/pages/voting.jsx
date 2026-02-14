@@ -8,7 +8,7 @@ export default function VotingPage() {
   return (
     <>
       <Helmet>
-        <title> Clients | AnnourTravel </title>
+        <title> Clients | PREVENTIC </title>
       </Helmet>
 
       <VotingView />

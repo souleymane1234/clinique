@@ -830,7 +830,7 @@ export default function AdminCriticalView() {
   return (
     <>
       <Helmet>
-        <title>Actions Critiques | AnnourTravel</title>
+        <title>Actions Critiques | PREVENTIC</title>
       </Helmet>
 
       {contextHolder}

@@ -8,7 +8,7 @@ export default function CreateActualityPage() {
   return (
     <>
       <Helmet>
-        <title> Création Formation | AnnourTravel </title>
+        <title> Création Formation | PREVENTIC </title>
       </Helmet>
 
       <CreateActualityView />

@@ -72,7 +72,7 @@ export default function FileStatsView() {
   return (
     <>
       <Helmet>
-        <title> Statistiques des dossiers | AnnourTravel</title>
+        <title> Statistiques des dossiers | PREVENTIC</title>
       </Helmet>
 
       <Container>

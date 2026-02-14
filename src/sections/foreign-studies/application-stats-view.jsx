@@ -72,7 +72,7 @@ export default function ApplicationStatsView() {
   return (
     <>
       <Helmet>
-        <title> Statistiques des candidatures | AnnourTravel</title>
+        <title> Statistiques des candidatures | PREVENTIC</title>
       </Helmet>
 
       <Container>

@@ -546,7 +546,7 @@ export default function ConfigurationView() {
   return (
     <>
       <Helmet>
-        <title> Configuration Système | AnnourTravel </title>
+        <title> Configuration Système | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

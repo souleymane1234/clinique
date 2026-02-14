@@ -8,7 +8,7 @@ export default function ProductsPage() {
   return (
     <>
       <Helmet>
-        <title> Candidats | AnnourTravel </title>
+        <title> Candidats | PREVENTIC </title>
       </Helmet>
 
       <ProductsView />

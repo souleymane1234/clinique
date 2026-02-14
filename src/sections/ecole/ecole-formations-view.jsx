@@ -163,7 +163,7 @@ export default function EcoleFormationsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Formations | AnnourTravel </title>
+        <title> Formations | PREVENTIC </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

@@ -8,7 +8,7 @@ export default function FacturesByCategoryPage() {
   return (
     <>
       <Helmet>
-        <title> Factures par Catégorie | AnnourTravel </title>
+        <title> Factures par Catégorie | PREVENTIC </title>
       </Helmet>
 
       <FacturesByCategoryView />

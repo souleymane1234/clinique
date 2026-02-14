@@ -8,7 +8,7 @@ export default function CreateFactureProformaPage() {
   return (
     <>
       <Helmet>
-        <title> Créer Facture Proforma | AnnourTravel </title>
+        <title> Créer Facture Proforma | PREVENTIC </title>
       </Helmet>
 
       <CreateFactureProformaView />

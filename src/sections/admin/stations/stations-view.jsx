@@ -297,7 +297,7 @@ export default function StationsView() {
   return (
     <>
       <Helmet>
-        <title> Stations | AnnourTravel </title>
+        <title> Stations | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

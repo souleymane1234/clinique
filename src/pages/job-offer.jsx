@@ -8,7 +8,7 @@ export default function JobOfferPage() {
   return (
     <>
       <Helmet>
-        <title> Partenaires | AnnourTravel </title>
+        <title> Partenaires | PREVENTIC </title>
       </Helmet>
 
       <JobOfferView />

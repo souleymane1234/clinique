@@ -230,7 +230,7 @@ export default function FilesView() {
   return (
     <>
       <Helmet>
-        <title> Dossiers Études à l&apos;Étranger | AnnourTravel</title>
+        <title> Dossiers Études à l&apos;Étranger | PREVENTIC</title>
       </Helmet>
 
       <Container>

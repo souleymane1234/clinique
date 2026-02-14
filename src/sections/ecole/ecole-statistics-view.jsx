@@ -121,7 +121,7 @@ export default function EcoleStatisticsView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Statistiques | AnnourTravel </title>
+        <title> Statistiques | PREVENTIC </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>

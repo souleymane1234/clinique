@@ -274,7 +274,7 @@ export default function AdministrationAdminsView() {
   return (
     <>
       <Helmet>
-        <title>Gestion des Administrateurs | AnnourTravel</title>
+        <title>Gestion des Administrateurs | PREVENTIC</title>
       </Helmet>
 
       {contextHolder}

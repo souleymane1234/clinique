@@ -229,7 +229,7 @@ export default function ApplicationsView() {
   return (
     <>
       <Helmet>
-        <title> Candidatures Études à l&apos;Étranger | AnnourTravel</title>
+        <title> Candidatures Études à l&apos;Étranger | PREVENTIC</title>
       </Helmet>
 
       <Container>

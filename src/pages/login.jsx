@@ -8,7 +8,7 @@ export default function LoginPage() {
   return (
     <>
       <Helmet>
-        <title> Connexion | AnnourTravel </title>
+        <title> Connexion | PREVENTIC </title>
       </Helmet>
 
       <LoginView />

@@ -962,7 +962,7 @@ export default function ReportsView() {
   return (
     <>
       <Helmet>
-        <title> Rapports & Statistiques | AnnourTravel </title>
+        <title> Rapports & Statistiques | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

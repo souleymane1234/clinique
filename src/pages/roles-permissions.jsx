@@ -8,7 +8,7 @@ export default function RolesPermissionsPage() {
   return (
     <>
       <Helmet>
-        <title> Rôles & Permissions | AnnourTravel </title>
+        <title> Rôles & Permissions | PREVENTIC </title>
       </Helmet>
 
       <RolesPermissionsView />

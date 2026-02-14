@@ -8,7 +8,7 @@ export default function ReportsPage() {
   return (
     <>
       <Helmet>
-        <title> Rapports & Statistiques | AnnourTravel </title>
+        <title> Rapports & Statistiques | PREVENTIC </title>
       </Helmet>
 
       <ReportsView />

@@ -230,7 +230,7 @@ export default function UsersView() {
   return (
     <>
       <Helmet>
-        <title> Utilisateurs | AnnourTravel </title>
+        <title> Utilisateurs | PREVENTIC </title>
       </Helmet>
 
       {contextHolder}

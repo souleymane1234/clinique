@@ -128,7 +128,7 @@ export default function EcoleProgrammesView() {
     <>
       {contextHolder}
       <Helmet>
-        <title> Programmes | AnnourTravel </title>
+        <title> Programmes | PREVENTIC </title>
       </Helmet>
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
