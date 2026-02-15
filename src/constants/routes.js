@@ -37,6 +37,9 @@ export const routesName = {
   // Administration - Users Management
   adminUsers: '/admin/users',
   
+  // Administration - Médecins Management
+  adminMedecins: '/admin/medecins',
+  
   // Stations Management
   adminStations: '/admin/stations',
   adminStationDetails: '/admin/stations/:id',
@@ -52,11 +55,13 @@ export const routesName = {
   // Patients Management
   patients: '/patients',
   patientDetails: '/patients/:id',
+  patientsAccueil: '/patients/accueil',
   patientsDossiers: '/patients/dossiers',
   patientsHistory: '/patients/history',
   patientsAntecedents: '/patients/antecedents',
   patientsDocuments: '/patients/documents',
   patientsConsultations: '/patients/consultations',
+  patientsCreateConsultation: '/patients/consultation/create/:patientId',
   patientsAppointments: '/patients/appointments',
   patientsQueue: '/patients/queue',
   

@@ -6,6 +6,7 @@ import { usePathname } from 'src/routes/hooks';
 
 // Import des vues
 import UsersView from '../users/users-view';
+import MedecinsView from '../medecins/medecins-view';
 import ActivityLogView from '../activity-log/activity-log-view';
 import MultiClinicsView from '../multi-clinics/multi-clinics-view';
 import ServicesListView from '../../site-admin/services-list-view';
@@ -22,6 +23,9 @@ export default function AdministrationView() {
   const renderContent = () => {
     if (pathname.includes('/users')) {
       return <UsersView />;
+    }
+    if (pathname.includes('/medecins')) {
+      return <MedecinsView />;
     }
     if (pathname.includes('/roles-permissions')) {
       return <RolesPermissionsView />;

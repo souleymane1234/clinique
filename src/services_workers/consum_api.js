@@ -184,12 +184,16 @@ export default class ConsumApi {
   static async _authenticatedRequest(method, url, data = null) {
     const urlLower = url.toLowerCase();
     
-    // Pour les endpoints de modules de permissions, PATIENTS, ALLERGIES et ANTECEDENTS, utiliser l'API réelle
+    // Pour les endpoints de modules de permissions, PATIENTS, ALLERGIES, ANTECEDENTS et MEDECINS, utiliser l'API réelle
     if (urlLower.includes('/module-permission') || 
-        urlLower.includes('/permission') || 
-        urlLower.includes('/permissions') || 
+        urlLower.includes('/permission') ||
+        urlLower.includes('/permissions') ||
         urlLower.includes('/patient') ||
         urlLower.includes('/patients') ||
+        urlLower.includes('/medecin') ||
+        urlLower.includes('/medecins') ||
+        urlLower.includes('/consultation') ||
+        urlLower.includes('/consultations') ||
         urlLower.includes('/allergy') ||
         urlLower.includes('/allergie') ||
         urlLower.includes('/antecedent') ||
@@ -2596,6 +2600,150 @@ export default class ConsumApi {
     return this._authenticatedRequest('DELETE', apiUrl.deletePatient(patientNumber));
   }
 
+  // ========== MÉDECINS ==========
+
+  static async getMedecins(filters = {}) {
+    let url = apiUrl.medecins;
+    
+    const params = new URLSearchParams();
+    if (filters.search) params.append('search', filters.search);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.speciality) params.append('speciality', filters.speciality);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && Array.isArray(result.data)) {
+      result.data = result.data.map((medecin) => this._mapMedecinFields(medecin));
+    }
+    
+    return result;
+  }
+
+  static async getMedecinsPaginated(page = 1, limit = 10, filters = {}) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    
+    if (filters.search) params.append('search', filters.search);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.speciality) params.append('speciality', filters.speciality);
+    
+    const url = `${apiUrl.medecinsPaginated}?${params.toString()}`;
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && result.data) {
+      if (Array.isArray(result.data.medecins || result.data.data)) {
+        const medecins = result.data.medecins || result.data.data || [];
+        result.data.medecins = medecins.map((medecin) => this._mapMedecinFields(medecin));
+      }
+    }
+    
+    return result;
+  }
+
+  static async getMedecinById(medecinId) {
+    const result = await this._authenticatedRequest('GET', apiUrl.medecinById(medecinId));
+    
+    if (result.success && result.data) {
+      result.data = this._mapMedecinFields(result.data);
+    }
+    
+    return result;
+  }
+
+  static async createMedecin(data) {
+    // Normaliser les données selon la structure API
+    const normalizedData = {
+      doctorNumber: data.doctorNumber || '',
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: data.speciality || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      password: data.password || '',
+      userId: data.userId || null,
+    };
+    
+    const result = await this._authenticatedRequest('POST', apiUrl.medecins, normalizedData);
+    
+    if (result.success && result.data?.medecin) {
+      result.data.medecin = this._mapMedecinFields(result.data.medecin);
+    }
+    
+    return result;
+  }
+
+  static async updateMedecin(medecinId, data) {
+    // Normaliser les données - PUT requiert TOUS les champs
+    const normalizedData = {
+      doctorNumber: data.doctorNumber || '',
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: data.speciality || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      userId: data.userId || null,
+    };
+    
+    const result = await this._authenticatedRequest('PUT', apiUrl.updateMedecin(medecinId), normalizedData);
+    
+    if (result.success && result.data) {
+      result.data = this._mapMedecinFields(result.data);
+    }
+    
+    return result;
+  }
+
+  static async deleteMedecin(medecinId) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteMedecin(medecinId));
+  }
+
+  // Mapper les champs médecin API → Frontend
+  static _mapMedecinFields(medecin) {
+    if (!medecin) return medecin;
+    
+    return {
+      id: medecin.id || medecin._id || medecin.uuid,
+      doctorNumber: medecin.doctorNumber || '',
+      firstName: medecin.firstName || medecin.first_name || '',
+      firstname: medecin.firstName || medecin.first_name || '',
+      lastName: medecin.lastName || medecin.last_name || '',
+      lastname: medecin.lastName || medecin.last_name || '',
+      gender: medecin.gender || 'MALE',
+      speciality: medecin.speciality || '',
+      phone: medecin.phone || '',
+      email: medecin.email || '',
+      address: medecin.address || '',
+      city: medecin.city || '',
+      country: medecin.country || '',
+      status: medecin.status || 'ACTIVE',
+      isActive: medecin.isActive !== undefined ? medecin.isActive : true,
+      user: medecin.user || null,
+      userId: medecin.user?.id || medecin.userId || null,
+      createdAt: medecin.createdAt || medecin.created_at || new Date().toISOString(),
+      updatedAt: medecin.updatedAt || medecin.updated_at || new Date().toISOString(),
+      createdBy: medecin.createdBy || null,
+      updatedBy: medecin.updatedBy || null,
+      ...medecin
+    };
+  }
+
   static async getPatientMedicalHistory(patientId, filters = {}) {
     let url = apiUrl.patientMedicalHistory(patientId);
     
@@ -2816,6 +2964,356 @@ export default class ConsumApi {
 
   static async getPatientConsultations(patientId) {
     return this._authenticatedRequest('GET', apiUrl.patientConsultations(patientId));
+  }
+
+  // ========== CONSULTATIONS (Gestion complète) ==========
+
+  static async getConsultations(filters = {}) {
+    let url = apiUrl.consultations;
+    
+    const params = new URLSearchParams();
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.medecinId) params.append('medecinId', filters.medecinId);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.type) params.append('type', filters.type);
+    if (filters.dateDebut) params.append('dateDebut', filters.dateDebut);
+    if (filters.dateFin) params.append('dateFin', filters.dateFin);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && Array.isArray(result.data)) {
+      result.data = result.data.map((consultation) => this._mapConsultationFields(consultation));
+    }
+    
+    return result;
+  }
+
+  static async getConsultationsPaginated(page = 1, limit = 10, filters = {}) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    
+    if (filters.patientId) params.append('patientId', filters.patientId);
+    if (filters.medecinId) params.append('medecinId', filters.medecinId);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.type) params.append('type', filters.type);
+    if (filters.dateDebut) params.append('dateDebut', filters.dateDebut);
+    if (filters.dateFin) params.append('dateFin', filters.dateFin);
+    
+    const url = `${apiUrl.consultationsPaginated}?${params.toString()}`;
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && result.data) {
+      if (Array.isArray(result.data.data || result.data.consultations)) {
+        const consultations = result.data.data || result.data.consultations || [];
+        result.data.data = consultations.map((consultation) => this._mapConsultationFields(consultation));
+      }
+    }
+    
+    return result;
+  }
+
+  static async getConsultationById(consultationId) {
+    const result = await this._authenticatedRequest('GET', apiUrl.consultationById(consultationId));
+    
+    if (result.success && result.data) {
+      result.data = this._mapConsultationFields(result.data);
+    }
+    
+    return result;
+  }
+
+  static async getConsultationComplete(consultationId) {
+    const result = await this._authenticatedRequest('GET', apiUrl.consultationComplete(consultationId));
+    
+    if (result.success && result.data) {
+      result.data = this._mapConsultationFields(result.data);
+    }
+    
+    return result;
+  }
+
+  static async createConsultation(data) {
+    // Normaliser les données selon la structure API
+    const normalizedData = {
+      patientId: data.patientId || '',
+      medecinId: data.medecinId || '',
+      type: data.type || 'PREMIERE_CONSULTATION',
+      status: data.status || 'EN_ATTENTE',
+      consultationDate: data.consultationDate || new Date().toISOString(),
+      reason: data.reason || '',
+      clinicalExamination: data.clinicalExamination || '',
+      temperature: data.temperature || 0,
+      systolicBloodPressure: data.systolicBloodPressure || 0,
+      diastolicBloodPressure: data.diastolicBloodPressure || 0,
+      heartRate: data.heartRate || 0,
+      respiratoryRate: data.respiratoryRate || 0,
+      weight: data.weight || 0,
+      height: data.height || 0,
+      oxygenSaturation: data.oxygenSaturation || 0,
+      diagnostic: data.diagnostic || '',
+      differentialDiagnosis: data.differentialDiagnosis || '',
+      treatment: data.treatment || '',
+      recommendations: data.recommendations || '',
+      privateNotes: data.privateNotes || '',
+      nextAppointment: data.nextAppointment || null,
+      hospitalizationRequired: data.hospitalizationRequired || false,
+      hospitalizationReason: data.hospitalizationReason || '',
+    };
+    
+    const result = await this._authenticatedRequest('POST', apiUrl.consultations, normalizedData);
+    
+    if (result.success && result.data?.consultation) {
+      result.data.consultation = this._mapConsultationFields(result.data.consultation);
+    }
+    
+    return result;
+  }
+
+  static async updateConsultation(consultationId, data) {
+    // Normaliser les données
+    const normalizedData = {
+      patientId: data.patientId || '',
+      medecinId: data.medecinId || '',
+      type: data.type || 'PREMIERE_CONSULTATION',
+      status: data.status || 'EN_ATTENTE',
+      consultationDate: data.consultationDate || new Date().toISOString(),
+      reason: data.reason || '',
+      clinicalExamination: data.clinicalExamination || '',
+      temperature: data.temperature || 0,
+      systolicBloodPressure: data.systolicBloodPressure || 0,
+      diastolicBloodPressure: data.diastolicBloodPressure || 0,
+      heartRate: data.heartRate || 0,
+      respiratoryRate: data.respiratoryRate || 0,
+      weight: data.weight || 0,
+      height: data.height || 0,
+      oxygenSaturation: data.oxygenSaturation || 0,
+      diagnostic: data.diagnostic || '',
+      differentialDiagnosis: data.differentialDiagnosis || '',
+      treatment: data.treatment || '',
+      recommendations: data.recommendations || '',
+      privateNotes: data.privateNotes || '',
+      nextAppointment: data.nextAppointment || null,
+      hospitalizationRequired: data.hospitalizationRequired || false,
+      hospitalizationReason: data.hospitalizationReason || '',
+    };
+    
+    const result = await this._authenticatedRequest('PATCH', apiUrl.updateConsultation(consultationId), normalizedData);
+    
+    if (result.success && result.data) {
+      result.data = this._mapConsultationFields(result.data);
+    }
+    
+    return result;
+  }
+
+  static async deleteConsultation(consultationId) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteConsultation(consultationId));
+  }
+
+  static async updateConsultationStatus(consultationId, status) {
+    const result = await this._authenticatedRequest('PATCH', apiUrl.consultationStatus(consultationId), { status });
+    
+    if (result.success && result.data) {
+      result.data = this._mapConsultationFields(result.data);
+    }
+    
+    return result;
+  }
+
+  // ========== PRESCRIPTIONS ==========
+
+  static async getConsultationPrescriptions(consultationId) {
+    const result = await this._authenticatedRequest('GET', apiUrl.consultationPrescriptions(consultationId));
+    
+    if (result.success && Array.isArray(result.data)) {
+      result.data = result.data.map((prescription) => this._mapPrescriptionFields(prescription));
+    }
+    
+    return result;
+  }
+
+  static async getConsultationPrescriptionsPaginated(consultationId, page = 1, limit = 10) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    
+    const url = `${apiUrl.consultationPrescriptionsPaginated(consultationId)}?${params.toString()}`;
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && result.data) {
+      if (Array.isArray(result.data.data || result.data.prescriptions)) {
+        const prescriptions = result.data.data || result.data.prescriptions || [];
+        result.data.data = prescriptions.map((prescription) => this._mapPrescriptionFields(prescription));
+      }
+    }
+    
+    return result;
+  }
+
+  static async addConsultationPrescription(consultationId, data) {
+    const normalizedData = {
+      type: data.type || 'MEDICAMENT',
+      label: data.label || '',
+      dosage: data.dosage || '',
+      duration: data.duration || '',
+      quantity: data.quantity || 0,
+      instructions: data.instructions || '',
+      urgent: data.urgent || false,
+      completed: data.completed || false,
+      completedAt: data.completedAt || null,
+    };
+    
+    const result = await this._authenticatedRequest('POST', apiUrl.addConsultationPrescription(consultationId), normalizedData);
+    
+    if (result.success && result.data?.prescription) {
+      result.data.prescription = this._mapPrescriptionFields(result.data.prescription);
+    }
+    
+    return result;
+  }
+
+  static async deletePrescription(prescriptionId) {
+    return this._authenticatedRequest('DELETE', apiUrl.deletePrescription(prescriptionId));
+  }
+
+  // ========== CERTIFICATS ==========
+
+  static async getConsultationCertificats(consultationId) {
+    const result = await this._authenticatedRequest('GET', apiUrl.consultationCertificats(consultationId));
+    
+    if (result.success && Array.isArray(result.data)) {
+      result.data = result.data.map((certificat) => this._mapCertificatFields(certificat));
+    }
+    
+    return result;
+  }
+
+  static async getConsultationCertificatsPaginated(consultationId, page = 1, limit = 10) {
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    
+    const url = `${apiUrl.consultationCertificatsPaginated(consultationId)}?${params.toString()}`;
+    const result = await this._authenticatedRequest('GET', url);
+    
+    if (result.success && result.data) {
+      if (Array.isArray(result.data.data || result.data.certificats)) {
+        const certificats = result.data.data || result.data.certificats || [];
+        result.data.data = certificats.map((certificat) => this._mapCertificatFields(certificat));
+      }
+    }
+    
+    return result;
+  }
+
+  static async addConsultationCertificat(consultationId, data) {
+    const normalizedData = {
+      type: data.type || '',
+      content: data.content || '',
+      durationDays: data.durationDays || 0,
+      startDate: data.startDate || null,
+      endDate: data.endDate || null,
+    };
+    
+    const result = await this._authenticatedRequest('POST', apiUrl.addConsultationCertificat(consultationId), normalizedData);
+    
+    if (result.success && result.data?.certificat) {
+      result.data.certificat = this._mapCertificatFields(result.data.certificat);
+    }
+    
+    return result;
+  }
+
+  // Mapper les champs consultation API → Frontend
+  static _mapConsultationFields(consultation) {
+    if (!consultation) return consultation;
+    
+    return {
+      id: consultation.id || consultation._id || consultation.uuid,
+      consultationNumber: consultation.consultationNumber || '',
+      patientId: consultation.patient?.id || consultation.patientId || '',
+      patient: consultation.patient || null,
+      medecinId: consultation.medecin?.id || consultation.medecinId || '',
+      medecin: consultation.medecin || null,
+      type: consultation.type || 'PREMIERE_CONSULTATION',
+      status: consultation.status || 'EN_ATTENTE',
+      consultationDate: consultation.consultationDate || consultation.consultation_date || '',
+      reason: consultation.reason || consultation.motif || '',
+      clinicalExamination: consultation.clinicalExamination || consultation.examen_clinique || '',
+      temperature: consultation.temperature ? parseFloat(consultation.temperature) : 0,
+      systolicBloodPressure: consultation.systolicBloodPressure || consultation.tension_systolique || 0,
+      diastolicBloodPressure: consultation.diastolicBloodPressure || consultation.tension_diastolique || 0,
+      heartRate: consultation.heartRate || consultation.frequence_cardiaque || 0,
+      respiratoryRate: consultation.respiratoryRate || consultation.frequence_respiratoire || 0,
+      weight: consultation.weight ? parseFloat(consultation.weight) : 0,
+      height: consultation.height ? parseFloat(consultation.height) : 0,
+      oxygenSaturation: consultation.oxygenSaturation || consultation.saturation_oxygene || 0,
+      diagnostic: consultation.diagnostic || '',
+      differentialDiagnosis: consultation.differentialDiagnosis || consultation.diagnostic_differentiel || '',
+      treatment: consultation.treatment || consultation.traitement || '',
+      recommendations: consultation.recommendations || consultation.recommandations || '',
+      privateNotes: consultation.privateNotes || consultation.notes_privees || '',
+      nextAppointment: consultation.nextAppointment || consultation.prochain_rdv || null,
+      hospitalizationRequired: consultation.hospitalizationRequired || consultation.hospitalisation_requise || false,
+      hospitalizationReason: consultation.hospitalizationReason || consultation.raison_hospitalisation || '',
+      prescriptions: consultation.prescriptions || [],
+      certificats: consultation.certificats || [],
+      createdAt: consultation.createdAt || consultation.created_at || new Date().toISOString(),
+      updatedAt: consultation.updatedAt || consultation.updated_at || new Date().toISOString(),
+      createdBy: consultation.createdBy || null,
+      ...consultation
+    };
+  }
+
+  // Mapper les champs prescription API → Frontend
+  static _mapPrescriptionFields(prescription) {
+    if (!prescription) return prescription;
+    
+    return {
+      id: prescription.id || prescription._id || prescription.uuid,
+      consultationId: prescription.consultation?.id || prescription.consultationId || '',
+      consultation: prescription.consultation || null,
+      type: prescription.type || 'MEDICAMENT',
+      label: prescription.label || prescription.libelle || '',
+      dosage: prescription.dosage || '',
+      duration: prescription.duration || prescription.duree || '',
+      quantity: prescription.quantity || prescription.quantite || 0,
+      instructions: prescription.instructions || prescription.posologie || '',
+      urgent: prescription.urgent || false,
+      completed: prescription.completed || prescription.complete || false,
+      completedAt: prescription.completedAt || prescription.completed_at || null,
+      createdAt: prescription.createdAt || prescription.created_at || new Date().toISOString(),
+      updatedAt: prescription.updatedAt || prescription.updated_at || new Date().toISOString(),
+      ...prescription
+    };
+  }
+
+  // Mapper les champs certificat API → Frontend
+  static _mapCertificatFields(certificat) {
+    if (!certificat) return certificat;
+    
+    return {
+      id: certificat.id || certificat._id || certificat.uuid,
+      consultationId: certificat.consultation?.id || certificat.consultationId || '',
+      consultation: certificat.consultation || null,
+      patientId: certificat.patient?.id || certificat.patientId || '',
+      patient: certificat.patient || null,
+      medecinId: certificat.medecin?.id || certificat.medecinId || '',
+      medecin: certificat.medecin || null,
+      type: certificat.type || '',
+      content: certificat.content || certificat.contenu || '',
+      durationDays: certificat.durationDays || certificat.duree_jours || 0,
+      startDate: certificat.startDate || certificat.date_debut || null,
+      endDate: certificat.endDate || certificat.date_fin || null,
+      createdAt: certificat.createdAt || certificat.created_at || new Date().toISOString(),
+      updatedAt: certificat.updatedAt || certificat.updated_at || new Date().toISOString(),
+      ...certificat
+    };
   }
 
   static async getAppointments(filters = {}) {

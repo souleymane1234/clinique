@@ -228,6 +228,11 @@ const SUB_MENUS = {
   ],
   'Gestion des Patients': [
     { 
+      title: 'Accueil Patient', 
+      path: '/patients/accueil', 
+      icon: 'solar:user-plus-bold' 
+    },
+    { 
       title: 'Dossiers patients', 
       path: '/patients/dossiers', 
       icon: 'solar:user-id-bold' 

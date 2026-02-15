@@ -24,9 +24,10 @@ const navConfig = [
   },
   { 
     title: 'Gestion des Patients',
-    path: routesName.patients,
+    path: routesName.patientsAccueil, // Par défaut, afficher l'accueil patient
     childrenPath: [
       routesName.patients,
+      routesName.patientsAccueil, // Accueil patient (enregistrement, paiement, ticket)
       routesName.patientsDossiers,
       routesName.patientsHistory,
       routesName.patientsAntecedents,
@@ -40,24 +41,23 @@ const navConfig = [
     icon: icon('ic_user'),
     protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER'], // Administrateur, Directeur, Médecin, Infirmier
   },
-  // Masqué temporairement - APIs non intégrées
-  // {
-  //   title: 'Médecins',
-  //   path: routesName.doctorsViewDossiers, // Default sub-route for doctors
-  //   childrenPath: [
-  //     routesName.doctors,
-  //     routesName.doctorsViewDossiers,
-  //     routesName.doctorsCreateConsultation,
-  //     routesName.doctorsDiagnostic,
-  //     routesName.doctorsPrescriptions,
-  //     routesName.doctorsOrdonnances,
-  //     routesName.doctorsHospitalisation,
-  //     routesName.doctorsCertificats,
-  //     routesName.doctorsMessagerie,
-  //   ],
-  //   icon: icon('ic_lock'), // You may want to use a medical icon
-  //   protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN'], // Administrateur, Directeur, Médecin
-  // },
+  {
+    title: 'Médecins',
+    path: routesName.doctorsViewDossiers, // Default sub-route for doctors
+    childrenPath: [
+      routesName.doctors,
+      routesName.doctorsViewDossiers,
+      routesName.doctorsCreateConsultation,
+      routesName.doctorsDiagnostic,
+      routesName.doctorsPrescriptions,
+      routesName.doctorsOrdonnances,
+      routesName.doctorsHospitalisation,
+      routesName.doctorsCertificats,
+      routesName.doctorsMessagerie,
+    ],
+    icon: icon('ic_lock'), // You may want to use a medical icon
+    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN'], // Administrateur, Directeur, Médecin
+  },
   // {
   //   title: 'Infirmiers',
   //   path: routesName.nursesPlanning, // Default sub-route for nurses

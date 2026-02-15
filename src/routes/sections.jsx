@@ -103,7 +103,7 @@ export default function Router() {
       element: (
         <ProtectRoute>
           <DashboardLayout>
-            <Suspense>
+            <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Chargement...</div>}>
               <Outlet />
             </Suspense>
           </DashboardLayout>
@@ -147,6 +147,7 @@ export default function Router() {
         
         // Administration & Paramétrage (Module 4.1)
         { path: routesName.adminUsers, element: <AdministrationView /> },
+        { path: routesName.adminMedecins, element: <AdministrationView /> },
         { path: routesName.adminRolesPermissions, element: <AdministrationView /> },
         { path: routesName.adminConfiguration, element: <AdministrationView /> },
         { path: routesName.adminActivityLog, element: <AdministrationView /> },
@@ -156,11 +157,13 @@ export default function Router() {
         // Gestion des Patients (Module 4.2)
         { path: routesName.patientDetails, element: <PatientDetailsView /> },
         { path: routesName.patients, element: <PatientsView /> },
+        { path: routesName.patientsAccueil, element: <PatientsView /> },
         { path: routesName.patientsDossiers, element: <PatientsView /> },
         { path: routesName.patientsHistory, element: <PatientsView /> },
         { path: routesName.patientsAntecedents, element: <PatientsView /> },
         { path: routesName.patientsDocuments, element: <PatientsView /> },
         { path: routesName.patientsConsultations, element: <PatientsView /> },
+        { path: routesName.patientsCreateConsultation, element: <PatientsView /> },
         { path: routesName.patientsAppointments, element: <PatientsView /> },
         { path: routesName.patientsQueue, element: <PatientsView /> },
         

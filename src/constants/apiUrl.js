@@ -115,6 +115,23 @@ export const apiUrl = {
   deletePatientDocument: (id) => `${base_url}/documents/${id}`,
   
   // Consultations
+  consultations: `${base_url}/consultations`,
+  consultationById: (id) => `${base_url}/consultations/${id}`,
+  consultationComplete: (id) => `${base_url}/consultations/${id}/complete`,
+  updateConsultation: (id) => `${base_url}/consultations/${id}`,
+  deleteConsultation: (id) => `${base_url}/consultations/${id}`,
+  consultationStatus: (id) => `${base_url}/consultations/${id}/status`,
+  consultationsPaginated: `${base_url}/consultations/paginated`,
+  // Prescriptions
+  consultationPrescriptions: (id) => `${base_url}/consultations/${id}/prescriptions`,
+  consultationPrescriptionsPaginated: (id) => `${base_url}/consultations/${id}/prescriptions/paginated`,
+  addConsultationPrescription: (id) => `${base_url}/consultations/${id}/prescriptions`,
+  deletePrescription: (prescriptionId) => `${base_url}/consultations/prescriptions/${prescriptionId}`,
+  // Certificats
+  consultationCertificats: (id) => `${base_url}/consultations/${id}/certificats`,
+  consultationCertificatsPaginated: (id) => `${base_url}/consultations/${id}/certificats/paginated`,
+  addConsultationCertificat: (id) => `${base_url}/consultations/${id}/certificats`,
+  // Legacy (pour compatibilité)
   patientConsultations: `${base_url}/consultation`,
   
   // Historique Médical
@@ -177,6 +194,13 @@ export const apiUrl = {
   assignRoleToModule: (moduleId, roleId) => `${base_url}/module-permission/${moduleId}/roles/${roleId}`,
   removeRoleFromModule: (moduleId, roleId) => `${base_url}/module-permission/${moduleId}/roles/${roleId}`,
   moduleRoles: (moduleId) => `${base_url}/module-permission/${moduleId}/roles`,
+  
+  // Médecins
+  medecins: `${base_url}/medecin`,
+  medecinById: (id) => `${base_url}/medecin/${id}`,
+  updateMedecin: (id) => `${base_url}/medecin/${id}`,
+  deleteMedecin: (id) => `${base_url}/medecin/${id}`,
+  medecinsPaginated: `${base_url}/medecin/paginated`,
 };
 
 export const apiUrlAsset = {
