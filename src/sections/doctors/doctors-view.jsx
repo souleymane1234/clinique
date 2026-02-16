@@ -11,7 +11,9 @@ import DoctorCertificatsView from './doctor-certificats/doctor-certificats-view'
 // Import des vues
 import DoctorViewDossiersView from './doctor-view-dossiers/doctor-view-dossiers-view';
 import DoctorPrescriptionsView from './doctor-prescriptions/doctor-prescriptions-view';
+import DoctorMyAppointmentsView from './doctor-my-appointments/doctor-my-appointments-view';
 import DoctorHospitalisationView from './doctor-hospitalisation/doctor-hospitalisation-view';
+import DoctorMyConsultationsView from './doctor-my-consultations/doctor-my-consultations-view';
 import DoctorCreateConsultationView from './doctor-create-consultation/doctor-create-consultation-view';
 
 // ----------------------------------------------------------------------
@@ -22,6 +24,12 @@ export default function DoctorsView() {
   // Déterminer quelle vue afficher selon la route
   const renderContent = () => {
     // Vérifier les routes les plus spécifiques en premier
+    if (pathname.includes('/doctors/mes-consultations')) {
+      return <DoctorMyConsultationsView />;
+    }
+    if (pathname.includes('/doctors/mes-rendez-vous')) {
+      return <DoctorMyAppointmentsView />;
+    }
     if (pathname.includes('/doctors/view-dossiers')) {
       return <DoctorViewDossiersView />;
     }

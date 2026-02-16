@@ -171,6 +171,8 @@ export default function Router() {
         { path: routesName.doctorsConsultationDetails, element: <DoctorConsultationDetailsView /> },
         { path: routesName.doctors, element: <DoctorsView /> },
         { path: routesName.doctorsViewDossiers, element: <DoctorsView /> },
+        { path: routesName.doctorsMyConsultations, element: <DoctorsView /> },
+        { path: routesName.doctorsMyAppointments, element: <DoctorsView /> },
         { path: routesName.doctorsCreateConsultation, element: <DoctorsView /> },
         { path: routesName.doctorsDiagnostic, element: <DoctorsView /> },
         { path: routesName.doctorsPrescriptions, element: <DoctorsView /> },

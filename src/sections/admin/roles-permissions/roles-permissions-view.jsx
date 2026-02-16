@@ -30,6 +30,7 @@ import {
   IconButton,
   FormControl,
   TableContainer,
+  TablePagination,
   AccordionSummary,
   AccordionDetails,
   FormControlLabel,
@@ -78,10 +79,14 @@ export default function RolesPermissionsView() {
   // Modules de permissions
   const [modules, setModules] = useState([]);
   const [loadingModules, setLoadingModules] = useState(false);
+  const [modulesPage, setModulesPage] = useState(0);
+  const [modulesRowsPerPage, setModulesRowsPerPage] = useState(20);
 
   // Toutes les permissions
   const [allPermissions, setAllPermissions] = useState([]);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [permissionsPage, setPermissionsPage] = useState(0);
+  const [permissionsRowsPerPage, setPermissionsRowsPerPage] = useState(20);
 
   // Permissions par module
   const [permissionsByModule, setPermissionsByModule] = useState({});
@@ -1025,7 +1030,9 @@ export default function RolesPermissionsView() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {modules.map((module) => (
+                  {modules
+                    .slice(modulesPage * modulesRowsPerPage, modulesPage * modulesRowsPerPage + modulesRowsPerPage)
+                    .map((module) => (
                     <TableRow key={module.id}>
                       <TableCell>
                         <Typography variant="subtitle2">{module.name}</Typography>
@@ -1103,11 +1110,19 @@ export default function RolesPermissionsView() {
           )}
 
           {modules.length > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {modules.length} module(s) affiché(s)
-              </Typography>
-            </Box>
+            <TablePagination
+                component="div"
+                count={modules.length}
+                page={modulesPage}
+                onPageChange={(e, newPage) => setModulesPage(newPage)}
+                rowsPerPage={modulesRowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setModulesRowsPerPage(parseInt(e.target.value, 10));
+                  setModulesPage(0);
+                }}
+                labelRowsPerPage="Lignes par page:"
+                rowsPerPageOptions={[10, 20, 50, 100]}
+              />
           )}
         </Stack>
       </Card>
@@ -1170,7 +1185,9 @@ export default function RolesPermissionsView() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {allPermissions.map((permission) => {
+                  {allPermissions
+                    .slice(permissionsPage * permissionsRowsPerPage, permissionsPage * permissionsRowsPerPage + permissionsRowsPerPage)
+                    .map((permission) => {
                     console.log('Rendering permission:', permission);
     return (
                       <TableRow key={permission.id || permission.slug}>
@@ -1264,11 +1281,19 @@ export default function RolesPermissionsView() {
           )}
 
           {allPermissions.length > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {allPermissions.length} permission(s) affichée(s)
-              </Typography>
-            </Box>
+            <TablePagination
+              component="div"
+              count={allPermissions.length}
+              page={permissionsPage}
+              onPageChange={(e, newPage) => setPermissionsPage(newPage)}
+              rowsPerPage={permissionsRowsPerPage}
+              onRowsPerPageChange={(e) => {
+                setPermissionsRowsPerPage(parseInt(e.target.value, 10));
+                setPermissionsPage(0);
+              }}
+              labelRowsPerPage="Lignes par page:"
+              rowsPerPageOptions={[10, 20, 50, 100]}
+            />
           )}
         </Stack>
       </Card>

@@ -43,12 +43,12 @@ export default function LaboratoryView() {
       return <LaboratoryStatistiquesView />;
     }
     
-    // Par défaut (pour /laboratory), afficher la vue des prescriptions
+    // Par défaut (pour /laboratory), afficher la vue des analyses
     if (pathname === '/laboratory' || pathname.startsWith('/laboratory')) {
-      return <LaboratoryPrescriptionsView />;
+      return <LaboratoryAnalysesView />;
     }
     
-    return <LaboratoryPrescriptionsView />;
+    return <LaboratoryAnalysesView />;
   };
 
   return (

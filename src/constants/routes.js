@@ -102,6 +102,8 @@ export const routesName = {
   // Médecins Management (Module 4.3)
   doctors: '/doctors',
   doctorsViewDossiers: '/doctors/view-dossiers',
+  doctorsMyConsultations: '/doctors/mes-consultations',
+  doctorsMyAppointments: '/doctors/mes-rendez-vous',
   doctorsCreateConsultation: '/doctors/create-consultation',
   doctorsConsultationDetails: '/doctors/consultations/:id',
   doctorsDiagnostic: '/doctors/diagnostic',

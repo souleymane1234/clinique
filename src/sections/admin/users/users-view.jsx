@@ -94,24 +94,75 @@ export default function UsersView() {
   const [statusDialog, setStatusDialog] = useState({ open: false, user: null, loading: false });
   const [roleDialog, setRoleDialog] = useState({ open: false, user: null, newRole: '', loading: false });
   const [passwordDialog, setPasswordDialog] = useState({ open: false, user: null, newPassword: '', showPassword: false, loading: false });
+  const [createUserDialog, setCreateUserDialog] = useState({ open: false, loading: false });
+  const [roles, setRoles] = useState([]);
+  const [createUserForm, setCreateUserForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    password: '',
+    role_id: '',
+  });
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const filters = {};
-      if (search) filters.search = search;
-      if (roleFilter) filters.role = roleFilter;
-      if (isSuspendedFilter !== '') {
-        filters.isSuspended = isSuspendedFilter === 'true';
+      const result = await ConsumApi.getUsersNew();
+      console.log('loadUsers - result from getUsersNew:', result);
+      
+      // Traiter la réponse directement
+      let usersList = [];
+      if (result && result.success) {
+        if (Array.isArray(result.data)) {
+          usersList = result.data;
+        } else if (result.data && Array.isArray(result.data.data)) {
+          usersList = result.data.data;
+        } else if (result.data && Array.isArray(result.data.users)) {
+          usersList = result.data.users;
+        }
+      } else if (Array.isArray(result)) {
+        // Si result est directement un tableau (cas où ApiClient retourne directement le tableau)
+        usersList = result;
+      } else if (result && Array.isArray(result.data)) {
+        usersList = result.data;
       }
-
-      const result = await ConsumApi.getUsers(filters);
-      const processed = showApiResponse(result, {
-        successTitle: 'Utilisateurs chargés',
-        errorTitle: 'Erreur de chargement',
-      });
-      if (processed.success) {
-        setUsers(Array.isArray(processed.data) ? processed.data : []);
+      
+      console.log('loadUsers - usersList before filters:', usersList.length, usersList);
+      
+      if (usersList.length > 0 || result) {
+        // Appliquer les filtres côté client si nécessaire
+        if (search) {
+          const searchLower = search.toLowerCase();
+          usersList = usersList.filter((user) => {
+            const firstName = (user.first_name || user.firstName || '').toLowerCase();
+            const lastName = (user.last_name || user.lastName || '').toLowerCase();
+            const email = (user.email || '').toLowerCase();
+            const phone = (user.phone || user.phoneNumber || '').toLowerCase();
+            return firstName.includes(searchLower) || 
+                   lastName.includes(searchLower) || 
+                   email.includes(searchLower) || 
+                   phone.includes(searchLower);
+          });
+        }
+        if (roleFilter) {
+          usersList = usersList.filter((user) => {
+            const userRole = user.role?.id || user.role?.name || user.role_id || user.role;
+            return userRole === roleFilter;
+          });
+        }
+        if (isSuspendedFilter !== '') {
+          const isSuspended = isSuspendedFilter === 'true';
+          usersList = usersList.filter((user) => {
+            const userSuspended = user.is_locked || user.isLocked || user.isSuspended || false;
+            return userSuspended === isSuspended;
+          });
+        }
+        console.log('loadUsers - usersList after filters:', usersList.length, usersList);
+        setUsers(usersList);
+      } else {
+        console.warn('loadUsers - No users found or invalid response:', result);
+        // Même si on n'a pas de données, on définit quand même un tableau vide
+        setUsers([]);
       }
     } catch (error) {
       console.error('Error loading users:', error);
@@ -122,14 +173,50 @@ export default function UsersView() {
     }
   }, [search, roleFilter, isSuspendedFilter]);
 
-  // Charger les utilisateurs avec debounce pour éviter trop de requêtes
+  // Charger les rôles disponibles
+  const loadRoles = useCallback(async () => {
+    try {
+      const result = await ConsumApi.getRoles();
+      if (result && result.success) {
+        let rolesList = [];
+        if (Array.isArray(result.data)) {
+          rolesList = result.data;
+        } else if (result.data && Array.isArray(result.data.roles)) {
+          rolesList = result.data.roles;
+        } else if (result.data && Array.isArray(result.data.data)) {
+          rolesList = result.data.data;
+        }
+        setRoles(rolesList);
+      } else if (Array.isArray(result)) {
+        setRoles(result);
+      }
+    } catch (error) {
+      console.error('Error loading roles:', error);
+      // En cas d'erreur, utiliser une liste de rôles par défaut
+      setRoles([
+        { id: 'DIRECTEUR', name: 'Directeur' },
+        { id: 'RH', name: 'RH' },
+        { id: 'COMPTABLE', name: 'Comptable' },
+        { id: 'ACHAT', name: 'Achat' },
+        { id: 'ASSURANCE', name: 'Assurance' },
+        { id: 'LABORANTIN', name: 'Laborantin' },
+        { id: 'MEDECIN', name: 'Médecin' },
+        { id: 'INFIRMIER', name: 'Infirmier' },
+        { id: 'AIDE_SOIGNANT', name: 'Aide-soignant' },
+        { id: 'ADMINISTRATEUR', name: 'Administrateur' },
+      ]);
+    }
+  }, []);
+
+  // Charger les utilisateurs au montage et quand les filtres changent
   useEffect(() => {
+    loadRoles();
     const timer = setTimeout(() => {
       loadUsers();
     }, search ? 500 : 0); // Debounce de 500ms seulement pour la recherche textuelle
     
     return () => clearTimeout(timer);
-  }, [loadUsers]);
+  }, [search, roleFilter, isSuspendedFilter, loadUsers, loadRoles]);
 
   const handleSearch = () => {
     setPage(0);
@@ -152,14 +239,14 @@ export default function UsersView() {
 
     setStatusDialog({ ...statusDialog, loading: true });
     try {
-      const newStatus = !statusDialog.user.isSuspended;
-      const result = await ConsumApi.updateUserStatus(statusDialog.user.id, newStatus);
+      const result = await ConsumApi.toggleUserLock(statusDialog.user.id);
       const processed = showApiResponse(result, {
         successTitle: 'Statut modifié',
         errorTitle: 'Erreur de modification',
       });
       if (processed.success) {
-        showSuccess('Succès', `Utilisateur ${newStatus ? 'suspendu' : 'réactivé'} avec succès`);
+        const newStatus = processed.data?.is_locked || processed.data?.isLocked || false;
+        showSuccess('Succès', `Utilisateur ${newStatus ? 'bloqué' : 'débloqué'} avec succès`);
         setStatusDialog({ open: false, user: null, loading: false });
         loadUsers();
       }
@@ -180,7 +267,12 @@ export default function UsersView() {
 
     setRoleDialog({ ...roleDialog, loading: true });
     try {
-      const result = await ConsumApi.updateUserRole(roleDialog.user.id, roleDialog.newRole);
+      // Si newRole est un ID de rôle, l'utiliser directement, sinon chercher l'ID
+      const roleId = typeof roleDialog.newRole === 'string' && roleDialog.newRole.length > 20 
+        ? roleDialog.newRole 
+        : roleDialog.newRole; // Supposons que c'est déjà un ID ou qu'il faut le convertir
+      
+      const result = await ConsumApi.updateUserNew(roleDialog.user.id, { role_id: roleId });
       const processed = showApiResponse(result, {
         successTitle: 'Rôle modifié',
         errorTitle: 'Erreur de modification',
@@ -210,7 +302,7 @@ export default function UsersView() {
 
     setPasswordDialog({ ...passwordDialog, loading: true });
     try {
-      const result = await ConsumApi.changeUserPassword(passwordDialog.user.id, passwordDialog.newPassword);
+      const result = await ConsumApi.changeUserPasswordNew(passwordDialog.user.id, passwordDialog.newPassword);
       const processed = showApiResponse(result, {
         successTitle: 'Mot de passe modifié',
         errorTitle: 'Erreur de modification',
@@ -227,6 +319,65 @@ export default function UsersView() {
     }
   };
 
+  const openCreateUserDialog = () => {
+    setCreateUserForm({
+      first_name: '',
+      last_name: '',
+      email: '',
+      password: '',
+      role_id: '',
+    });
+    setCreateUserDialog({ open: true, loading: false });
+  };
+
+  const handleCloseCreateUserDialog = () => {
+    setCreateUserDialog({ open: false, loading: false });
+    setCreateUserForm({
+      first_name: '',
+      last_name: '',
+      email: '',
+      password: '',
+      role_id: '',
+    });
+  };
+
+  const handleCreateUser = async () => {
+    if (!createUserForm.first_name.trim() || !createUserForm.last_name.trim() || !createUserForm.email.trim() || !createUserForm.password.trim() || !createUserForm.role_id) {
+      showError('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (createUserForm.password.length < 8) {
+      showError('Erreur', 'Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
+
+    setCreateUserDialog({ open: true, loading: true });
+    try {
+      const result = await ConsumApi.createUserNew({
+        first_name: createUserForm.first_name.trim(),
+        last_name: createUserForm.last_name.trim(),
+        email: createUserForm.email.trim(),
+        password: createUserForm.password,
+        role_id: createUserForm.role_id,
+      });
+      const processed = showApiResponse(result, {
+        successTitle: 'Utilisateur créé',
+        errorTitle: 'Erreur de création',
+      });
+      if (processed.success) {
+        showSuccess('Succès', 'Utilisateur créé avec succès');
+        handleCloseCreateUserDialog();
+        loadUsers();
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      showError('Erreur', 'Impossible de créer l\'utilisateur');
+    } finally {
+      setCreateUserDialog({ open: true, loading: false });
+    }
+  };
+
   return (
     <>
       <Helmet>
@@ -237,11 +388,20 @@ export default function UsersView() {
 
       <Container maxWidth="xl">
         <Stack spacing={3}>
-          <Box>
-            <Typography variant="h4">Gestion des Utilisateurs</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Gérez tous les utilisateurs du système
-            </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h4">Gestion des Utilisateurs</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Gérez tous les utilisateurs du système
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<Iconify icon="eva:plus-fill" />}
+              onClick={openCreateUserDialog}
+            >
+              Créer un utilisateur
+            </Button>
           </Box>
 
           {/* Filters */}
@@ -363,7 +523,7 @@ export default function UsersView() {
                             </TableCell>
                             <TableCell>
                               <Typography variant="subtitle2" noWrap>
-                                {user.firstName || ''} {user.lastName || ''}
+                                {user.first_name || user.firstName || ''} {user.last_name || user.lastName || ''}
                               </Typography>
                             </TableCell>
                             <TableCell>
@@ -373,8 +533,8 @@ export default function UsersView() {
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={ROLE_LABELS[user.role] || user.role || 'N/A'}
-                                color={ROLE_COLORS[user.role] || 'default'}
+                                label={ROLE_LABELS[user.role?.name || user.role?.id || user.role_id || user.role] || user.role?.name || user.role || 'N/A'}
+                                color={ROLE_COLORS[user.role?.name || user.role?.id || user.role_id || user.role] || 'default'}
                                 size="small"
                               />
                             </TableCell>
@@ -389,13 +549,13 @@ export default function UsersView() {
                                     <Iconify icon="eva:eye-fill" width={18} />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title={user.isSuspended ? 'Réactiver' : 'Suspendre'}>
+                                <Tooltip title={(user.is_locked || user.isLocked || user.isSuspended) ? 'Débloquer' : 'Bloquer'}>
                                   <IconButton
                                     size="small"
                                     onClick={() => openStatusDialog(user)}
-                                    color={user.isSuspended ? 'success' : 'warning'}
+                                    color={(user.is_locked || user.isLocked || user.isSuspended) ? 'success' : 'warning'}
                                   >
-                                    <Iconify icon={user.isSuspended ? 'solar:user-check-bold' : 'solar:user-block-bold'} width={18} />
+                                    <Iconify icon={(user.is_locked || user.isLocked || user.isSuspended) ? 'solar:user-check-bold' : 'solar:user-block-bold'} width={18} />
                                   </IconButton>
                                 </Tooltip>
                                 {user.role !== 'SUPERADMIN' && (
@@ -447,13 +607,13 @@ export default function UsersView() {
       {/* Status Dialog */}
       <Dialog open={statusDialog.open} onClose={() => setStatusDialog({ open: false, user: null, loading: false })} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {statusDialog.user?.isSuspended ? 'Réactiver' : 'Suspendre'} l&apos;utilisateur
+          {(statusDialog.user?.is_locked || statusDialog.user?.isLocked || statusDialog.user?.isSuspended) ? 'Débloquer' : 'Bloquer'} l&apos;utilisateur
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Êtes-vous sûr de vouloir {statusDialog.user?.isSuspended ? 'réactiver' : 'suspendre'} l&apos;utilisateur{' '}
+            Êtes-vous sûr de vouloir {(statusDialog.user?.is_locked || statusDialog.user?.isLocked || statusDialog.user?.isSuspended) ? 'débloquer' : 'bloquer'} l&apos;utilisateur{' '}
             <strong>
-              {statusDialog.user?.firstName} {statusDialog.user?.lastName}
+              {statusDialog.user?.first_name || statusDialog.user?.firstName} {statusDialog.user?.last_name || statusDialog.user?.lastName}
             </strong>
             ?
           </Typography>
@@ -462,11 +622,11 @@ export default function UsersView() {
           <Button onClick={() => setStatusDialog({ open: false, user: null, loading: false })}>Annuler</Button>
           <LoadingButton
             variant="contained"
-            color={statusDialog.user?.isSuspended ? 'success' : 'warning'}
+            color={(statusDialog.user?.is_locked || statusDialog.user?.isLocked || statusDialog.user?.isSuspended) ? 'success' : 'warning'}
             onClick={handleToggleStatus}
             loading={statusDialog.loading}
           >
-            {statusDialog.user?.isSuspended ? 'Réactiver' : 'Suspendre'}
+            {(statusDialog.user?.is_locked || statusDialog.user?.isLocked || statusDialog.user?.isSuspended) ? 'Débloquer' : 'Bloquer'}
           </LoadingButton>
         </DialogActions>
       </Dialog>
@@ -512,6 +672,84 @@ export default function UsersView() {
             disabled={!roleDialog.newRole || roleDialog.newRole === roleDialog.user?.role}
           >
             Modifier
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={createUserDialog.open} onClose={handleCloseCreateUserDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Créer un utilisateur</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ pt: 2 }}>
+            <TextField
+              fullWidth
+              label="Prénom *"
+              value={createUserForm.first_name}
+              onChange={(e) => setCreateUserForm({ ...createUserForm, first_name: e.target.value })}
+              required
+            />
+            <TextField
+              fullWidth
+              label="Nom *"
+              value={createUserForm.last_name}
+              onChange={(e) => setCreateUserForm({ ...createUserForm, last_name: e.target.value })}
+              required
+            />
+            <TextField
+              fullWidth
+              label="Email *"
+              type="email"
+              value={createUserForm.email}
+              onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+              required
+            />
+            <TextField
+              fullWidth
+              label="Mot de passe *"
+              type="password"
+              value={createUserForm.password}
+              onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+              required
+              helperText="Le mot de passe doit contenir au moins 8 caractères"
+            />
+            <FormControl fullWidth required>
+              <InputLabel>Rôle *</InputLabel>
+              <Select
+                value={createUserForm.role_id}
+                label="Rôle *"
+                onChange={(e) => setCreateUserForm({ ...createUserForm, role_id: e.target.value })}
+              >
+                {roles.length === 0 ? (
+                  <MenuItem value="" disabled>
+                    Chargement des rôles...
+                  </MenuItem>
+                ) : (
+                  roles.map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      {role.name || role.nom_role || role.id}
+                    </MenuItem>
+                  ))
+                )}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreateUserDialog}>Annuler</Button>
+          <LoadingButton
+            variant="contained"
+            onClick={handleCreateUser}
+            loading={createUserDialog.loading}
+            disabled={
+              !createUserForm.first_name.trim() ||
+              !createUserForm.last_name.trim() ||
+              !createUserForm.email.trim() ||
+              !createUserForm.password.trim() ||
+              createUserForm.password.length < 8 ||
+              !createUserForm.role_id
+            }
+          >
+            Créer
           </LoadingButton>
         </DialogActions>
       </Dialog>

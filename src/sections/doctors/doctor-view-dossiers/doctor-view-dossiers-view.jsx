@@ -38,6 +38,7 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDateTime } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
+import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
@@ -68,27 +69,91 @@ export default function DoctorViewDossiersView() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('EN_ATTENTE'); // Par défaut, afficher les consultations en attente
+  const [statusFilter, setStatusFilter] = useState(''); // Par défaut, afficher toutes les consultations (EN_ATTENTE et EN_COURS)
   const [detailsDialog, setDetailsDialog] = useState({ open: false, consultation: null, loading: false });
+  const [currentMedecinId, setCurrentMedecinId] = useState(null);
+
+  // Récupérer l'ID du médecin connecté
+  useEffect(() => {
+    const loadCurrentMedecin = async () => {
+      try {
+        // Récupérer les informations de l'utilisateur connecté
+        const adminInfo = AdminStorage.getInfoAdmin();
+        console.log('Admin info:', adminInfo);
+        
+        // Si l'utilisateur a un ID de médecin directement
+        if (adminInfo.medecinId || adminInfo.medecin?.id) {
+          setCurrentMedecinId(adminInfo.medecinId || adminInfo.medecin?.id);
+          return;
+        }
+        
+        // Sinon, essayer de récupérer l'utilisateur depuis l'API
+        const userResult = await ConsumApi.getCurrentUser();
+        if (userResult.success && userResult.data) {
+          const userData = userResult.data;
+          // Chercher l'ID du médecin dans les données utilisateur
+          if (userData.medecinId || userData.medecin?.id) {
+            setCurrentMedecinId(userData.medecinId || userData.medecin?.id);
+          } else if (userData.id) {
+            // Si l'utilisateur est un médecin, son ID peut être l'ID du médecin
+            // Essayer de trouver le médecin par l'ID utilisateur
+            const medecinsResult = await ConsumApi.getMedecins({});
+            if (medecinsResult.success) {
+              const medecins = Array.isArray(medecinsResult.data) ? medecinsResult.data : [];
+              const medecin = medecins.find((m) => m.user?.id === userData.id || m.userId === userData.id);
+              if (medecin) {
+                setCurrentMedecinId(medecin.id);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading current medecin:', error);
+      }
+    };
+    
+    loadCurrentMedecin();
+  }, []);
 
   const loadConsultations = useCallback(async () => {
+    if (!currentMedecinId) {
+      console.log('Waiting for medecin ID...');
+      return;
+    }
+
     setLoading(true);
     try {
       const filters = {
         page: page + 1,
         limit: rowsPerPage,
-        status: statusFilter,
+        medecinId: currentMedecinId, // Filtrer par médecin connecté
       };
 
-      if (search) {
-        // La recherche se fera côté serveur si l'API le supporte
-        // Sinon, on peut filtrer côté client
+      // Si un statut est sélectionné, l'ajouter au filtre
+      if (statusFilter) {
+        filters.status = statusFilter;
+      } else {
+        // Si aucun statut n'est sélectionné, charger EN_ATTENTE et EN_COURS
+        // On va charger toutes les consultations et filtrer côté client
       }
 
       const result = await ConsumApi.getConsultationsPaginated(page + 1, rowsPerPage, filters);
 
       if (result.success) {
-        const consultationsData = result.data?.data || result.data?.consultations || [];
+        let consultationsData = result.data?.data || result.data?.consultations || [];
+        
+        // Si aucun filtre de statut, filtrer pour ne garder que EN_ATTENTE et EN_COURS
+        if (!statusFilter) {
+          consultationsData = consultationsData.filter(
+            (c) => c.status === 'EN_ATTENTE' || c.status === 'EN_COURS'
+          );
+        }
+        
+        // Filtrer aussi par médecin côté client pour être sûr
+        consultationsData = consultationsData.filter(
+          (c) => c.medecinId === currentMedecinId || c.medecin?.id === currentMedecinId
+        );
+        
         setConsultations(consultationsData);
         setTotal(result.data?.pagination?.total || result.data?.total || consultationsData.length);
       } else {
@@ -104,19 +169,21 @@ export default function DoctorViewDossiersView() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, statusFilter, search]);
+  }, [page, rowsPerPage, statusFilter, search, currentMedecinId]);
 
   useEffect(() => {
-    loadConsultations();
-    // Recharger toutes les 30 secondes pour les consultations en attente
-    if (statusFilter === 'EN_ATTENTE') {
-      const interval = setInterval(() => {
-        loadConsultations();
-      }, 30000);
-      return () => clearInterval(interval);
+    if (currentMedecinId) {
+      loadConsultations();
+      // Recharger toutes les 30 secondes pour les consultations en attente ou en cours
+      if (!statusFilter || statusFilter === 'EN_ATTENTE' || statusFilter === 'EN_COURS') {
+        const interval = setInterval(() => {
+          loadConsultations();
+        }, 30000);
+        return () => clearInterval(interval);
+      }
     }
     return undefined;
-  }, [loadConsultations, statusFilter]);
+  }, [loadConsultations, statusFilter, currentMedecinId]);
 
   const handleViewDetails = async (consultation) => {
     setDetailsDialog({ open: true, consultation, loading: true });
@@ -201,7 +268,7 @@ export default function DoctorViewDossiersView() {
                   setPage(0);
                 }}
               >
-                <MenuItem value="">Tous</MenuItem>
+                <MenuItem value="">Toutes (En attente + En cours)</MenuItem>
                 <MenuItem value="EN_ATTENTE">En attente</MenuItem>
                 <MenuItem value="EN_COURS">En cours</MenuItem>
                 <MenuItem value="TERMINEE">Terminée</MenuItem>

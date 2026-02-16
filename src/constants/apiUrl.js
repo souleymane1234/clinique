@@ -10,13 +10,21 @@ export const apiUrl = {
   getCurrentUser: `${base_url}/auth`,
   resetPassword: `${base_url}/reset-passord`,
 
-  // Users
+  // Users (Legacy - /users)
   users: `${base_url}/users`,
   getUserById: (userId) => `${base_url}/users/${userId}`,
   updateUser: (id) => `${base_url}/users/${id}`,
   deleteUser: (id) => `${base_url}/users/${id}`,
   suspendUser: (id) => `${base_url}/users/${id}/suspend`,
   changeUserPassword: (id) => `${base_url}/users/${id}/change-password`,
+
+  // User (New API - /user)
+  user: `${base_url}/user`,
+  userById: (id) => `${base_url}/user/${id}`,
+  updateUserNew: (id) => `${base_url}/user/${id}`,
+  deleteUserNew: (id) => `${base_url}/user/${id}`,
+  toggleUserLock: (id) => `${base_url}/user/${id}/toggle-lock`,
+  changeUserPasswordNew: (id) => `${base_url}/user/${id}/password`,
 
   // Clients
   clients: `${base_url}/clients`,
@@ -73,6 +81,34 @@ export const apiUrl = {
   rendezVousById: (id) => `${base_url}/rendez-vous/${id}`,
   reprogrammerRendezVous: (id) => `${base_url}/rendez-vous/${id}/reprogrammer`,
   prendreRendezVous: (id) => `${base_url}/rendez-vous/${id}/prendre`,
+  // Appointments (nouvelle API)
+  appointments: `${base_url}/appointments`,
+  appointmentById: (id) => `${base_url}/appointments/${id}`,
+  appointmentsPaginated: `${base_url}/appointments/paginated`,
+  appointmentsByMedecin: (medecinId) => `${base_url}/appointments/medecin/${medecinId}`,
+  confirmAppointment: (id) => `${base_url}/appointments/${id}/confirmer`,
+  cancelAppointment: (id) => `${base_url}/appointments/${id}/annuler`,
+  
+  // Laboratory
+  laboratoryAnalyses: `${base_url}/laboratory/analyses`,
+  laboratoryAnalysisById: (id) => `${base_url}/laboratory/analyses/${id}`,
+  laboratoryAnalysesPaginated: `${base_url}/laboratory/analyses/paginated`,
+  laboratoryAnalysesStatistics: `${base_url}/laboratory/analyses/statistics`,
+  laboratoryAnalysisComplete: (id) => `${base_url}/laboratory/analyses/${id}/complete`,
+  laboratoryAnalysisResults: (id) => `${base_url}/laboratory/analyses/${id}/results`,
+  addLaboratoryAnalysisResult: (id) => `${base_url}/laboratory/analyses/${id}/results`,
+  laboratoryAnalysisReceive: (id) => `${base_url}/laboratory/analyses/${id}/receptionner`,
+  laboratoryAnalysisPerform: (id) => `${base_url}/laboratory/analyses/${id}/realiser`,
+  laboratoryAnalysisValidate: (id) => `${base_url}/laboratory/analyses/${id}/valider`,
+  // Laboratory Results
+  laboratoryResultById: (id) => `${base_url}/laboratory/results/${id}`,
+  // Laboratory Consommables
+  laboratoryConsommables: `${base_url}/laboratory/consommables`,
+  laboratoryConsommableById: (id) => `${base_url}/laboratory/consommables/${id}`,
+  laboratoryConsommablesPaginated: `${base_url}/laboratory/consommables/paginated`,
+  laboratoryConsommablesRupture: `${base_url}/laboratory/consommables/rupture`,
+  laboratoryConsommablesPerimes: `${base_url}/laboratory/consommables/perimes`,
+  laboratoryConsommablesMouvements: `${base_url}/laboratory/consommables/mouvements`,
   
   // Patients
   patients: `${base_url}/patient`,

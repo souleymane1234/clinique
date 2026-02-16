@@ -43,16 +43,11 @@ const navConfig = [
   },
   {
     title: 'Médecins',
-    path: routesName.doctorsViewDossiers, // Default sub-route for doctors
+    path: routesName.doctorsMyConsultations, // Default sub-route for doctors
     childrenPath: [
       routesName.doctors,
-      routesName.doctorsViewDossiers,
-      routesName.doctorsCreateConsultation,
-      routesName.doctorsDiagnostic,
-      routesName.doctorsPrescriptions,
-      routesName.doctorsOrdonnances,
-      routesName.doctorsHospitalisation,
-      routesName.doctorsCertificats,
+      routesName.doctorsMyConsultations,
+      routesName.doctorsMyAppointments,
       routesName.doctorsMessagerie,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
@@ -87,22 +82,16 @@ const navConfig = [
   //   icon: icon('ic_user'), // You may want to use a medical icon
   //   protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER', 'AIDE_SOIGNANTE'], // Administrateur, Directeur, Infirmier, Aide-soignante
   // },
-  // {
-  //   title: 'Laboratoire',
-  //   path: routesName.laboratoryPrescriptions, // Default sub-route for laboratory
-  //   childrenPath: [
-  //     routesName.laboratory,
-  //     routesName.laboratoryPrescriptions,
-  //     routesName.laboratoryAnalyses,
-  //     routesName.laboratoryResultats,
-  //     routesName.laboratoryTransmission,
-  //     routesName.laboratoryImpression,
-  //     routesName.laboratoryConsommables,
-  //     routesName.laboratoryStatistiques,
-  //   ],
-  //   icon: icon('ic_lock'), // You may want to use a medical icon
-  //   protected: ['ADMIN', 'DIRECTEUR', 'LABORATOIRE', 'MEDECIN'], // Administrateur, Directeur, Laboratoire, Médecin
-  // },
+  {
+    title: 'Laboratoire',
+    path: routesName.laboratoryAnalyses, // Default sub-route for laboratory
+    childrenPath: [
+      routesName.laboratory,
+      routesName.laboratoryAnalyses,
+    ],
+    icon: icon('ic_lock'), // You may want to use a medical icon
+    protected: ['ADMIN', 'DIRECTEUR', 'LABORATOIRE', 'MEDECIN'], // Administrateur, Directeur, Laboratoire, Médecin
+  },
   // {
   //   title: 'Pharmacie',
   //   path: routesName.pharmacyStocks, // Default sub-route for pharmacy

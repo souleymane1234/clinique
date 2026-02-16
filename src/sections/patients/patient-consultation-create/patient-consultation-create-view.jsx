@@ -76,7 +76,10 @@ export default function PatientConsultationCreateView() {
   const [medecins, setMedecins] = useState([]);
   const [consultations, setConsultations] = useState([]);
   const [selectedConsultation, setSelectedConsultation] = useState(null);
-  const [detailsDialog, setDetailsDialog] = useState({ open: false, loading: false });
+  const [detailsDialog, setDetailsDialog] = useState({ open: false, loading: false, editing: false });
+  const [editForm, setEditForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
     patientId: patientId || '',
     medecinId: '',
@@ -190,15 +193,47 @@ export default function PatientConsultationCreateView() {
       setLoadingConsultations(true);
       try {
         const result = await ConsumApi.getConsultations({ patientId });
+        
+        console.log('=== DEBUG CONSULTATIONS ===');
+        console.log('Full result:', JSON.stringify(result, null, 2));
+        console.log('result.success:', result.success);
+        console.log('result.data:', result.data);
+        console.log('result.data type:', typeof result.data);
+        console.log('result.data is array:', Array.isArray(result.data));
+        if (result.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+          console.log('result.data keys:', Object.keys(result.data));
+        }
+        console.log('===========================');
+        
         if (result.success) {
-          const consultationsList = Array.isArray(result.data) ? result.data : [];
+          let consultationsList = [];
+          
+          if (Array.isArray(result.data)) {
+            consultationsList = result.data;
+            console.log('Using direct array, length:', consultationsList.length);
+          } else if (result.data && Array.isArray(result.data.data)) {
+            // Format paginé
+            consultationsList = result.data.data;
+            console.log('Using paginated format, length:', consultationsList.length);
+          } else if (result.data && typeof result.data === 'object') {
+            // Peut-être un objet avec une propriété array
+            consultationsList = result.data.consultations || result.data.items || result.data.results || [];
+            console.log('Using object format, length:', consultationsList.length);
+          }
+          
+          console.log('Final consultations list:', consultationsList.length);
           setConsultations(consultationsList);
+          
+          if (consultationsList.length === 0) {
+            console.warn('Aucune consultation trouvée pour ce patient');
+          }
         } else {
-          console.warn('Failed to load consultations:', result.message);
+          console.error('Failed to load consultations:', result.message || result.errors);
           setConsultations([]);
         }
       } catch (error) {
         console.error('Error loading consultations:', error);
+        console.error('Error stack:', error.stack);
         setConsultations([]);
       } finally {
         setLoadingConsultations(false);
@@ -254,7 +289,14 @@ export default function PatientConsultationCreateView() {
         // Recharger la liste des consultations
         const resultConsultations = await ConsumApi.getConsultations({ patientId });
         if (resultConsultations.success) {
-          const consultationsList = Array.isArray(resultConsultations.data) ? resultConsultations.data : [];
+          let consultationsList = [];
+          if (Array.isArray(resultConsultations.data)) {
+            consultationsList = resultConsultations.data;
+          } else if (resultConsultations.data && Array.isArray(resultConsultations.data.data)) {
+            consultationsList = resultConsultations.data.data;
+          } else if (resultConsultations.data && typeof resultConsultations.data === 'object') {
+            consultationsList = resultConsultations.data.consultations || resultConsultations.data.items || resultConsultations.data.results || [];
+          }
           setConsultations(consultationsList);
         }
         // Réinitialiser le formulaire
@@ -279,30 +321,143 @@ export default function PatientConsultationCreateView() {
   };
 
   const handleOpenDetails = async (consultation) => {
-    setDetailsDialog({ open: true, loading: true });
+    setDetailsDialog({ open: true, loading: true, editing: false });
     setSelectedConsultation(null);
+    setEditForm(null);
     
     try {
       // Charger les détails complets de la consultation
-      const result = await ConsumApi.getConsultationComplete(consultation.id);
+      const result = await ConsumApi.getConsultationById(consultation.id);
       if (result.success) {
-        setSelectedConsultation(result.data);
+        const consultationData = result.data?.consultation || result.data;
+        setSelectedConsultation(consultationData);
+        // Initialiser le formulaire d'édition avec les données
+        setEditForm({
+          clinicalExamination: consultationData.clinicalExamination || '',
+          temperature: consultationData.temperature || 0,
+          systolicBloodPressure: consultationData.systolicBloodPressure || 0,
+          diastolicBloodPressure: consultationData.diastolicBloodPressure || 0,
+          heartRate: consultationData.heartRate || 0,
+          respiratoryRate: consultationData.respiratoryRate || 0,
+          weight: consultationData.weight || 0,
+          height: consultationData.height || 0,
+          oxygenSaturation: consultationData.oxygenSaturation || 0,
+          diagnostic: consultationData.diagnostic || '',
+          differentialDiagnosis: consultationData.differentialDiagnosis || '',
+          treatment: consultationData.treatment || '',
+          recommendations: consultationData.recommendations || '',
+          privateNotes: consultationData.privateNotes || '',
+          nextAppointment: consultationData.nextAppointment || '',
+          hospitalizationRequired: consultationData.hospitalizationRequired || false,
+          hospitalizationReason: consultationData.hospitalizationReason || '',
+        });
       } else {
         showError('Erreur', 'Impossible de charger les détails de la consultation');
-        setDetailsDialog({ open: false, loading: false });
+        setDetailsDialog({ open: false, loading: false, editing: false });
       }
     } catch (error) {
       console.error('Error loading consultation details:', error);
       showError('Erreur', 'Erreur lors du chargement des détails');
-      setDetailsDialog({ open: false, loading: false });
+      setDetailsDialog({ open: false, loading: false, editing: false });
     } finally {
       setDetailsDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
   const handleCloseDetails = () => {
-    setDetailsDialog({ open: false, loading: false });
+    setDetailsDialog({ open: false, loading: false, editing: false });
     setSelectedConsultation(null);
+    setEditForm(null);
+  };
+
+  const handleToggleEdit = () => {
+    setDetailsDialog((prev) => ({ ...prev, editing: !prev.editing }));
+  };
+
+  const handleSaveConsultation = async () => {
+    if (!selectedConsultation || !editForm) return;
+
+    setSaving(true);
+    try {
+      const updateData = {
+        ...editForm,
+        patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
+        medecinId: selectedConsultation.medecinId || selectedConsultation.medecin?.id,
+        type: selectedConsultation.type,
+        status: selectedConsultation.status,
+        consultationDate: selectedConsultation.consultationDate,
+        reason: selectedConsultation.reason,
+      };
+
+      const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
+      const processed = showApiResponse(result, {
+        successTitle: 'Consultation mise à jour',
+        errorTitle: 'Erreur de mise à jour',
+      });
+
+      if (processed.success) {
+        showSuccess('Succès', 'Consultation mise à jour avec succès');
+        setDetailsDialog((prev) => ({ ...prev, editing: false }));
+        // Recharger les détails
+        await handleOpenDetails({ id: selectedConsultation.id });
+        // Recharger la liste des consultations
+        const resultConsultations = await ConsumApi.getConsultations({ patientId });
+        if (resultConsultations.success) {
+          let consultationsList = [];
+          if (Array.isArray(resultConsultations.data)) {
+            consultationsList = resultConsultations.data;
+          } else if (resultConsultations.data && Array.isArray(resultConsultations.data.data)) {
+            consultationsList = resultConsultations.data.data;
+          } else if (resultConsultations.data && typeof resultConsultations.data === 'object') {
+            consultationsList = resultConsultations.data.consultations || resultConsultations.data.items || resultConsultations.data.results || [];
+          }
+          setConsultations(consultationsList);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating consultation:', error);
+      showError('Erreur', 'Erreur lors de la mise à jour de la consultation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTransferToDoctor = async () => {
+    if (!selectedConsultation) return;
+
+    setTransferring(true);
+    try {
+      // Changer le statut de la consultation à EN_COURS pour que le médecin la voie
+      const result = await ConsumApi.updateConsultationStatus(selectedConsultation.id, 'EN_COURS');
+      const processed = showApiResponse(result, {
+        successTitle: 'Patient transféré',
+        errorTitle: 'Erreur de transfert',
+      });
+
+      if (processed.success) {
+        showSuccess('Succès', 'Patient transféré au médecin avec succès');
+        // Recharger les détails
+        await handleOpenDetails({ id: selectedConsultation.id });
+        // Recharger la liste des consultations
+        const resultConsultations = await ConsumApi.getConsultations({ patientId });
+        if (resultConsultations.success) {
+          let consultationsList = [];
+          if (Array.isArray(resultConsultations.data)) {
+            consultationsList = resultConsultations.data;
+          } else if (resultConsultations.data && Array.isArray(resultConsultations.data.data)) {
+            consultationsList = resultConsultations.data.data;
+          } else if (resultConsultations.data && typeof resultConsultations.data === 'object') {
+            consultationsList = resultConsultations.data.consultations || resultConsultations.data.items || resultConsultations.data.results || [];
+          }
+          setConsultations(consultationsList);
+        }
+      }
+    } catch (error) {
+      console.error('Error transferring to doctor:', error);
+      showError('Erreur', 'Erreur lors du transfert au médecin');
+    } finally {
+      setTransferring(false);
+    }
   };
 
   if (loadingPatient) {
@@ -564,16 +719,29 @@ export default function PatientConsultationCreateView() {
 
       {/* Dialog de détails de consultation */}
       <Dialog open={detailsDialog.open} onClose={handleCloseDetails} maxWidth="lg" fullWidth>
-        <DialogTitle>Détails de la Consultation</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Détails de la Consultation</Typography>
+            {!detailsDialog.loading && selectedConsultation && (
+              <Button
+                variant={detailsDialog.editing ? 'outlined' : 'contained'}
+                startIcon={<Iconify icon={detailsDialog.editing ? 'eva:close-fill' : 'eva:edit-fill'} />}
+                onClick={handleToggleEdit}
+              >
+                {detailsDialog.editing ? 'Annuler' : 'Modifier'}
+              </Button>
+            )}
+          </Box>
+        </DialogTitle>
         <DialogContent>
           {detailsDialog.loading ? (
             <Box sx={{ textAlign: 'center', py: 3 }}>
               <LoadingButton loading>Chargement des détails...</LoadingButton>
             </Box>
           ) : (
-            selectedConsultation && (
+            selectedConsultation && editForm && (
               <Stack spacing={3} sx={{ mt: 1 }}>
-                {/* Informations de base */}
+                {/* Informations de base (lecture seule) */}
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="subtitle2" color="text.secondary">Numéro de consultation</Typography>
@@ -605,108 +773,230 @@ export default function PatientConsultationCreateView() {
                   </Grid>
                 </Grid>
 
-                <Divider>Informations Médecin</Divider>
+                <Divider>Examen Clinique</Divider>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Nom complet</Typography>
-                    <Typography variant="body1">
-                      Dr. {selectedConsultation.medecin?.firstName} {selectedConsultation.medecin?.lastName}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Spécialité</Typography>
-                    <Typography variant="body1">{selectedConsultation.medecin?.speciality || 'N/A'}</Typography>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Examen clinique"
+                      value={editForm.clinicalExamination}
+                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
                   </Grid>
                 </Grid>
 
-                <Divider>Détails de la Consultation</Divider>
+                <Divider>Signes Vitaux</Divider>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Date et heure</Typography>
-                    <Typography variant="body1">
-                      {fDateTime(selectedConsultation.consultationDate || selectedConsultation.createdAt)}
-                    </Typography>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Température (°C)"
+                      value={editForm.temperature}
+                      onChange={(e) => setEditForm({ ...editForm, temperature: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.1 }}
+                    />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">Type de consultation</Typography>
-                    <Typography variant="body1">{CONSULTATION_TYPES[selectedConsultation.type] || selectedConsultation.type || 'N/A'}</Typography>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Pression artérielle systolique (mmHg)"
+                      value={editForm.systolicBloodPressure}
+                      onChange={(e) => setEditForm({ ...editForm, systolicBloodPressure: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Pression artérielle diastolique (mmHg)"
+                      value={editForm.diastolicBloodPressure}
+                      onChange={(e) => setEditForm({ ...editForm, diastolicBloodPressure: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Fréquence cardiaque (bpm)"
+                      value={editForm.heartRate}
+                      onChange={(e) => setEditForm({ ...editForm, heartRate: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Fréquence respiratoire (rpm)"
+                      value={editForm.respiratoryRate}
+                      onChange={(e) => setEditForm({ ...editForm, respiratoryRate: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Saturation en oxygène (%)"
+                      value={editForm.oxygenSaturation}
+                      onChange={(e) => setEditForm({ ...editForm, oxygenSaturation: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Poids (kg)"
+                      value={editForm.weight}
+                      onChange={(e) => setEditForm({ ...editForm, weight: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Taille (m)"
+                      value={editForm.height}
+                      onChange={(e) => setEditForm({ ...editForm, height: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.01 }}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Diagnostic et Traitement</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Diagnostic"
+                      value={editForm.diagnostic}
+                      onChange={(e) => setEditForm({ ...editForm, diagnostic: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">Motif</Typography>
-                    <Typography variant="body1">{selectedConsultation.reason || 'N/A'}</Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Diagnostic différentiel"
+                      value={editForm.differentialDiagnosis}
+                      onChange={(e) => setEditForm({ ...editForm, differentialDiagnosis: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Traitement"
+                      value={editForm.treatment}
+                      onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Recommandations"
+                      value={editForm.recommendations}
+                      onChange={(e) => setEditForm({ ...editForm, recommendations: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      label="Notes privées"
+                      value={editForm.privateNotes}
+                      onChange={(e) => setEditForm({ ...editForm, privateNotes: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      type="datetime-local"
+                      label="Prochain rendez-vous"
+                      value={editForm.nextAppointment ? new Date(editForm.nextAppointment).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => setEditForm({ ...editForm, nextAppointment: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                      disabled={!detailsDialog.editing}
+                      InputLabelProps={{ shrink: true }}
+                    />
                   </Grid>
                 </Grid>
 
-                {/* Prescriptions */}
-                {selectedConsultation.prescriptions && selectedConsultation.prescriptions.length > 0 && (
-                  <>
-                    <Divider>Prescriptions</Divider>
-                    <Stack spacing={1}>
-                      {selectedConsultation.prescriptions.map((prescription, index) => (
-                        <Box key={prescription.id || index} sx={{ border: '1px dashed', borderColor: 'divider', p: 2, borderRadius: 1 }}>
-                          <Typography variant="subtitle2">{prescription.label} ({prescription.type})</Typography>
-                          <Typography variant="body2">
-                            Dosage: {prescription.dosage || 'N/A'}, Durée: {prescription.duration || 'N/A'}
-                          </Typography>
-                          <Typography variant="body2">
-                            Instructions: {prescription.instructions || 'N/A'}, Quantité: {prescription.quantity || 'N/A'}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </>
-                )}
-
-                {/* Certificats */}
-                {selectedConsultation.certificats && selectedConsultation.certificats.length > 0 && (
-                  <>
-                    <Divider>Certificats Médicaux</Divider>
-                    <Stack spacing={1}>
-                      {selectedConsultation.certificats.map((certificat, index) => (
-                        <Box key={certificat.id || index} sx={{ border: '1px dashed', borderColor: 'divider', p: 2, borderRadius: 1 }}>
-                          <Typography variant="subtitle2">{certificat.type}</Typography>
-                          <Typography variant="body2">Contenu: {certificat.content || 'N/A'}</Typography>
-                          <Typography variant="body2">
-                            Durée: {certificat.durationDays || 'N/A'} jours, Du:{' '}
-                            {certificat.startDate ? fDateTime(certificat.startDate) : 'N/A'} Au:{' '}
-                            {certificat.endDate ? fDateTime(certificat.endDate) : 'N/A'}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </>
-                )}
-
-                {/* Boutons pour ajouter prescriptions et certificats */}
-                <Divider>Actions</Divider>
-                <Stack direction="row" spacing={2}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Iconify icon="solar:pill-bold" />}
-                    onClick={() => {
-                      // TODO: Ouvrir dialog pour ajouter prescription
-                      showError('Info', 'Fonctionnalité à implémenter: Ajouter prescription');
-                    }}
-                  >
-                    Ajouter Prescription
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Iconify icon="solar:document-bold" />}
-                    onClick={() => {
-                      // TODO: Ouvrir dialog pour ajouter certificat
-                      showError('Info', 'Fonctionnalité à implémenter: Ajouter certificat');
-                    }}
-                  >
-                    Ajouter Certificat
-                  </Button>
-                </Stack>
+                <Divider>Hospitalisation</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Hospitalisation requise</InputLabel>
+                      <Select
+                        value={editForm.hospitalizationRequired ? 'true' : 'false'}
+                        label="Hospitalisation requise"
+                        onChange={(e) => setEditForm({ ...editForm, hospitalizationRequired: e.target.value === 'true' })}
+                        disabled={!detailsDialog.editing}
+                      >
+                        <MenuItem value="false">Non</MenuItem>
+                        <MenuItem value="true">Oui</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {editForm.hospitalizationRequired && (
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
+                        label="Raison de l'hospitalisation"
+                        value={editForm.hospitalizationReason}
+                        onChange={(e) => setEditForm({ ...editForm, hospitalizationReason: e.target.value })}
+                        disabled={!detailsDialog.editing}
+                      />
+                    </Grid>
+                  )}
+                </Grid>
               </Stack>
             )
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDetails}>Fermer</Button>
+          {detailsDialog.editing && (
+            <LoadingButton variant="contained" onClick={handleSaveConsultation} loading={saving}>
+              Enregistrer
+            </LoadingButton>
+          )}
+          {!detailsDialog.editing && selectedConsultation && selectedConsultation.status === 'EN_ATTENTE' && (
+            <LoadingButton
+              variant="contained"
+              color="primary"
+              onClick={handleTransferToDoctor}
+              loading={transferring}
+              startIcon={<Iconify icon="eva:person-add-fill" />}
+            >
+              Transférer au médecin
+            </LoadingButton>
+          )}
         </DialogActions>
       </Dialog>
     </>

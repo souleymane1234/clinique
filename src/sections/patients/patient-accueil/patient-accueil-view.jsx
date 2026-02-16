@@ -6,25 +6,34 @@ import { LoadingButton } from '@mui/lab';
 import {
   Box,
   Card,
+  Chip,
   Grid,
   Alert,
   Stack,
+  Table,
   Button,
   Dialog,
   Select,
   Divider,
   MenuItem,
+  TableRow,
   Container,
   TextField,
+  TableBody,
+  TableCell,
+  TableHead,
   InputLabel,
   Typography,
   DialogTitle,
   FormControl,
   DialogActions,
   DialogContent,
+  TableContainer,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
+
+import { fDateTime } from 'src/utils/format-time';
 
 import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
@@ -33,11 +42,33 @@ import Iconify from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
+const STATUS_COLORS = {
+  EN_ATTENTE: 'warning',
+  EN_COURS: 'info',
+  TERMINEE: 'success',
+  ANNULEE: 'error',
+};
+
+const STATUS_LABELS = {
+  EN_ATTENTE: 'En attente',
+  EN_COURS: 'En cours',
+  TERMINEE: 'Terminée',
+  ANNULEE: 'Annulée',
+};
+
+const CONSULTATION_TYPES = {
+  PREMIERE_CONSULTATION: 'Première consultation',
+  CONSULTATION_SUIVI: 'Consultation de suivi',
+  URGENCE: 'Urgence',
+};
+
+// ----------------------------------------------------------------------
+
 
 export default function PatientAccueilView() {
   const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
 
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep] = useState(0);
 
   // Patient search modal
   const [patientSearchModal, setPatientSearchModal] = useState({ open: false });
@@ -45,6 +76,15 @@ export default function PatientAccueilView() {
   const [allPatients, setAllPatients] = useState([]);
   const [filteredPatients, setFilteredPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
+
+  // Consultations
+  const [consultations, setConsultations] = useState([]);
+  const [loadingConsultations, setLoadingConsultations] = useState(false);
+  const [selectedConsultation, setSelectedConsultation] = useState(null);
+  const [detailsDialog, setDetailsDialog] = useState({ open: false, loading: false, editing: false });
+  const [editForm, setEditForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
   // Create patient dialog
   const [createPatientDialog, setCreatePatientDialog] = useState({ open: false, loading: false });
@@ -86,9 +126,37 @@ export default function PatientAccueilView() {
     }
   }, []);
 
+  const loadAllConsultations = useCallback(async () => {
+    setLoadingConsultations(true);
+    try {
+      const result = await ConsumApi.getConsultations({});
+      
+      if (result.success) {
+        let consultationsList = [];
+        if (Array.isArray(result.data)) {
+          consultationsList = result.data;
+        } else if (result.data && Array.isArray(result.data.data)) {
+          consultationsList = result.data.data;
+        } else if (result.data && typeof result.data === 'object') {
+          consultationsList = result.data.consultations || result.data.items || result.data.results || [];
+        }
+        setConsultations(consultationsList);
+      } else {
+        console.warn('Failed to load consultations:', result.message);
+        setConsultations([]);
+      }
+    } catch (error) {
+      console.error('Error loading consultations:', error);
+      setConsultations([]);
+    } finally {
+      setLoadingConsultations(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadAllPatients();
-  }, [loadAllPatients]);
+    loadAllConsultations();
+  }, [loadAllPatients, loadAllConsultations]);
 
   // Filtrer les patients selon la recherche
   useEffect(() => {
@@ -210,12 +278,122 @@ export default function PatientAccueilView() {
     navigate(routesName.patientsCreateConsultation.replace(':patientId', patient.id));
   };
 
-  const handleReset = () => {
-    setActiveStep(0);
-    setPatientSearch('');
-    // Recharger la liste des patients
-    loadAllPatients();
+  const handleOpenDetails = async (consultation) => {
+    setDetailsDialog({ open: true, loading: true, editing: false });
+    setSelectedConsultation(null);
+    setEditForm(null);
+    
+    try {
+      const result = await ConsumApi.getConsultationById(consultation.id);
+      if (result.success) {
+        const consultationData = result.data?.consultation || result.data;
+        setSelectedConsultation(consultationData);
+        setEditForm({
+          clinicalExamination: consultationData.clinicalExamination || '',
+          temperature: consultationData.temperature || 0,
+          systolicBloodPressure: consultationData.systolicBloodPressure || 0,
+          diastolicBloodPressure: consultationData.diastolicBloodPressure || 0,
+          heartRate: consultationData.heartRate || 0,
+          respiratoryRate: consultationData.respiratoryRate || 0,
+          weight: consultationData.weight || 0,
+          height: consultationData.height || 0,
+          oxygenSaturation: consultationData.oxygenSaturation || 0,
+          diagnostic: consultationData.diagnostic || '',
+          differentialDiagnosis: consultationData.differentialDiagnosis || '',
+          treatment: consultationData.treatment || '',
+          recommendations: consultationData.recommendations || '',
+          privateNotes: consultationData.privateNotes || '',
+          nextAppointment: consultationData.nextAppointment || '',
+          hospitalizationRequired: consultationData.hospitalizationRequired || false,
+          hospitalizationReason: consultationData.hospitalizationReason || '',
+        });
+      } else {
+        showError('Erreur', 'Impossible de charger les détails de la consultation');
+        setDetailsDialog({ open: false, loading: false, editing: false });
+      }
+    } catch (error) {
+      console.error('Error loading consultation details:', error);
+      showError('Erreur', 'Erreur lors du chargement des détails');
+      setDetailsDialog({ open: false, loading: false, editing: false });
+    } finally {
+      setDetailsDialog((prev) => ({ ...prev, loading: false }));
+    }
   };
+
+  const handleCloseDetails = () => {
+    setDetailsDialog({ open: false, loading: false, editing: false });
+    setSelectedConsultation(null);
+    setEditForm(null);
+  };
+
+  const handleToggleEdit = () => {
+    setDetailsDialog((prev) => ({ ...prev, editing: !prev.editing }));
+  };
+
+  const handleSaveConsultation = async () => {
+    if (!selectedConsultation || !editForm) return;
+
+    setSaving(true);
+    try {
+      const updateData = {
+        ...editForm,
+        patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
+        medecinId: selectedConsultation.medecinId || selectedConsultation.medecin?.id,
+        type: selectedConsultation.type,
+        status: selectedConsultation.status,
+        consultationDate: selectedConsultation.consultationDate,
+        reason: selectedConsultation.reason,
+      };
+
+      const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
+      const processed = showApiResponse(result, {
+        successTitle: 'Consultation mise à jour',
+        errorTitle: 'Erreur de mise à jour',
+      });
+
+      if (processed.success) {
+        showSuccess('Succès', 'Consultation mise à jour avec succès');
+        setDetailsDialog((prev) => ({ ...prev, editing: false }));
+        // Recharger les détails
+        await handleOpenDetails({ id: selectedConsultation.id });
+        // Recharger la liste des consultations
+        await loadAllConsultations();
+      }
+    } catch (error) {
+      console.error('Error updating consultation:', error);
+      showError('Erreur', 'Erreur lors de la mise à jour de la consultation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTransferToDoctor = async () => {
+    if (!selectedConsultation) return;
+
+    setTransferring(true);
+    try {
+      // Changer le statut de la consultation à EN_COURS pour que le médecin la voie
+      const result = await ConsumApi.updateConsultationStatus(selectedConsultation.id, 'EN_COURS');
+      const processed = showApiResponse(result, {
+        successTitle: 'Patient transféré',
+        errorTitle: 'Erreur de transfert',
+      });
+
+      if (processed.success) {
+        showSuccess('Succès', 'Patient transféré au médecin avec succès');
+        // Recharger les détails
+        await handleOpenDetails({ id: selectedConsultation.id });
+        // Recharger la liste des consultations
+        await loadAllConsultations();
+      }
+    } catch (error) {
+      console.error('Error transferring to doctor:', error);
+      showError('Erreur', 'Erreur lors du transfert au médecin');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
 
   return (
     <>
@@ -264,6 +442,110 @@ export default function PatientAccueilView() {
             </Card>
           )}
 
+          {/* Tableau des consultations */}
+          <Card sx={{ p: 3 }}>
+            <Stack spacing={3}>
+              <Box>
+                <Typography variant="h6">Toutes les consultations</Typography>
+              </Box>
+
+              {(() => {
+                if (loadingConsultations) {
+                  return (
+                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                      <LoadingButton loading>Chargement des consultations...</LoadingButton>
+                    </Box>
+                  );
+                }
+                if (consultations.length === 0) {
+                  return <Alert severity="info">Aucune consultation enregistrée.</Alert>;
+                }
+                return (
+                  <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Numéro</TableCell>
+                        <TableCell>Patient</TableCell>
+                        <TableCell>Médecin</TableCell>
+                        <TableCell>Type</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Motif</TableCell>
+                        <TableCell>Statut</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {consultations.map((consultation) => (
+                        <TableRow
+                          key={consultation.id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => handleOpenDetails(consultation)}
+                        >
+                          <TableCell>
+                            <Typography variant="subtitle2">
+                              {consultation.consultationNumber || consultation.id?.substring(0, 8)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {consultation.patient?.firstName || consultation.patient?.firstname || 'N/A'}{' '}
+                              {consultation.patient?.lastName || consultation.patient?.lastname || ''}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {consultation.patient?.phone || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              Dr. {consultation.medecin?.firstName || consultation.medecin?.firstname || 'N/A'}{' '}
+                              {consultation.medecin?.lastName || consultation.medecin?.lastname || ''}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {CONSULTATION_TYPES[consultation.type] || consultation.type || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {fDateTime(consultation.consultationDate || consultation.createdAt)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+                              {consultation.reason || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={STATUS_LABELS[consultation.status] || consultation.status}
+                              color={STATUS_COLORS[consultation.status] || 'default'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenDetails(consultation);
+                              }}
+                            >
+                              Voir détails
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                );
+              })()}
+            </Stack>
+          </Card>
         </Stack>
       </Container>
 
@@ -508,6 +790,289 @@ export default function PatientAccueilView() {
           <Button variant="outlined" startIcon={<Iconify icon="eva:plus-fill" />} onClick={handleOpenCreatePatient}>
             Créer un nouveau patient
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de détails de consultation */}
+      <Dialog open={detailsDialog.open} onClose={handleCloseDetails} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Détails de la Consultation</Typography>
+            {!detailsDialog.loading && selectedConsultation && (
+              <Button
+                variant={detailsDialog.editing ? 'outlined' : 'contained'}
+                startIcon={<Iconify icon={detailsDialog.editing ? 'eva:close-fill' : 'eva:edit-fill'} />}
+                onClick={handleToggleEdit}
+              >
+                {detailsDialog.editing ? 'Annuler' : 'Modifier'}
+              </Button>
+            )}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {detailsDialog.loading ? (
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <LoadingButton loading>Chargement des détails...</LoadingButton>
+            </Box>
+          ) : (
+            selectedConsultation && editForm && (
+              <Stack spacing={3} sx={{ mt: 1 }}>
+                {/* Informations de base (lecture seule) */}
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Numéro de consultation</Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {selectedConsultation.consultationNumber || selectedConsultation.id}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Statut</Typography>
+                    <Chip
+                      label={STATUS_LABELS[selectedConsultation.status] || selectedConsultation.status}
+                      color={STATUS_COLORS[selectedConsultation.status] || 'default'}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Informations Patient</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Nom complet</Typography>
+                    <Typography variant="body1">
+                      {selectedConsultation.patient?.firstName} {selectedConsultation.patient?.lastName}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Téléphone</Typography>
+                    <Typography variant="body1">{selectedConsultation.patient?.phone || 'N/A'}</Typography>
+                  </Grid>
+                </Grid>
+
+                <Divider>Examen Clinique</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Examen clinique"
+                      value={editForm.clinicalExamination}
+                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Signes Vitaux</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Température (°C)"
+                      value={editForm.temperature}
+                      onChange={(e) => setEditForm({ ...editForm, temperature: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Pression artérielle systolique (mmHg)"
+                      value={editForm.systolicBloodPressure}
+                      onChange={(e) => setEditForm({ ...editForm, systolicBloodPressure: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Pression artérielle diastolique (mmHg)"
+                      value={editForm.diastolicBloodPressure}
+                      onChange={(e) => setEditForm({ ...editForm, diastolicBloodPressure: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Fréquence cardiaque (bpm)"
+                      value={editForm.heartRate}
+                      onChange={(e) => setEditForm({ ...editForm, heartRate: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Fréquence respiratoire (rpm)"
+                      value={editForm.respiratoryRate}
+                      onChange={(e) => setEditForm({ ...editForm, respiratoryRate: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Saturation en oxygène (%)"
+                      value={editForm.oxygenSaturation}
+                      onChange={(e) => setEditForm({ ...editForm, oxygenSaturation: parseInt(e.target.value, 10) || 0 })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Poids (kg)"
+                      value={editForm.weight}
+                      onChange={(e) => setEditForm({ ...editForm, weight: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Taille (m)"
+                      value={editForm.height}
+                      onChange={(e) => setEditForm({ ...editForm, height: parseFloat(e.target.value) || 0 })}
+                      disabled={!detailsDialog.editing}
+                      inputProps={{ step: 0.01 }}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Diagnostic et Traitement</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Diagnostic"
+                      value={editForm.diagnostic}
+                      onChange={(e) => setEditForm({ ...editForm, diagnostic: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Diagnostic différentiel"
+                      value={editForm.differentialDiagnosis}
+                      onChange={(e) => setEditForm({ ...editForm, differentialDiagnosis: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Traitement"
+                      value={editForm.treatment}
+                      onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Recommandations"
+                      value={editForm.recommendations}
+                      onChange={(e) => setEditForm({ ...editForm, recommendations: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      label="Notes privées"
+                      value={editForm.privateNotes}
+                      onChange={(e) => setEditForm({ ...editForm, privateNotes: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      type="datetime-local"
+                      label="Prochain rendez-vous"
+                      value={editForm.nextAppointment ? new Date(editForm.nextAppointment).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => setEditForm({ ...editForm, nextAppointment: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                      disabled={!detailsDialog.editing}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Hospitalisation</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Hospitalisation requise</InputLabel>
+                      <Select
+                        value={editForm.hospitalizationRequired ? 'true' : 'false'}
+                        label="Hospitalisation requise"
+                        onChange={(e) => setEditForm({ ...editForm, hospitalizationRequired: e.target.value === 'true' })}
+                        disabled={!detailsDialog.editing}
+                      >
+                        <MenuItem value="false">Non</MenuItem>
+                        <MenuItem value="true">Oui</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {editForm.hospitalizationRequired && (
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
+                        label="Raison de l'hospitalisation"
+                        value={editForm.hospitalizationReason}
+                        onChange={(e) => setEditForm({ ...editForm, hospitalizationReason: e.target.value })}
+                        disabled={!detailsDialog.editing}
+                      />
+                    </Grid>
+                  )}
+                </Grid>
+              </Stack>
+            )
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDetails}>Fermer</Button>
+          {detailsDialog.editing && (
+            <LoadingButton variant="contained" onClick={handleSaveConsultation} loading={saving}>
+              Enregistrer
+            </LoadingButton>
+          )}
+          {!detailsDialog.editing && selectedConsultation && selectedConsultation.status === 'EN_ATTENTE' && (
+            <LoadingButton
+              variant="contained"
+              color="primary"
+              onClick={handleTransferToDoctor}
+              loading={transferring}
+              startIcon={<Iconify icon="eva:person-add-fill" />}
+            >
+              Transférer au médecin
+            </LoadingButton>
+          )}
         </DialogActions>
       </Dialog>
     </>

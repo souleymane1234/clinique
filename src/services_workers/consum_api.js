@@ -186,17 +186,21 @@ export default class ConsumApi {
     
     // Pour les endpoints de modules de permissions, PATIENTS, ALLERGIES, ANTECEDENTS et MEDECINS, utiliser l'API réelle
     if (urlLower.includes('/module-permission') || 
-        urlLower.includes('/permission') ||
-        urlLower.includes('/permissions') ||
+        urlLower.includes('/permission') || 
+        urlLower.includes('/permissions') || 
         urlLower.includes('/patient') ||
         urlLower.includes('/patients') ||
         urlLower.includes('/medecin') ||
         urlLower.includes('/medecins') ||
         urlLower.includes('/consultation') ||
         urlLower.includes('/consultations') ||
+        urlLower.includes('/appointments') ||
+        urlLower.includes('/appointment') ||
+        urlLower.includes('/laboratory') ||
         urlLower.includes('/allergy') ||
         urlLower.includes('/allergie') ||
         urlLower.includes('/antecedent') ||
+        (urlLower.includes('/user') && !urlLower.includes('/users')) ||
         (urlLower.includes('/role') && !urlLower.includes('/roles-permissions/matrix'))) {
       // Utiliser ApiClient pour les vraies requêtes
       if (method === 'GET') {
@@ -723,6 +727,264 @@ export default class ConsumApi {
   // Response 404: Utilisateur non trouvé
   static async changeUserPassword(id, newPassword) {
     return this._authenticatedRequest('PATCH', apiUrl.changeUserPassword(id), { newPassword });
+  }
+
+  // ========== USER API (New - /user) ==========
+
+  // Créer un utilisateur
+  // API: POST /user
+  // Body: { first_name, last_name, email, password, role_id }
+  // Response 201: { user, message }
+  static async createUserNew({ first_name, last_name, email, password, role_id }) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.user, {
+        first_name,
+        last_name,
+        email,
+        password,
+        role_id,
+      });
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.user || result.data,
+          message: result.data.message || 'Utilisateur créé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la création de l\'utilisateur',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Obtenir tous les utilisateurs
+  // API: GET /user
+  // Response 200: Array d'utilisateurs
+  static async getUsersNew() {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.user);
+      console.log('getUsersNew raw result:', result);
+      
+      // Si result est directement un tableau (cas où ApiClient retourne directement le tableau)
+      if (Array.isArray(result)) {
+        console.log('Result is directly an array, length:', result.length);
+        return {
+          success: true,
+          data: result,
+          message: 'Utilisateurs récupérés avec succès',
+          errors: [],
+        };
+      }
+      
+      // Si result a une structure { success, data }
+      if (result && result.success && result.data) {
+        // Si data est un tableau, l'utiliser directement
+        if (Array.isArray(result.data)) {
+          return {
+            success: true,
+            data: result.data,
+            message: 'Utilisateurs récupérés avec succès',
+            errors: [],
+          };
+        }
+        // Si data est un objet avec un tableau dedans
+        if (result.data && typeof result.data === 'object') {
+          if (Array.isArray(result.data.data)) {
+            return {
+              success: true,
+              data: result.data.data,
+              message: 'Utilisateurs récupérés avec succès',
+              errors: [],
+            };
+          }
+          if (Array.isArray(result.data.users)) {
+            return {
+              success: true,
+              data: result.data.users,
+              message: 'Utilisateurs récupérés avec succès',
+              errors: [],
+            };
+          }
+        }
+      }
+      
+      // Si result n'a pas success mais contient directement des données
+      if (result && !result.success && Array.isArray(result)) {
+        return {
+          success: true,
+          data: result,
+          message: 'Utilisateurs récupérés avec succès',
+          errors: [],
+        };
+      }
+      
+      return result || {
+        success: false,
+        data: [],
+        message: 'Format de réponse inattendu',
+        errors: [],
+      };
+    } catch (error) {
+      console.error('Error getting users:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des utilisateurs',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Obtenir un utilisateur par ID
+  // API: GET /user/{id}
+  // Response 200: Objet utilisateur
+  // Response 404: Utilisateur non trouvé
+  static async getUserByIdNew(id) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.userById(id));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.user || result.data,
+          message: 'Utilisateur récupéré avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération de l\'utilisateur',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Modifier un utilisateur
+  // API: PUT /user/{id}
+  // Body: { first_name?, last_name?, email?, role_id? }
+  // Response 200: { user, message }
+  // Response 400: Erreur de validation ou email déjà utilisé
+  // Response 404: Utilisateur non trouvé
+  static async updateUserNew(id, { first_name, last_name, email, role_id }) {
+    try {
+      const updateData = {};
+      if (first_name !== undefined) updateData.first_name = first_name?.trim();
+      if (last_name !== undefined) updateData.last_name = last_name?.trim();
+      if (email !== undefined) updateData.email = email?.trim();
+      if (role_id !== undefined) updateData.role_id = role_id;
+
+      const result = await this._authenticatedRequest('PUT', apiUrl.updateUserNew(id), updateData);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.user || result.data,
+          message: result.data.message || 'Utilisateur modifié avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la modification de l\'utilisateur',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Supprimer un utilisateur
+  // API: DELETE /user/{id}
+  // Response 200: { message }
+  // Response 404: Utilisateur non trouvé
+  static async deleteUserNew(id) {
+    try {
+      const result = await this._authenticatedRequest('DELETE', apiUrl.deleteUserNew(id));
+      if (result.success) {
+        return {
+          success: true,
+          data: { id },
+          message: result.data?.message || 'Utilisateur supprimé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la suppression de l\'utilisateur',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Bloquer/Débloquer un utilisateur
+  // API: PATCH /user/{id}/toggle-lock
+  // Response 200: { user, message }
+  // Response 404: Utilisateur non trouvé
+  static async toggleUserLock(id) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.toggleUserLock(id));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.user || result.data,
+          message: result.data?.message || 'Statut de verrouillage modifié avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error toggling user lock:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la modification du statut de verrouillage',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // Modifier le mot de passe d'un utilisateur
+  // API: PUT /user/{id}/password
+  // Body: { password: string }
+  // Response 200: { message }
+  // Response 400: Erreur de validation (mot de passe trop court)
+  // Response 404: Utilisateur non trouvé
+  static async changeUserPasswordNew(id, password) {
+    try {
+      const result = await this._authenticatedRequest('PUT', apiUrl.changeUserPasswordNew(id), { password });
+      if (result.success) {
+        return {
+          success: true,
+          data: { id },
+          message: result.data?.message || 'Mot de passe modifié avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error changing user password:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la modification du mot de passe',
+        errors: [error.message],
+      };
+    }
   }
 
   // ========== ROLES & PERMISSIONS ==========
@@ -3075,7 +3337,7 @@ export default class ConsumApi {
   }
 
   static async updateConsultation(consultationId, data) {
-    // Normaliser les données
+    // Normaliser les données et s'assurer que les nombres sont bien des nombres
     const normalizedData = {
       patientId: data.patientId || '',
       medecinId: data.medecinId || '',
@@ -3084,14 +3346,54 @@ export default class ConsumApi {
       consultationDate: data.consultationDate || new Date().toISOString(),
       reason: data.reason || '',
       clinicalExamination: data.clinicalExamination || '',
-      temperature: data.temperature || 0,
-      systolicBloodPressure: data.systolicBloodPressure || 0,
-      diastolicBloodPressure: data.diastolicBloodPressure || 0,
-      heartRate: data.heartRate || 0,
-      respiratoryRate: data.respiratoryRate || 0,
-      weight: data.weight || 0,
-      height: data.height || 0,
-      oxygenSaturation: data.oxygenSaturation || 0,
+      temperature: (() => {
+        if (data.temperature === null || data.temperature === undefined || data.temperature === '') return 0;
+        if (typeof data.temperature === 'number') return Number.isNaN(data.temperature) ? 0 : data.temperature;
+        const parsed = parseFloat(data.temperature);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      systolicBloodPressure: (() => {
+        if (data.systolicBloodPressure === null || data.systolicBloodPressure === undefined || data.systolicBloodPressure === '') return 0;
+        if (typeof data.systolicBloodPressure === 'number') return Number.isNaN(data.systolicBloodPressure) ? 0 : Math.floor(data.systolicBloodPressure);
+        const parsed = parseInt(data.systolicBloodPressure, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      diastolicBloodPressure: (() => {
+        if (data.diastolicBloodPressure === null || data.diastolicBloodPressure === undefined || data.diastolicBloodPressure === '') return 0;
+        if (typeof data.diastolicBloodPressure === 'number') return Number.isNaN(data.diastolicBloodPressure) ? 0 : Math.floor(data.diastolicBloodPressure);
+        const parsed = parseInt(data.diastolicBloodPressure, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      heartRate: (() => {
+        if (data.heartRate === null || data.heartRate === undefined || data.heartRate === '') return 0;
+        if (typeof data.heartRate === 'number') return Number.isNaN(data.heartRate) ? 0 : Math.floor(data.heartRate);
+        const parsed = parseInt(data.heartRate, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      respiratoryRate: (() => {
+        if (data.respiratoryRate === null || data.respiratoryRate === undefined || data.respiratoryRate === '') return 0;
+        if (typeof data.respiratoryRate === 'number') return Number.isNaN(data.respiratoryRate) ? 0 : Math.floor(data.respiratoryRate);
+        const parsed = parseInt(data.respiratoryRate, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      weight: (() => {
+        if (data.weight === null || data.weight === undefined || data.weight === '') return 0;
+        if (typeof data.weight === 'number') return Number.isNaN(data.weight) ? 0 : data.weight;
+        const parsed = parseFloat(data.weight);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      height: (() => {
+        if (data.height === null || data.height === undefined || data.height === '') return 0;
+        if (typeof data.height === 'number') return Number.isNaN(data.height) ? 0 : data.height;
+        const parsed = parseFloat(data.height);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
+      oxygenSaturation: (() => {
+        if (data.oxygenSaturation === null || data.oxygenSaturation === undefined || data.oxygenSaturation === '') return 0;
+        if (typeof data.oxygenSaturation === 'number') return Number.isNaN(data.oxygenSaturation) ? 0 : Math.floor(data.oxygenSaturation);
+        const parsed = parseInt(data.oxygenSaturation, 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      })(),
       diagnostic: data.diagnostic || '',
       differentialDiagnosis: data.differentialDiagnosis || '',
       treatment: data.treatment || '',
@@ -3101,6 +3403,12 @@ export default class ConsumApi {
       hospitalizationRequired: data.hospitalizationRequired || false,
       hospitalizationReason: data.hospitalizationReason || '',
     };
+    
+    console.log('=== UPDATE CONSULTATION DEBUG ===');
+    console.log('Consultation ID:', consultationId);
+    console.log('Normalized data:', normalizedData);
+    console.log('Weight type:', typeof normalizedData.weight, 'Value:', normalizedData.weight);
+    console.log('Height type:', typeof normalizedData.height, 'Value:', normalizedData.height);
     
     const result = await this._authenticatedRequest('PATCH', apiUrl.updateConsultation(consultationId), normalizedData);
     
@@ -3316,52 +3624,233 @@ export default class ConsumApi {
     };
   }
 
+  // ========== APPOINTMENTS ==========
+  
   static async getAppointments(filters = {}) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    let appointments = this._generateFakeAppointments(30);
-
-    if (filters.status) {
-      appointments = appointments.filter(a => a.status === filters.status);
-    }
-
-    if (filters.date) {
-      appointments = appointments.filter(a => a.date?.startsWith(filters.date));
-    }
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      appointments = appointments.filter(a =>
-        (a.patient?.firstName || '').toLowerCase().includes(searchLower) ||
-        (a.doctor?.name || '').toLowerCase().includes(searchLower)
-      );
-    }
-
-    const page = filters.page || 1;
-    const limit = filters.limit || 10;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.appointments, null, filters);
+      if (result.success && result.data) {
+        // Si result.data est un tableau, le retourner directement
+        if (Array.isArray(result.data)) {
         return {
           success: true,
-      data: {
-        appointments: appointments.slice(start, end),
-        total: appointments.length,
-        page,
-        limit,
-      },
+            data: result.data,
       message: 'Rendez-vous récupérés avec succès',
-          errors: []
-        };
+            errors: [],
+          };
+        }
+        // Sinon, retourner result.data tel quel
+        return result;
       }
+      return result;
+    } catch (error) {
+      console.error('Error getting appointments:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
 
-  static async updateAppointmentStatus(appointmentId, status) {
-    await new Promise(resolve => setTimeout(resolve, 300));
+  static async getAppointmentsPaginated(page = 1, limit = 10, filters = {}) {
+    try {
+      const params = { page, limit, ...filters };
+      const result = await this._authenticatedRequest('GET', apiUrl.appointmentsPaginated, null, params);
+      if (result.success && result.data) {
       return {
       success: true,
-      data: { id: appointmentId, status },
-      message: 'Statut du rendez-vous mis à jour avec succès',
-      errors: []
-    };
+          data: result.data.data || result.data,
+          pagination: result.data.pagination || { page, limit, total: 0 },
+          message: 'Rendez-vous récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting paginated appointments:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: { page, limit, total: 0 },
+        message: 'Erreur lors de la récupération des rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getAppointmentsByMedecin(medecinId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.appointmentsByMedecin(medecinId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Rendez-vous récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting appointments by medecin:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getAppointmentById(appointmentId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.appointmentById(appointmentId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Rendez-vous récupéré avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async createAppointment(data) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.appointments, data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.appointment || result.data,
+          message: result.data.message || 'Rendez-vous créé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la création du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async updateAppointment(appointmentId, data) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.appointmentById(appointmentId), data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Rendez-vous mis à jour avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la mise à jour du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async deleteAppointment(appointmentId) {
+    try {
+      const result = await this._authenticatedRequest('DELETE', apiUrl.appointmentById(appointmentId));
+      if (result.success) {
+        return {
+          success: true,
+          data: null,
+          message: 'Rendez-vous supprimé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la suppression du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async confirmAppointment(appointmentId) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.confirmAppointment(appointmentId));
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: appointmentId, status: 'CONFIRME' },
+          message: result.data?.message || 'Rendez-vous confirmé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error confirming appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la confirmation du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async cancelAppointment(appointmentId) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.cancelAppointment(appointmentId));
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: appointmentId, status: 'ANNULE' },
+          message: result.data?.message || 'Rendez-vous annulé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error canceling appointment:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de l\'annulation du rendez-vous',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async updateAppointmentStatus(appointmentId, status) {
+    // Pour compatibilité avec l'ancien code
+    if (status === 'CONFIRME') {
+      return this.confirmAppointment(appointmentId);
+    }
+    if (status === 'ANNULE') {
+      return this.cancelAppointment(appointmentId);
+    }
+    // Pour les autres statuts, utiliser updateAppointment
+    return this.updateAppointment(appointmentId, { status });
   }
 
   static async getPatientQueue(filters = {}) {
@@ -3386,6 +3875,593 @@ export default class ConsumApi {
 
   static async removeFromQueue(patientId) {
     return this._authenticatedRequest('DELETE', apiUrl.removeFromQueue(patientId));
+  }
+
+  // ========== LABORATORY ANALYSES ==========
+
+  static async getLaboratoryAnalyses(filters = {}) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalyses, null, filters);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Analyses récupérées avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory analyses:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des analyses',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryAnalysesPaginated(page = 1, limit = 10, filters = {}) {
+    try {
+      const params = { page, limit, ...filters };
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysesPaginated, null, params);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.data || result.data,
+          pagination: result.data.pagination || { page, limit, total: 0 },
+          message: 'Analyses récupérées avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting paginated laboratory analyses:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: { page, limit, total: 0 },
+        message: 'Erreur lors de la récupération des analyses',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryAnalysisById(analysisId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysisById(analysisId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Analyse récupérée avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryAnalysisComplete(analysisId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysisComplete(analysisId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Analyse complète récupérée avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting complete laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération de l\'analyse complète',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async createLaboratoryAnalysis(data) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.laboratoryAnalyses, data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.analysis || result.data,
+          message: result.data.message || 'Analyse créée avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la création de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async updateLaboratoryAnalysis(analysisId, data) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryAnalysisById(analysisId), data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Analyse mise à jour avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error updating laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la mise à jour de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async completeLaboratoryAnalysis(analysisId) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryAnalysisComplete(analysisId));
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: analysisId, status: 'TERMINE' },
+          message: result.data?.message || 'Analyse marquée comme terminée',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error completing laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la finalisation de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryAnalysisResults(analysisId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysisResults(analysisId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Résultats récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory analysis results:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des résultats',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async addLaboratoryAnalysisResult(analysisId, resultData) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.addLaboratoryAnalysisResult(analysisId), resultData);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.result || result.data,
+          message: result.data.message || 'Résultat ajouté avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error adding laboratory analysis result:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de l\'ajout du résultat',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryAnalysesStatistics() {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysesStatistics);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Statistiques récupérées avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory statistics:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération des statistiques',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // ========== LABORATORY ANALYSES - ADDITIONAL METHODS ==========
+
+  static async receiveLaboratoryAnalysis(analysisId, receivedBy) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryAnalysisReceive(analysisId), { receivedBy });
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: analysisId, status: 'EN_COURS' },
+          message: result.data?.message || 'Échantillon réceptionné avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error receiving laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la réception de l\'échantillon',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async performLaboratoryAnalysis(analysisId, performedBy) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryAnalysisPerform(analysisId), { performedBy });
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: analysisId },
+          message: result.data?.message || 'Analyse marquée comme réalisée',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error performing laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la réalisation de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async validateLaboratoryAnalysis(analysisId, validatedBy) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryAnalysisValidate(analysisId), { validatedBy });
+      if (result.success) {
+        return {
+          success: true,
+          data: { id: analysisId, status: 'VALIDE' },
+          message: result.data?.message || 'Résultats validés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error validating laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la validation des résultats',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async deleteLaboratoryAnalysis(analysisId) {
+    try {
+      const result = await this._authenticatedRequest('DELETE', apiUrl.laboratoryAnalysisById(analysisId));
+      if (result.success) {
+        return {
+          success: true,
+          data: null,
+          message: 'Analyse supprimée avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error deleting laboratory analysis:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la suppression de l\'analyse',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async updateLaboratoryResult(resultId, data) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryResultById(resultId), data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Résultat mis à jour avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error updating laboratory result:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la mise à jour du résultat',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async deleteLaboratoryResult(resultId) {
+    try {
+      const result = await this._authenticatedRequest('DELETE', apiUrl.laboratoryResultById(resultId));
+      if (result.success) {
+        return {
+          success: true,
+          data: null,
+          message: 'Résultat supprimé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error deleting laboratory result:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la suppression du résultat',
+        errors: [error.message],
+      };
+    }
+  }
+
+  // ========== LABORATORY CONSOMMABLES ==========
+
+  static async getLaboratoryConsommables(filters = {}) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommables, null, filters);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Consommables récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory consommables:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des consommables',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryConsommablesPaginated(page = 1, limit = 10, filters = {}) {
+    try {
+      const params = { page, limit, ...filters };
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommablesPaginated, null, params);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.data || result.data,
+          pagination: result.data.pagination || { page, limit, total: 0 },
+          message: 'Consommables récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting paginated laboratory consommables:', error);
+      return {
+        success: false,
+        data: [],
+        pagination: { page, limit, total: 0 },
+        message: 'Erreur lors de la récupération des consommables',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryConsommableById(consommableId) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommableById(consommableId));
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Consommable récupéré avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory consommable:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la récupération du consommable',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async createLaboratoryConsommable(data) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.laboratoryConsommables, data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.consommable || result.data,
+          message: result.data.message || 'Consommable créé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating laboratory consommable:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la création du consommable',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async updateLaboratoryConsommable(consommableId, data) {
+    try {
+      const result = await this._authenticatedRequest('PATCH', apiUrl.laboratoryConsommableById(consommableId), data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data,
+          message: 'Consommable mis à jour avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error updating laboratory consommable:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la mise à jour du consommable',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async deleteLaboratoryConsommable(consommableId) {
+    try {
+      const result = await this._authenticatedRequest('DELETE', apiUrl.laboratoryConsommableById(consommableId));
+      if (result.success) {
+        return {
+          success: true,
+          data: null,
+          message: 'Consommable supprimé avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error deleting laboratory consommable:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de la suppression du consommable',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryConsommablesRupture() {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommablesRupture);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Consommables en rupture récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory consommables rupture:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des consommables en rupture',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async getLaboratoryConsommablesPerimes() {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommablesPerimes);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: Array.isArray(result.data) ? result.data : [],
+          message: 'Consommables périmés récupérés avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getting laboratory consommables perimes:', error);
+      return {
+        success: false,
+        data: [],
+        message: 'Erreur lors de la récupération des consommables périmés',
+        errors: [error.message],
+      };
+    }
+  }
+
+  static async createLaboratoryConsommableMouvement(data) {
+    try {
+      const result = await this._authenticatedRequest('POST', apiUrl.laboratoryConsommablesMouvements, data);
+      if (result.success && result.data) {
+        return {
+          success: true,
+          data: result.data.mouvement || result.data,
+          message: result.data.message || 'Mouvement enregistré avec succès',
+          errors: [],
+        };
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating laboratory consommable mouvement:', error);
+      return {
+        success: false,
+        data: null,
+        message: 'Erreur lors de l\'enregistrement du mouvement',
+        errors: [error.message],
+      };
+    }
   }
 
   // ========== FAKE DATA GENERATORS FOR PATIENTS ==========

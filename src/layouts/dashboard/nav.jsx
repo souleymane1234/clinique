@@ -250,39 +250,14 @@ const SUB_MENUS = {
   ],
   'Médecins': [
     { 
-      title: 'Consultation des dossiers', 
-      path: '/doctors/view-dossiers', 
-      icon: 'solar:folder-2-bold' 
+      title: 'Mes Consultations', 
+      path: '/doctors/mes-consultations', 
+      icon: 'solar:clipboard-list-bold' 
     },
     { 
-      title: 'Création de consultations', 
-      path: '/doctors/create-consultation', 
-      icon: 'solar:document-add-bold' 
-    },
-    { 
-      title: 'Diagnostic', 
-      path: '/doctors/diagnostic', 
-      icon: 'solar:clipboard-heart-bold' 
-    },
-    { 
-      title: 'Prescriptions', 
-      path: '/doctors/prescriptions', 
-      icon: 'solar:document-medicine-bold' 
-    },
-    { 
-      title: 'Ordonnances imprimables', 
-      path: '/doctors/ordonnances', 
-      icon: 'solar:printer-bold' 
-    },
-    { 
-      title: 'Demandes d\'hospitalisation', 
-      path: '/doctors/hospitalisation', 
-      icon: 'solar:hospital-bold' 
-    },
-    { 
-      title: 'Certificats médicaux', 
-      path: '/doctors/certificats', 
-      icon: 'solar:certificate-bold' 
+      title: 'Mes Rendez-vous', 
+      path: '/doctors/mes-rendez-vous', 
+      icon: 'solar:calendar-bold' 
     },
     { 
       title: 'Messagerie interne', 
@@ -351,24 +326,9 @@ const SUB_MENUS = {
   ],
   'Laboratoire': [
     { 
-      title: 'Réception des prescriptions', 
-      path: '/laboratory/prescriptions', 
-      icon: 'solar:document-medicine-bold' 
-    },
-    { 
       title: 'Gestion des analyses', 
       path: '/laboratory/analyses', 
       icon: 'solar:test-tube-bold' 
-    },
-    { 
-      title: 'Saisie et validation des résultats', 
-      path: '/laboratory/resultats', 
-      icon: 'solar:clipboard-text-bold' 
-    },
-    { 
-      title: 'Transmission automatique', 
-      path: '/laboratory/transmission', 
-      icon: 'solar:send-bold' 
     },
     { 
       title: 'Impression des résultats', 
