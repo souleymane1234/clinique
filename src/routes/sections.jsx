@@ -146,7 +146,7 @@ export default function Router() {
         { path: routesName.siteAdminPartnerLogos, element: <PartnerLogosListView /> },
         
         // Administration & Paramétrage (Module 4.1)
-        { path: routesName.adminUsers, element: <AdministrationView /> },
+        { path: routesName.adminUsers, element: <AdminUsersGuard /> },
         { path: routesName.adminMedecins, element: <AdministrationView /> },
         { path: routesName.adminRolesPermissions, element: <AdministrationView /> },
         { path: routesName.adminConfiguration, element: <AdministrationView /> },
@@ -311,3 +311,15 @@ const ProtectRoute = ({ children }) => {
 ProtectRoute.propTypes = {
   children: PropTypes.node.isRequired,
 };
+
+/**
+ * Garde pour la route /admin/users : redirige les MEDECIN vers mes-consultations.
+ */
+function AdminUsersGuard() {
+  const admin = AdminStorage.getInfoAdmin();
+  const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+  if (role === 'MEDECIN') {
+    return <Navigate to={routesName.doctorsMyConsultations} replace />;
+  }
+  return <AdministrationView />;
+}

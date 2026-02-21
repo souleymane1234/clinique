@@ -39,7 +39,7 @@ const navConfig = [
       // sont accessibles uniquement depuis la vue de détails d'un patient
     ],
     icon: icon('ic_user'),
-    protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER'], // Administrateur, Directeur, Médecin, Infirmier
+    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER'], // Administrateur, Directeur, Médecin, Infirmier
   },
   {
     title: 'Médecins',
