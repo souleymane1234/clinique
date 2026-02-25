@@ -37,12 +37,14 @@ import { fDateTime } from 'src/utils/format-time';
 
 import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
+import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
 const STATUS_COLORS = {
+  PRISE_CONSTANTES: 'secondary',
   EN_ATTENTE: 'warning',
   EN_COURS: 'info',
   TERMINEE: 'success',
@@ -50,7 +52,8 @@ const STATUS_COLORS = {
 };
 
 const STATUS_LABELS = {
-  EN_ATTENTE: 'En attente',
+  PRISE_CONSTANTES: 'Prise de constantes (infirmier)',
+  EN_ATTENTE: 'En attente médecin',
   EN_COURS: 'En cours',
   TERMINEE: 'Terminée',
   ANNULEE: 'Annulée',
@@ -85,6 +88,8 @@ export default function PatientAccueilView() {
   const [editForm, setEditForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  const [transferDoctorDialog, setTransferDoctorDialog] = useState({ open: false, medecinId: '' });
+  const [medecins, setMedecins] = useState([]);
 
   // Create patient dialog
   const [createPatientDialog, setCreatePatientDialog] = useState({ open: false, loading: false });
@@ -107,9 +112,33 @@ export default function PatientAccueilView() {
   const loadAllPatients = useCallback(async () => {
     setLoadingPatients(true);
     try {
-      const result = await ConsumApi.getPatients({});
+      const admin = AdminStorage.getInfoAdmin();
+      const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+      let infirmierId = admin?.infirmierId || admin?.infirmier?.id || null;
+      if (role === 'INFIRMIER' && !infirmierId && admin?.id) {
+        try {
+          const infResult = await ConsumApi.getInfirmiers();
+          if (infResult.success && Array.isArray(infResult.data)) {
+            const me = infResult.data.find((n) => n.user?.id === admin.id || n.userId === admin.id);
+            if (me) infirmierId = me.id;
+          }
+        } catch (_) { /* infirmier id non trouvé */ }
+      }
+      const filters = role === 'INFIRMIER' && infirmierId ? { infirmierId } : {};
+      const result = await ConsumApi.getPatients(filters);
       if (result.success) {
-        const patients = Array.isArray(result.data?.patients) ? result.data.patients : result.data || [];
+        let patients = Array.isArray(result.data?.patients) ? result.data.patients : result.data || [];
+        if (!Array.isArray(patients)) patients = [];
+        if (role === 'INFIRMIER' && infirmierId && patients.length > 0) {
+          patients = patients.filter(
+            (p) =>
+              p.infirmierId === infirmierId ||
+              p.nurseId === infirmierId ||
+              p.assignedNurseId === infirmierId ||
+              p.infirmier?.id === infirmierId ||
+              p.nurse?.id === infirmierId
+          );
+        }
         setAllPatients(patients);
         setFilteredPatients(patients);
       } else {
@@ -129,8 +158,21 @@ export default function PatientAccueilView() {
   const loadAllConsultations = useCallback(async () => {
     setLoadingConsultations(true);
     try {
-      const result = await ConsumApi.getConsultations({});
-      
+      const admin = AdminStorage.getInfoAdmin();
+      const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+      let infirmierId = admin?.infirmierId || admin?.infirmier?.id || null;
+      if (role === 'INFIRMIER' && !infirmierId && admin?.id) {
+        try {
+          const infResult = await ConsumApi.getInfirmiers();
+          if (infResult.success && Array.isArray(infResult.data)) {
+            const me = infResult.data.find((n) => n.user?.id === admin.id || n.userId === admin.id);
+            if (me) infirmierId = me.id;
+          }
+        } catch (_) { /* infirmier id non trouvé */ }
+      }
+      const filters = role === 'INFIRMIER' && infirmierId ? { nurseId: infirmierId } : {};
+      const result = await ConsumApi.getConsultations(filters);
+
       if (result.success) {
         let consultationsList = [];
         if (Array.isArray(result.data)) {
@@ -139,6 +181,15 @@ export default function PatientAccueilView() {
           consultationsList = result.data.data;
         } else if (result.data && typeof result.data === 'object') {
           consultationsList = result.data.consultations || result.data.items || result.data.results || [];
+        }
+        if (role === 'INFIRMIER' && infirmierId && consultationsList.length > 0) {
+          consultationsList = consultationsList.filter(
+            (c) =>
+              c.nurseId === infirmierId ||
+              c.infirmierId === infirmierId ||
+              c.nurse?.id === infirmierId ||
+              c.infirmier?.id === infirmierId
+          );
         }
         setConsultations(consultationsList);
       } else {
@@ -289,6 +340,7 @@ export default function PatientAccueilView() {
         const consultationData = result.data?.consultation || result.data;
         setSelectedConsultation(consultationData);
         setEditForm({
+          selectedMedecinId: consultationData.medecinId || consultationData.medecin?.id || '',
           clinicalExamination: consultationData.clinicalExamination || '',
           temperature: consultationData.temperature || 0,
           systolicBloodPressure: consultationData.systolicBloodPressure || 0,
@@ -307,6 +359,7 @@ export default function PatientAccueilView() {
           hospitalizationRequired: consultationData.hospitalizationRequired || false,
           hospitalizationReason: consultationData.hospitalizationReason || '',
         });
+        loadMedecinsForDetails();
       } else {
         showError('Erreur', 'Impossible de charger les détails de la consultation');
         setDetailsDialog({ open: false, loading: false, editing: false });
@@ -333,12 +386,19 @@ export default function PatientAccueilView() {
   const handleSaveConsultation = async () => {
     if (!selectedConsultation || !editForm) return;
 
+    const currentMedecinId = selectedConsultation.medecinId || selectedConsultation.medecin?.id;
+    const selectedMedecinId = editForm.selectedMedecinId || currentMedecinId;
+    if (!selectedMedecinId) {
+      showError('Erreur', 'Veuillez sélectionner un médecin pour enregistrer les constantes.');
+      return;
+    }
+
     setSaving(true);
     try {
       const updateData = {
         ...editForm,
         patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
-        medecinId: selectedConsultation.medecinId || selectedConsultation.medecin?.id,
+        medecinId: selectedMedecinId,
         type: selectedConsultation.type,
         status: selectedConsultation.status,
         consultationDate: selectedConsultation.consultationDate,
@@ -367,13 +427,68 @@ export default function PatientAccueilView() {
     }
   };
 
+  const loadMedecinsForDetails = useCallback(async () => {
+    try {
+      const result = await ConsumApi.getMedecins({});
+      if (result.success) {
+        const list = Array.isArray(result.data) ? result.data : result.data?.medecins || result.data?.data || [];
+        setMedecins(list);
+      }
+    } catch (e) {
+      console.error('Error loading medecins:', e);
+    }
+  }, []);
+
+  const handleOpenTransferToDoctor = async () => {
+    try {
+      const result = await ConsumApi.getMedecins({});
+      if (result.success) {
+        const list = Array.isArray(result.data) ? result.data : result.data?.medecins || result.data?.data || [];
+        setMedecins(list);
+        setTransferDoctorDialog({ open: true, medecinId: list.length > 0 ? list[0].id : '' });
+      }
+    } catch (e) {
+      showError('Erreur', 'Impossible de charger la liste des médecins');
+    }
+  };
+
   const handleTransferToDoctor = async () => {
     if (!selectedConsultation) return;
+    const { medecinId } = transferDoctorDialog;
+    if (!medecinId) {
+      showError('Erreur', 'Veuillez sélectionner un médecin');
+      return;
+    }
 
     setTransferring(true);
+    setTransferDoctorDialog({ open: false, medecinId: '' });
     try {
-      // Changer le statut de la consultation à EN_COURS pour que le médecin la voie
-      const result = await ConsumApi.updateConsultationStatus(selectedConsultation.id, 'EN_COURS');
+      const updatePayload = {
+        patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
+        medecinId,
+        type: selectedConsultation.type || 'PREMIERE_CONSULTATION',
+        status: 'EN_COURS',
+        consultationDate: selectedConsultation.consultationDate,
+        reason: selectedConsultation.reason,
+        clinicalExamination: editForm?.clinicalExamination ?? selectedConsultation.clinicalExamination,
+        temperature: editForm?.temperature ?? selectedConsultation.temperature,
+        systolicBloodPressure: editForm?.systolicBloodPressure ?? selectedConsultation.systolicBloodPressure,
+        diastolicBloodPressure: editForm?.diastolicBloodPressure ?? selectedConsultation.diastolicBloodPressure,
+        heartRate: editForm?.heartRate ?? selectedConsultation.heartRate,
+        respiratoryRate: editForm?.respiratoryRate ?? selectedConsultation.respiratoryRate,
+        weight: editForm?.weight ?? selectedConsultation.weight,
+        height: editForm?.height ?? selectedConsultation.height,
+        oxygenSaturation: editForm?.oxygenSaturation ?? selectedConsultation.oxygenSaturation,
+        diagnostic: editForm?.diagnostic ?? selectedConsultation.diagnostic,
+        differentialDiagnosis: editForm?.differentialDiagnosis ?? selectedConsultation.differentialDiagnosis,
+        treatment: editForm?.treatment ?? selectedConsultation.treatment,
+        recommendations: editForm?.recommendations ?? selectedConsultation.recommendations,
+        privateNotes: editForm?.privateNotes ?? selectedConsultation.privateNotes,
+        nextAppointment: editForm?.nextAppointment ?? selectedConsultation.nextAppointment,
+        hospitalizationRequired: editForm?.hospitalizationRequired ?? selectedConsultation.hospitalizationRequired,
+        hospitalizationReason: editForm?.hospitalizationReason ?? selectedConsultation.hospitalizationReason,
+      };
+      const result = await ConsumApi.updateConsultation(selectedConsultation.id, updatePayload);
       const processed = showApiResponse(result, {
         successTitle: 'Patient transféré',
         errorTitle: 'Erreur de transfert',
@@ -381,9 +496,7 @@ export default function PatientAccueilView() {
 
       if (processed.success) {
         showSuccess('Succès', 'Patient transféré au médecin avec succès');
-        // Recharger les détails
         await handleOpenDetails({ id: selectedConsultation.id });
-        // Recharger la liste des consultations
         await loadAllConsultations();
       }
     } catch (error) {
@@ -499,8 +612,9 @@ export default function PatientAccueilView() {
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2">
-                              Dr. {consultation.medecin?.firstName || consultation.medecin?.firstname || 'N/A'}{' '}
-                              {consultation.medecin?.lastName || consultation.medecin?.lastname || ''}
+                              {consultation.status === 'PRISE_CONSTANTES'
+                                ? '— Infirmier (constantes)'
+                                : `Dr. ${consultation.medecin?.firstName || consultation.medecin?.firstname || 'N/A'} ${consultation.medecin?.lastName || consultation.medecin?.lastname || ''}`}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -554,6 +668,9 @@ export default function PatientAccueilView() {
         <DialogTitle>Créer un nouveau patient</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
+            <Alert severity="info" sx={{ mb: 0 }}>
+              Après enregistrement, vous assignerez le patient à un infirmier (prise des constantes), puis l&apos;infirmier l&apos;assignera à un médecin pour la suite de la prise en charge.
+            </Alert>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -847,6 +964,29 @@ export default function PatientAccueilView() {
                     <Typography variant="subtitle2" color="text.secondary">Téléphone</Typography>
                     <Typography variant="body1">{selectedConsultation.patient?.phone || 'N/A'}</Typography>
                   </Grid>
+                  {detailsDialog.editing && (
+                    <Grid item xs={12}>
+                      <FormControl fullWidth required>
+                        <InputLabel>Médecin (obligatoire pour enregistrer)</InputLabel>
+                        <Select
+                          value={editForm.selectedMedecinId || ''}
+                          label="Médecin (obligatoire pour enregistrer)"
+                          onChange={(e) => setEditForm({ ...editForm, selectedMedecinId: e.target.value || '' })}
+                          displayEmpty
+                        >
+                          <MenuItem value="">
+                            <em>{medecins.length === 0 ? 'Chargement...' : '— Sélectionner un médecin —'}</em>
+                          </MenuItem>
+                          {medecins.map((med) => (
+                            <MenuItem key={med.id} value={med.id}>
+                              Dr. {med.firstName || med.first_name} {med.lastName || med.last_name}
+                              {med.speciality ? ` — ${med.speciality}` : ''}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
                 </Grid>
 
                 <Divider>Examen Clinique</Divider>
@@ -961,7 +1101,8 @@ export default function PatientAccueilView() {
                       label="Diagnostic"
                       value={editForm.diagnostic}
                       onChange={(e) => setEditForm({ ...editForm, diagnostic: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
+                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -983,7 +1124,8 @@ export default function PatientAccueilView() {
                       label="Traitement"
                       value={editForm.treatment}
                       onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
+                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -1062,17 +1204,44 @@ export default function PatientAccueilView() {
               Enregistrer
             </LoadingButton>
           )}
-          {!detailsDialog.editing && selectedConsultation && selectedConsultation.status === 'EN_ATTENTE' && (
+          {!detailsDialog.editing && selectedConsultation && (selectedConsultation.status === 'PRISE_CONSTANTES' || selectedConsultation.status === 'EN_ATTENTE') && (
             <LoadingButton
               variant="contained"
               color="primary"
-              onClick={handleTransferToDoctor}
+              onClick={handleOpenTransferToDoctor}
               loading={transferring}
               startIcon={<Iconify icon="eva:person-add-fill" />}
             >
               Transférer au médecin
             </LoadingButton>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog choix du médecin pour le transfert */}
+      <Dialog open={transferDoctorDialog.open} onClose={() => setTransferDoctorDialog({ open: false, medecinId: '' })} maxWidth="sm" fullWidth>
+        <DialogTitle>Choisir le médecin</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Médecin</InputLabel>
+            <Select
+              value={transferDoctorDialog.medecinId}
+              label="Médecin"
+              onChange={(e) => setTransferDoctorDialog((prev) => ({ ...prev, medecinId: e.target.value }))}
+            >
+              {medecins.map((medecin) => (
+                <MenuItem key={medecin.id} value={medecin.id}>
+                  Dr. {medecin.firstName || medecin.firstname} {medecin.lastName || medecin.lastname} — {medecin.speciality || 'Médecine générale'}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTransferDoctorDialog({ open: false, medecinId: '' })}>Annuler</Button>
+          <LoadingButton variant="contained" onClick={handleTransferToDoctor} loading={transferring}>
+            Confirmer le transfert
+          </LoadingButton>
         </DialogActions>
       </Dialog>
     </>

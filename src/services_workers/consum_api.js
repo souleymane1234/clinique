@@ -192,6 +192,8 @@ export default class ConsumApi {
         urlLower.includes('/patients') ||
         urlLower.includes('/medecin') ||
         urlLower.includes('/medecins') ||
+        urlLower.includes('/infirmier') ||
+        urlLower.includes('/secretaire') ||
         urlLower.includes('/consultation') ||
         urlLower.includes('/consultations') ||
         urlLower.includes('/appointments') ||
@@ -2609,6 +2611,9 @@ export default class ConsumApi {
     if (filters.gender) params.append('gender', filters.gender);
     if (filters.page) params.append('page', filters.page);
     if (filters.limit) params.append('limit', filters.limit);
+    // Filtre par infirmier : pour un infirmier connecté, ne retourner que les patients qui lui sont affectés
+    if (filters.infirmierId) params.append('infirmierId', filters.infirmierId);
+    if (filters.nurseId) params.append('nurseId', filters.nurseId);
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -2644,6 +2649,8 @@ export default class ConsumApi {
     params.append('limit', limit);
     if (filters.search) params.append('search', filters.search);
     if (filters.gender) params.append('gender', filters.gender);
+    if (filters.infirmierId) params.append('infirmierId', filters.infirmierId);
+    if (filters.nurseId) params.append('nurseId', filters.nurseId);
     const url = `${apiUrl.patientsPaginated}?${params.toString()}`;
 
     const result = await this._authenticatedRequest('GET', url);
@@ -2924,7 +2931,7 @@ export default class ConsumApi {
       firstName: data.firstName || data.first_name || '',
       lastName: data.lastName || data.last_name || '',
       gender: data.gender || 'MALE',
-      speciality: data.speciality || '',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Médecine générale',
       phone: data.phone || '',
       email: data.email || '',
       address: data.address || '',
@@ -2952,7 +2959,7 @@ export default class ConsumApi {
       firstName: data.firstName || data.first_name || '',
       lastName: data.lastName || data.last_name || '',
       gender: data.gender || 'MALE',
-      speciality: data.speciality || '',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Médecine générale',
       phone: data.phone || '',
       email: data.email || '',
       address: data.address || '',
@@ -2974,6 +2981,193 @@ export default class ConsumApi {
 
   static async deleteMedecin(medecinId) {
     return this._authenticatedRequest('DELETE', apiUrl.deleteMedecin(medecinId));
+  }
+
+  // ========== INFIRMIERS ==========
+
+  static async getInfirmiers() {
+    const result = await this._authenticatedRequest('GET', apiUrl.infirmiers);
+    if (result.success && result.data != null) {
+      const raw = result.data;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw.infirmiers || raw.nurses || raw.data || raw.items || raw.results || [];
+      result.data = Array.isArray(list) ? list.map((n) => this._mapInfirmierFields(n)) : [];
+    }
+    return result;
+  }
+
+  static async getInfirmierById(id) {
+    const result = await this._authenticatedRequest('GET', apiUrl.infirmierById(id));
+    if (result.success && result.data) {
+      result.data = this._mapInfirmierFields(result.data);
+    }
+    return result;
+  }
+
+  static async createInfirmier(data) {
+    const normalizedData = {
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Médecine générale',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      password: data.password || '',
+    };
+    const result = await this._authenticatedRequest('POST', apiUrl.infirmiers, normalizedData);
+    if (result.success && result.data?.nurse) {
+      result.data.nurse = this._mapInfirmierFields(result.data.nurse);
+    }
+    return result;
+  }
+
+  static async updateInfirmier(id, data) {
+    const normalizedData = {
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Médecine générale',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      userId: data.userId || data.user?.id || null,
+    };
+    const result = await this._authenticatedRequest('PUT', apiUrl.updateInfirmier(id), normalizedData);
+    if (result.success && result.data) {
+      result.data = this._mapInfirmierFields(result.data);
+    }
+    return result;
+  }
+
+  static async deleteInfirmier(id) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteInfirmier(id));
+  }
+
+  static _mapInfirmierFields(nurse) {
+    if (!nurse) return nurse;
+    return {
+      id: nurse.id || nurse._id || nurse.uuid,
+      firstName: nurse.firstName || nurse.first_name || '',
+      lastName: nurse.lastName || nurse.last_name || '',
+      gender: nurse.gender || 'MALE',
+      speciality: nurse.speciality || '',
+      phone: nurse.phone || '',
+      email: nurse.email || '',
+      address: nurse.address || '',
+      city: nurse.city || '',
+      country: nurse.country || '',
+      status: nurse.status || 'ACTIVE',
+      isActive: nurse.isActive !== undefined ? nurse.isActive : true,
+      user: nurse.user || null,
+      userId: nurse.user?.id || nurse.userId || null,
+      createdAt: nurse.createdAt || nurse.created_at,
+      updatedAt: nurse.updatedAt || nurse.updated_at,
+      ...nurse,
+    };
+  }
+
+  // ========== SECRÉTAIRES ==========
+
+  static async getSecretaires() {
+    const result = await this._authenticatedRequest('GET', apiUrl.secretaires);
+    if (result.success && result.data != null) {
+      const raw = result.data;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw.secretaires || raw.secretaries || (Array.isArray(raw.secretary) ? raw.secretary : []) || raw.data || raw.items || raw.results || [];
+      result.data = Array.isArray(list) ? list.map((s) => this._mapSecretaireFields(s)) : [];
+    }
+    return result;
+  }
+
+  static async getSecretaireById(id) {
+    const result = await this._authenticatedRequest('GET', apiUrl.secretaireById(id));
+    if (result.success && result.data) {
+      result.data = this._mapSecretaireFields(result.data);
+    }
+    return result;
+  }
+
+  static async createSecretaire(data) {
+    const normalizedData = {
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Accueil',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      password: data.password || '',
+    };
+    const result = await this._authenticatedRequest('POST', apiUrl.secretaires, normalizedData);
+    const raw = result.data?.secretary || result.data?.secretaire || result.data;
+    if (result.success && raw) {
+      result.data = { ...result.data, secretary: this._mapSecretaireFields(raw), secretaire: this._mapSecretaireFields(raw) };
+    }
+    return result;
+  }
+
+  static async updateSecretaire(id, data) {
+    const normalizedData = {
+      firstName: data.firstName || data.first_name || '',
+      lastName: data.lastName || data.last_name || '',
+      gender: data.gender || 'MALE',
+      speciality: (data.speciality && String(data.speciality).trim()) ? String(data.speciality).trim() : 'Accueil',
+      phone: data.phone || '',
+      email: data.email || '',
+      address: data.address || '',
+      city: data.city || '',
+      country: data.country || '',
+      status: data.status || 'ACTIVE',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      userId: data.userId || data.user?.id || null,
+    };
+    const result = await this._authenticatedRequest('PUT', apiUrl.updateSecretaire(id), normalizedData);
+    if (result.success && result.data) {
+      result.data = this._mapSecretaireFields(result.data);
+    }
+    return result;
+  }
+
+  static async deleteSecretaire(id) {
+    return this._authenticatedRequest('DELETE', apiUrl.deleteSecretaire(id));
+  }
+
+  static _mapSecretaireFields(sec) {
+    if (!sec) return sec;
+    return {
+      id: sec.id || sec._id || sec.uuid,
+      firstName: sec.firstName || sec.first_name || '',
+      lastName: sec.lastName || sec.last_name || '',
+      gender: sec.gender || 'MALE',
+      speciality: sec.speciality || 'Accueil',
+      phone: sec.phone || '',
+      email: sec.email || '',
+      address: sec.address || '',
+      city: sec.city || '',
+      country: sec.country || '',
+      status: sec.status || 'ACTIVE',
+      isActive: sec.isActive !== undefined ? sec.isActive : true,
+      user: sec.user || null,
+      userId: sec.user?.id || sec.userId || null,
+      createdAt: sec.createdAt || sec.created_at,
+      updatedAt: sec.updatedAt || sec.updated_at,
+      ...sec,
+    };
   }
 
   // Mapper les champs médecin API → Frontend
@@ -3236,6 +3430,8 @@ export default class ConsumApi {
     const params = new URLSearchParams();
     if (filters.patientId) params.append('patientId', filters.patientId);
     if (filters.medecinId) params.append('medecinId', filters.medecinId);
+    if (filters.nurseId) params.append('nurseId', filters.nurseId);
+    else if (filters.infirmierId) params.append('nurseId', filters.infirmierId);
     if (filters.status) params.append('status', filters.status);
     if (filters.type) params.append('type', filters.type);
     if (filters.dateDebut) params.append('dateDebut', filters.dateDebut);
@@ -3261,6 +3457,8 @@ export default class ConsumApi {
     
     if (filters.patientId) params.append('patientId', filters.patientId);
     if (filters.medecinId) params.append('medecinId', filters.medecinId);
+    if (filters.nurseId) params.append('nurseId', filters.nurseId);
+    else if (filters.infirmierId) params.append('nurseId', filters.infirmierId);
     if (filters.status) params.append('status', filters.status);
     if (filters.type) params.append('type', filters.type);
     if (filters.dateDebut) params.append('dateDebut', filters.dateDebut);
@@ -3300,33 +3498,40 @@ export default class ConsumApi {
   }
 
   static async createConsultation(data) {
-    // Normaliser les données selon la structure API
+    // Schéma API POST /api/consultations: patientId, medecinId?, nurseId?, type, status, consultationDate, reason + champs cliniques
+    // Ne pas envoyer medecinId/nurseId quand vides (évite 400 si le backend valide en UUID)
+    const medecinId = data.medecinId && String(data.medecinId).trim() ? data.medecinId : undefined;
+    let nurseId = data.nurseId && String(data.nurseId).trim() ? data.nurseId : undefined;
+    if (nurseId === undefined && data.infirmierId && String(data.infirmierId).trim()) nurseId = data.infirmierId;
+    const nextAppointment = data.nextAppointment != null && String(data.nextAppointment).trim() !== '' ? String(data.nextAppointment) : undefined;
+
     const normalizedData = {
       patientId: data.patientId || '',
-      medecinId: data.medecinId || '',
       type: data.type || 'PREMIERE_CONSULTATION',
       status: data.status || 'EN_ATTENTE',
       consultationDate: data.consultationDate || new Date().toISOString(),
       reason: data.reason || '',
       clinicalExamination: data.clinicalExamination || '',
-      temperature: data.temperature || 0,
-      systolicBloodPressure: data.systolicBloodPressure || 0,
-      diastolicBloodPressure: data.diastolicBloodPressure || 0,
-      heartRate: data.heartRate || 0,
-      respiratoryRate: data.respiratoryRate || 0,
-      weight: data.weight || 0,
-      height: data.height || 0,
-      oxygenSaturation: data.oxygenSaturation || 0,
+      temperature: Number(data.temperature) || 0,
+      systolicBloodPressure: Number(data.systolicBloodPressure) || 0,
+      diastolicBloodPressure: Number(data.diastolicBloodPressure) || 0,
+      heartRate: Number(data.heartRate) || 0,
+      respiratoryRate: Number(data.respiratoryRate) || 0,
+      weight: Number(data.weight) || 0,
+      height: Number(data.height) || 0,
+      oxygenSaturation: Number(data.oxygenSaturation) || 0,
       diagnostic: data.diagnostic || '',
       differentialDiagnosis: data.differentialDiagnosis || '',
       treatment: data.treatment || '',
       recommendations: data.recommendations || '',
       privateNotes: data.privateNotes || '',
-      nextAppointment: data.nextAppointment || null,
-      hospitalizationRequired: data.hospitalizationRequired || false,
+      hospitalizationRequired: Boolean(data.hospitalizationRequired),
       hospitalizationReason: data.hospitalizationReason || '',
     };
-    
+    if (medecinId) normalizedData.medecinId = medecinId;
+    if (nurseId) normalizedData.nurseId = nurseId;
+    if (nextAppointment !== undefined) normalizedData.nextAppointment = nextAppointment;
+
     const result = await this._authenticatedRequest('POST', apiUrl.consultations, normalizedData);
     
     if (result.success && result.data?.consultation) {
@@ -3337,10 +3542,15 @@ export default class ConsumApi {
   }
 
   static async updateConsultation(consultationId, data) {
-    // Normaliser les données et s'assurer que les nombres sont bien des nombres
+    // Normaliser les données et s'assurer que les nombres sont bien des nombres (schéma aligné avec POST /api/consultations)
+    // Ne pas envoyer medecinId si vide (le backend exige un UUID valide)
+    const medecinId = data.medecinId && String(data.medecinId).trim() ? data.medecinId : undefined;
+    let nurseId = data.nurseId != null && String(data.nurseId).trim() ? data.nurseId : undefined;
+    if (nurseId === undefined && data.infirmierId != null && String(data.infirmierId).trim()) nurseId = data.infirmierId;
     const normalizedData = {
       patientId: data.patientId || '',
-      medecinId: data.medecinId || '',
+      ...(medecinId && { medecinId }),
+      ...(nurseId !== undefined && { nurseId }),
       type: data.type || 'PREMIERE_CONSULTATION',
       status: data.status || 'EN_ATTENTE',
       consultationDate: data.consultationDate || new Date().toISOString(),

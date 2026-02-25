@@ -39,6 +39,7 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDate } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
+import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
@@ -104,14 +105,27 @@ export default function PatientDossiersView() {
   const loadPatients = useCallback(async () => {
     setLoading(true);
     try {
+      const admin = AdminStorage.getInfoAdmin();
+      const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+      let infirmierId = admin?.infirmierId || admin?.infirmier?.id || null;
+      if (role === 'INFIRMIER' && !infirmierId && admin?.id) {
+        try {
+          const infResult = await ConsumApi.getInfirmiers();
+          if (infResult.success && Array.isArray(infResult.data)) {
+            const me = infResult.data.find((n) => n.user?.id === admin.id || n.userId === admin.id);
+            if (me) infirmierId = me.id;
+          }
+        } catch (_) { /* infirmier id non trouvé */ }
+      }
+
       const filters = {
         page: page + 1,
         limit: rowsPerPage,
       };
-
       if (search) filters.search = search;
       if (genderFilter) filters.gender = genderFilter;
       if (ageFilter) filters.age = ageFilter;
+      if (role === 'INFIRMIER' && infirmierId) filters.infirmierId = infirmierId;
 
       console.log('=== LOAD PATIENTS START ===');
       console.log('Filters:', filters);
@@ -142,6 +156,18 @@ export default function PatientDossiersView() {
           patientsList = processed.data.patients;
         } else if (Array.isArray(processed.data)) {
           patientsList = processed.data;
+        }
+        // Si infirmier connecté et API n'a pas filtré : filtrer côté client par infirmier affecté
+        if (role === 'INFIRMIER' && infirmierId && patientsList.length > 0) {
+          const filtered = patientsList.filter(
+            (p) =>
+              p.infirmierId === infirmierId ||
+              p.nurseId === infirmierId ||
+              p.assignedNurseId === infirmierId ||
+              p.infirmier?.id === infirmierId ||
+              p.nurse?.id === infirmierId
+          );
+          if (filtered.length !== patientsList.length) patientsList = filtered;
         }
         
         console.log('=== PATIENTS LIST ===');

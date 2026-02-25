@@ -484,9 +484,9 @@ export default function UsersView() {
                 <Table size="small" sx={{ minWidth: 800 }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Matricule</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Noms</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Numéro</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Nom</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Prénom</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>Mail</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>Rôle</TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>Actions</TableCell>
                     </TableRow>
@@ -518,17 +518,17 @@ export default function UsersView() {
                           <TableRow key={user.id} hover>
                             <TableCell>
                               <Typography variant="body2" noWrap>
-                                {user.matricule || user.id?.substring(0, 8) || '-'}
+                                {user.first_name || user.firstName || '-'}
                               </Typography>
                             </TableCell>
                             <TableCell>
                               <Typography variant="subtitle2" noWrap>
-                                {user.first_name || user.firstName || ''} {user.last_name || user.lastName || ''}
+                                {user.last_name || user.lastName || '-'}
                               </Typography>
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2" noWrap>
-                                {user.phone || user.phoneNumber || '-'}
+                                {user.email || user.mail || '-'}
                               </Typography>
                             </TableCell>
                             <TableCell>

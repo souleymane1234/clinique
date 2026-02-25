@@ -51,32 +51,38 @@ const GENDER_LABELS = {
   FEMALE: 'Femme',
 };
 
-export default function MedecinsView() {
-  const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
+const SPECIALITY_OPTIONS = [
+  'Accueil',
+  'Standard',
+  'Administratif',
+  'Rendez-vous',
+  'Facturation',
+  'Archivage',
+];
 
-  const [medecins, setMedecins] = useState([]);
+const SUCCESS_AUTO_CLOSE_MS = 2000;
+
+export default function SecretairesView() {
+  const { contextHolder, showApiResponse, showError } = useNotification();
+
+  const [secretaires, setSecretaires] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
 
-  // Filters
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [specialityFilter, setSpecialityFilter] = useState('');
 
-  // Dialogs
   const [createDialog, setCreateDialog] = useState({ open: false, loading: false });
-  const [editDialog, setEditDialog] = useState({ open: false, medecin: null, loading: false });
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, medecin: null, loading: false });
+  const [editDialog, setEditDialog] = useState({ open: false, secretaire: null, loading: false });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, secretaire: null, loading: false });
+  const [successModal, setSuccessModal] = useState({ open: false, message: '' });
 
-  // Form data
   const [formData, setFormData] = useState({
-    doctorNumber: '',
     firstName: '',
     lastName: '',
     gender: 'MALE',
-    speciality: '',
+    speciality: 'Accueil',
     phone: '',
     email: '',
     address: '',
@@ -87,56 +93,68 @@ export default function MedecinsView() {
     password: '',
   });
 
-  const loadMedecins = useCallback(async () => {
+  const loadSecretaires = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await ConsumApi.getMedecinsPaginated(page + 1, rowsPerPage, {
-        search,
-        status: statusFilter,
-        speciality: specialityFilter,
-      });
-
+      const result = await ConsumApi.getSecretaires();
       if (result.success) {
-        setMedecins(result.data?.medecins || result.data?.data || []);
-        setTotal(result.data?.total || result.data?.count || 0);
+        let list = Array.isArray(result.data) ? result.data : [];
+        if (search) {
+          const s = search.toLowerCase();
+          list = list.filter(
+            (n) =>
+              (n.firstName || '').toLowerCase().includes(s) ||
+              (n.lastName || '').toLowerCase().includes(s) ||
+              (n.email || '').toLowerCase().includes(s) ||
+              (n.phone || '').toLowerCase().includes(s)
+          );
+        }
+        if (statusFilter) {
+          list = list.filter((n) => (n.status || 'ACTIVE') === statusFilter);
+        }
+        setSecretaires(list);
       } else {
-        showError('Erreur', result.message || 'Impossible de charger les médecins');
-        setMedecins([]);
-        setTotal(0);
+        showError('Erreur', result.message || 'Impossible de charger les secrétaires');
+        setSecretaires([]);
       }
     } catch (error) {
-      console.error('Error loading medecins:', error);
-      showError('Erreur', 'Impossible de charger les médecins');
-      setMedecins([]);
-      setTotal(0);
+      console.error('Error loading secretaires:', error);
+      showError('Erreur', 'Impossible de charger les secrétaires');
+      setSecretaires([]);
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, statusFilter, specialityFilter]);
+  }, [search, statusFilter]);
 
   useEffect(() => {
-    loadMedecins();
-  }, [loadMedecins]);
+    loadSecretaires();
+  }, [loadSecretaires]);
+
+  useEffect(() => {
+    if (!successModal.open) return undefined;
+    const timer = setTimeout(() => {
+      setSuccessModal({ open: false, message: '' });
+    }, SUCCESS_AUTO_CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [successModal.open]);
 
   const handleSearch = () => {
     setPage(0);
-    loadMedecins();
+    loadSecretaires();
   };
 
   const handleClearFilters = () => {
     setSearch('');
     setStatusFilter('');
-    setSpecialityFilter('');
     setPage(0);
   };
 
   const resetForm = () => {
     setFormData({
-      doctorNumber: '',
       firstName: '',
       lastName: '',
       gender: 'MALE',
-      speciality: '',
+      speciality: 'Accueil',
       phone: '',
       email: '',
       address: '',
@@ -155,118 +173,120 @@ export default function MedecinsView() {
 
   const handleCreate = async () => {
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
-      showError('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      showError('Erreur', 'Veuillez remplir tous les champs obligatoires (prénom, nom, email, mot de passe)');
+      return;
+    }
+    if (!formData.speciality || !String(formData.speciality).trim()) {
+      showError('Erreur', 'La spécialité/département est obligatoire');
       return;
     }
 
-    setCreateDialog({ ...createDialog, loading: true });
+    setCreateDialog((d) => ({ ...d, loading: true }));
     try {
-      const result = await ConsumApi.createMedecin(formData);
-      const processed = showApiResponse(result, {
-        successTitle: 'Médecin créé',
-        errorTitle: 'Erreur de création',
-      });
-
-      if (processed.success) {
-        showSuccess('Succès', 'Médecin créé avec succès');
+      const result = await ConsumApi.createSecretaire(formData);
+      if (result.success) {
         setCreateDialog({ open: false, loading: false });
         resetForm();
-        loadMedecins();
+        loadSecretaires();
+        setSuccessModal({ open: true, message: 'Secrétaire créé(e) avec succès' });
+      } else {
+        showApiResponse(result, { successTitle: '', errorTitle: 'Erreur de création' });
       }
     } catch (error) {
-      console.error('Error creating medecin:', error);
-      showError('Erreur', 'Impossible de créer le médecin');
+      console.error('Error creating secretaire:', error);
+      showError('Erreur', 'Impossible de créer le/la secrétaire');
     } finally {
-      setCreateDialog({ ...createDialog, loading: false });
+      setCreateDialog((d) => ({ ...d, loading: false }));
     }
   };
 
-  const openEditDialog = (medecin) => {
+  const openEditDialog = (secretaire) => {
     setFormData({
-      doctorNumber: medecin.doctorNumber || '',
-      firstName: medecin.firstName || medecin.firstname || '',
-      lastName: medecin.lastName || medecin.lastname || '',
-      gender: medecin.gender || 'MALE',
-      speciality: medecin.speciality || '',
-      phone: medecin.phone || '',
-      email: medecin.email || '',
-      address: medecin.address || '',
-      city: medecin.city || '',
-      country: medecin.country || '',
-      status: medecin.status || 'ACTIVE',
-      isActive: medecin.isActive !== undefined ? medecin.isActive : true,
-      password: '', // Ne pas pré-remplir le mot de passe
-      userId: medecin.userId || medecin.user?.id || null,
+      firstName: secretaire.firstName || secretaire.first_name || '',
+      lastName: secretaire.lastName || secretaire.last_name || '',
+      gender: secretaire.gender || 'MALE',
+      speciality: (secretaire.speciality && String(secretaire.speciality).trim()) ? secretaire.speciality : 'Accueil',
+      phone: secretaire.phone || '',
+      email: secretaire.email || '',
+      address: secretaire.address || '',
+      city: secretaire.city || '',
+      country: secretaire.country || '',
+      status: secretaire.status || 'ACTIVE',
+      isActive: secretaire.isActive !== undefined ? secretaire.isActive : true,
+      password: '',
+      userId: secretaire.userId || secretaire.user?.id || null,
     });
-    setEditDialog({ open: true, medecin, loading: false });
+    setEditDialog({ open: true, secretaire, loading: false });
   };
 
   const handleUpdate = async () => {
-    if (!editDialog.medecin || !formData.firstName || !formData.lastName || !formData.email) {
+    const sec = editDialog.secretaire;
+    if (!sec || !formData.firstName || !formData.lastName || !formData.email) {
       showError('Erreur', 'Veuillez remplir tous les champs obligatoires');
       return;
     }
+    if (!formData.speciality || !String(formData.speciality).trim()) {
+      showError('Erreur', 'La spécialité/département est obligatoire');
+      return;
+    }
 
-    setEditDialog({ ...editDialog, loading: true });
+    setEditDialog((d) => ({ ...d, loading: true }));
     try {
-      // Ne pas envoyer le mot de passe s'il est vide
       const updateData = { ...formData };
-      if (!updateData.password) {
-        delete updateData.password;
-      }
+      if (!updateData.password) delete updateData.password;
 
-      const result = await ConsumApi.updateMedecin(editDialog.medecin.id, updateData);
-      const processed = showApiResponse(result, {
-        successTitle: 'Médecin modifié',
-        errorTitle: 'Erreur de modification',
-      });
-
-      if (processed.success) {
-        showSuccess('Succès', 'Médecin modifié avec succès');
-        setEditDialog({ open: false, medecin: null, loading: false });
+      const result = await ConsumApi.updateSecretaire(sec.id, updateData);
+      if (result.success) {
+        setEditDialog({ open: false, secretaire: null, loading: false });
         resetForm();
-        loadMedecins();
+        loadSecretaires();
+        setSuccessModal({ open: true, message: 'Secrétaire modifié(e) avec succès' });
+      } else {
+        showApiResponse(result, { successTitle: '', errorTitle: 'Erreur de modification' });
       }
     } catch (error) {
-      console.error('Error updating medecin:', error);
-      showError('Erreur', 'Impossible de modifier le médecin');
+      console.error('Error updating secretaire:', error);
+      showError('Erreur', 'Impossible de modifier le/la secrétaire');
     } finally {
-      setEditDialog({ ...editDialog, loading: false });
+      setEditDialog((d) => ({ ...d, loading: false }));
     }
   };
 
-  const openDeleteDialog = (medecin) => {
-    setDeleteDialog({ open: true, medecin, loading: false });
+  const openDeleteDialog = (secretaire) => {
+    setDeleteDialog({ open: true, secretaire, loading: false });
   };
 
   const handleDelete = async () => {
-    if (!deleteDialog.medecin) return;
+    if (!deleteDialog.secretaire) return;
 
-    setDeleteDialog({ ...deleteDialog, loading: true });
+    setDeleteDialog((d) => ({ ...d, loading: true }));
     try {
-      const result = await ConsumApi.deleteMedecin(deleteDialog.medecin.id);
-      const processed = showApiResponse(result, {
-        successTitle: 'Médecin supprimé',
-        errorTitle: 'Erreur de suppression',
-      });
-
-      if (processed.success) {
-        showSuccess('Succès', 'Médecin supprimé avec succès');
-        setDeleteDialog({ open: false, medecin: null, loading: false });
-        loadMedecins();
+      const result = await ConsumApi.deleteSecretaire(deleteDialog.secretaire.id);
+      if (result.success) {
+        setDeleteDialog({ open: false, secretaire: null, loading: false });
+        loadSecretaires();
+        setSuccessModal({ open: true, message: 'Secrétaire supprimé(e) avec succès' });
+      } else {
+        showApiResponse(result, { successTitle: '', errorTitle: 'Erreur de suppression' });
       }
     } catch (error) {
-      console.error('Error deleting medecin:', error);
-      showError('Erreur', 'Impossible de supprimer le médecin');
+      console.error('Error deleting secretaire:', error);
+      showError('Erreur', 'Impossible de supprimer le/la secrétaire');
     } finally {
-      setDeleteDialog({ ...deleteDialog, loading: false });
+      setDeleteDialog((d) => ({ ...d, loading: false }));
     }
   };
+
+  const paginatedSecretaires = secretaires.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+  const total = secretaires.length;
 
   return (
     <>
       <Helmet>
-        <title> Médecins | PREVENTIC </title>
+        <title> Secrétaires | Clinique </title>
       </Helmet>
 
       {contextHolder}
@@ -276,9 +296,9 @@ export default function MedecinsView() {
           <Box>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Box>
-                <Typography variant="h4">Gestion des Médecins</Typography>
+                <Typography variant="h4">Gestion des Secrétaires</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Gérez tous les médecins du système
+                  Gérez tous les secrétaires du système
                 </Typography>
               </Box>
               <Button
@@ -286,23 +306,20 @@ export default function MedecinsView() {
                 startIcon={<Iconify icon="mingcute:add-line" />}
                 onClick={openCreateDialog}
               >
-                Ajouter un médecin
+                Ajouter un(e) secrétaire
               </Button>
             </Stack>
           </Box>
 
-          {/* Filters */}
           <Card sx={{ p: 3 }}>
             <Stack spacing={2}>
               <TextField
                 fullWidth
-                placeholder="Rechercher par nom, prénom, email, téléphone ou numéro..."
+                placeholder="Rechercher par nom, prénom, email ou téléphone..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSearch();
-                  }
+                  if (e.key === 'Enter') handleSearch();
                 }}
                 InputProps={{
                   startAdornment: (
@@ -323,21 +340,6 @@ export default function MedecinsView() {
                     <MenuItem value="">Tous</MenuItem>
                     <MenuItem value="ACTIVE">Actif</MenuItem>
                     <MenuItem value="INACTIVE">Inactif</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl sx={{ minWidth: { xs: '100%', sm: 180 } }}>
-                  <InputLabel>Spécialité</InputLabel>
-                  <Select
-                    value={specialityFilter}
-                    label="Spécialité"
-                    onChange={(e) => setSpecialityFilter(e.target.value)}
-                  >
-                    <MenuItem value="">Toutes</MenuItem>
-                    <MenuItem value="Médecine générale">Médecine générale</MenuItem>
-                    <MenuItem value="Cardiologie">Cardiologie</MenuItem>
-                    <MenuItem value="Pédiatrie">Pédiatrie</MenuItem>
-                    <MenuItem value="Gynécologie">Gynécologie</MenuItem>
-                    <MenuItem value="Dermatologie">Dermatologie</MenuItem>
                   </Select>
                 </FormControl>
                 <Stack direction="row" spacing={2} sx={{ flex: 1, justifyContent: { xs: 'stretch', sm: 'flex-end' } }}>
@@ -367,10 +369,9 @@ export default function MedecinsView() {
           <Card>
             <TableContainer>
               <Scrollbar>
-                <Table size="small" sx={{ minWidth: 800 }}>
+                <Table size="small" sx={{ minWidth: 700 }}>
                   <TableHead>
                     <TableRow>
-                      {/* <TableCell sx={{ whiteSpace: 'nowrap' }}>Numéro</TableCell> */}
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>Nom complet</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>Spécialité</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>Téléphone</TableCell>
@@ -379,90 +380,73 @@ export default function MedecinsView() {
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
-
                   <TableBody>
-                    {(() => {
-                      if (loading) {
-                        return (
-                          <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
-                              <Typography color="text.secondary">Chargement...</Typography>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }
-                      if (medecins.length === 0) {
-                        return (
-                          <TableRow>
-                            <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
-                              <Typography color="text.secondary">Aucun médecin trouvé</Typography>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }
-                      return medecins.map((medecin) => (
-                        <TableRow key={medecin.id} hover>
-                          {/* <TableCell>
-                            <Typography variant="body2" noWrap>
-                              {medecin.doctorNumber || '-'}
-                            </Typography>
-                          </TableCell> */}
+                    {loading && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                          <Typography color="text.secondary">Chargement...</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {!loading && paginatedSecretaires.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
+                          <Typography color="text.secondary">Aucun(e) secrétaire trouvé(e)</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {!loading && paginatedSecretaires.length > 0 && paginatedSecretaires.map((secretaire) => (
+                        <TableRow key={secretaire.id} hover>
                           <TableCell>
                             <Typography variant="subtitle2" noWrap>
-                              {medecin.firstName || medecin.firstname || ''} {medecin.lastName || medecin.lastname || ''}
+                              {secretaire.firstName || ''} {secretaire.lastName || ''}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              {GENDER_LABELS[medecin.gender] || medecin.gender}
+                              {GENDER_LABELS[secretaire.gender] || secretaire.gender}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" noWrap>
-                              {medecin.speciality || '-'}
+                              {secretaire.speciality || '-'}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" noWrap>
-                              {medecin.phone || '-'}
+                              {secretaire.phone || '-'}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" noWrap>
-                              {medecin.email || '-'}
+                              {secretaire.email || '-'}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Chip
-                              label={medecin.status || 'ACTIVE'}
-                              color={STATUS_COLORS[medecin.status] || 'default'}
+                              label={secretaire.status || 'ACTIVE'}
+                              color={STATUS_COLORS[secretaire.status] || 'default'}
                               size="small"
                             />
                           </TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="nowrap">
                               <Tooltip title="Modifier">
-                                <IconButton size="small" onClick={() => openEditDialog(medecin)} color="primary">
+                                <IconButton size="small" onClick={() => openEditDialog(secretaire)} color="primary">
                                   <Iconify icon="solar:pen-bold" width={18} />
                                 </IconButton>
                               </Tooltip>
                               <Tooltip title="Supprimer">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => openDeleteDialog(medecin)}
-                                  color="error"
-                                >
+                                <IconButton size="small" onClick={() => openDeleteDialog(secretaire)} color="error">
                                   <Iconify icon="solar:trash-bin-trash-bold" width={18} />
                                 </IconButton>
                               </Tooltip>
                             </Stack>
                           </TableCell>
                         </TableRow>
-                      ));
-                    })()}
+                      ))}
                   </TableBody>
                 </Table>
               </Scrollbar>
             </TableContainer>
-
             <TablePagination
               component="div"
               count={total}
@@ -481,18 +465,10 @@ export default function MedecinsView() {
 
       {/* Create Dialog */}
       <Dialog open={createDialog.open} onClose={() => setCreateDialog({ open: false, loading: false })} maxWidth="md" fullWidth>
-        <DialogTitle>Ajouter un médecin</DialogTitle>
+        <DialogTitle>Ajouter un(e) secrétaire</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ pt: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Numéro de médecin"
-                  value={formData.doctorNumber}
-                  onChange={(e) => setFormData({ ...formData, doctorNumber: e.target.value })}
-                />
-              </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
                   <InputLabel>Genre</InputLabel>
@@ -506,6 +482,7 @@ export default function MedecinsView() {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12} sm={6} />
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -525,12 +502,20 @@ export default function MedecinsView() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Spécialité"
-                  value={formData.speciality}
-                  onChange={(e) => setFormData({ ...formData, speciality: e.target.value })}
-                />
+                <FormControl fullWidth required>
+                  <InputLabel>Spécialité / Département</InputLabel>
+                  <Select
+                    value={formData.speciality || 'Accueil'}
+                    label="Spécialité / Département"
+                    onChange={(e) => setFormData({ ...formData, speciality: e.target.value })}
+                  >
+                    {SPECIALITY_OPTIONS.map((opt) => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -609,19 +594,11 @@ export default function MedecinsView() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, medecin: null, loading: false })} maxWidth="md" fullWidth>
-        <DialogTitle>Modifier le médecin</DialogTitle>
+      <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, secretaire: null, loading: false })} maxWidth="md" fullWidth>
+        <DialogTitle>Modifier le/la secrétaire</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ pt: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Numéro de médecin"
-                  value={formData.doctorNumber}
-                  onChange={(e) => setFormData({ ...formData, doctorNumber: e.target.value })}
-                />
-              </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
                   <InputLabel>Genre</InputLabel>
@@ -635,6 +612,7 @@ export default function MedecinsView() {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12} sm={6} />
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -654,12 +632,20 @@ export default function MedecinsView() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Spécialité"
-                  value={formData.speciality}
-                  onChange={(e) => setFormData({ ...formData, speciality: e.target.value })}
-                />
+                <FormControl fullWidth required>
+                  <InputLabel>Spécialité / Département</InputLabel>
+                  <Select
+                    value={formData.speciality || 'Accueil'}
+                    label="Spécialité / Département"
+                    onChange={(e) => setFormData({ ...formData, speciality: e.target.value })}
+                  >
+                    {SPECIALITY_OPTIONS.map((opt) => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -729,7 +715,7 @@ export default function MedecinsView() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialog({ open: false, medecin: null, loading: false })}>Annuler</Button>
+          <Button onClick={() => setEditDialog({ open: false, secretaire: null, loading: false })}>Annuler</Button>
           <LoadingButton variant="contained" onClick={handleUpdate} loading={editDialog.loading}>
             Modifier
           </LoadingButton>
@@ -737,28 +723,65 @@ export default function MedecinsView() {
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, medecin: null, loading: false })} maxWidth="sm" fullWidth>
-        <DialogTitle>Supprimer le médecin</DialogTitle>
+      <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, secretaire: null, loading: false })} maxWidth="sm" fullWidth>
+        <DialogTitle>Supprimer le/la secrétaire</DialogTitle>
         <DialogContent>
           <Typography>
-            Êtes-vous sûr de vouloir supprimer le médecin{' '}
+            Êtes-vous sûr de vouloir supprimer le/la secrétaire{' '}
             <strong>
-              {deleteDialog.medecin?.firstName} {deleteDialog.medecin?.lastName}
+              {deleteDialog.secretaire?.firstName} {deleteDialog.secretaire?.lastName}
             </strong>
             ? Cette action est irréversible.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialog({ open: false, medecin: null, loading: false })}>Annuler</Button>
-          <LoadingButton
-            variant="contained"
-            color="error"
-            onClick={handleDelete}
-            loading={deleteDialog.loading}
-          >
+          <Button onClick={() => setDeleteDialog({ open: false, secretaire: null, loading: false })}>Annuler</Button>
+          <LoadingButton variant="contained" color="error" onClick={handleDelete} loading={deleteDialog.loading}>
             Supprimer
           </LoadingButton>
         </DialogActions>
+      </Dialog>
+
+      {/* Modal de succès */}
+      <Dialog
+        open={successModal.open}
+        onClose={() => setSuccessModal({ open: false, message: '' })}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: 'hidden',
+            boxShadow: (theme) => theme.shadows[20],
+          },
+        }}
+      >
+        <Box
+          sx={{
+            py: 5,
+            px: 3,
+            textAlign: 'center',
+            bgcolor: (theme) => theme.palette.success.main,
+            color: (theme) => theme.palette.success.contrastText,
+          }}
+        >
+          <Iconify
+            icon="eva:checkmark-circle-2-fill"
+            width={72}
+            sx={{ mb: 1.5, opacity: 0.95 }}
+          />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Succès
+          </Typography>
+        </Box>
+        <DialogContent sx={{ py: 3, textAlign: 'center' }}>
+          <Typography variant="body1" color="text.primary">
+            {successModal.message}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+            Ce message se ferme automatiquement…
+          </Typography>
+        </DialogContent>
       </Dialog>
     </>
   );

@@ -20,6 +20,9 @@ export default function NursesView() {
   // Déterminer quelle vue afficher selon la route
   const renderContent = () => {
     // Vérifier les routes les plus spécifiques en premier
+    if (pathname.includes('/nurses/mes-consultations')) {
+      return <NursePlanningView />;
+    }
     if (pathname.includes('/nurses/planning')) {
       return <NursePlanningView />;
     }

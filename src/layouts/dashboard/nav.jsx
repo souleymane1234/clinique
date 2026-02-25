@@ -201,6 +201,21 @@ const SUB_MENUS = {
       icon: 'solar:users-group-rounded-bold' 
     },
     { 
+      title: 'Médecins', 
+      path: '/admin/medecins', 
+      icon: 'solar:stethoscope-bold' 
+    },
+    { 
+      title: 'Infirmiers', 
+      path: '/admin/infirmiers', 
+      icon: 'solar:heart-pulse-bold' 
+    },
+    { 
+      title: 'Secrétaires', 
+      path: '/admin/secretaires', 
+      icon: 'solar:clipboard-list-bold' 
+    },
+    { 
       title: 'Rôles & Permissions', 
       path: '/admin/roles-permissions', 
       icon: 'solar:shield-user-bold' 
@@ -267,34 +282,9 @@ const SUB_MENUS = {
   ],
   'Infirmiers': [
     { 
-      title: 'Planning de soins', 
-      path: '/nurses/planning', 
-      icon: 'solar:calendar-bold' 
-    },
-    { 
-      title: 'Administration des traitements', 
-      path: '/nurses/traitements', 
-      icon: 'solar:syringe-bold' 
-    },
-    { 
-      title: 'Suivi des signes vitaux', 
-      path: '/nurses/signes-vitaux', 
-      icon: 'solar:heart-pulse-bold' 
-    },
-    { 
-      title: 'Notes infirmières', 
-      path: '/nurses/notes', 
-      icon: 'solar:notes-medical-bold' 
-    },
-    { 
-      title: 'Validation des soins', 
-      path: '/nurses/validation', 
-      icon: 'solar:check-circle-bold' 
-    },
-    { 
-      title: 'Alertes et urgences', 
-      path: '/nurses/alertes', 
-      icon: 'solar:bell-bold' 
+      title: 'Mes consultations', 
+      path: '/nurses/mes-consultations', 
+      icon: 'solar:clipboard-list-bold' 
     },
   ],
   'Aides-soignantes': [
@@ -594,19 +584,31 @@ const SUB_MENUS = {
 // ----------------------------------------------------------------------
 
 /**
- * Normalise le rôle pour la comparaison
+ * Normalise le rôle pour la comparaison avec la config de navigation.
+ * Aligne les libellés backend (ex: "Administrateur", "Directeur") avec les clés utilisées dans protected.
  */
 function normalizeRole(role) {
-  if (!role) return '';
-  
-  const normalized = String(role).trim().toUpperCase();
-  
-  // Gérer les cas spéciaux
+  if (role == null) return '';
+  // Rôle peut être un objet (ex: { name: "Directeur", slug: "directeur" })
+  const roleStr = typeof role === 'object'
+    ? (role.name || role.slug || role.label || '')
+    : String(role);
+  const normalized = roleStr.trim().toUpperCase().replace(/\s+/g, '_');
+  if (!normalized) return '';
+
+  // Cas spéciaux (avant les alias)
   if (normalized.includes('ADMINISTRATEUR') && normalized.includes('SITE') && normalized.includes('WEB')) {
     return 'ADMIN_SITE_WEB';
   }
-  
-  return normalized.replace(/\s+/g, '_');
+  // Alias courants : backend envoie souvent "Administrateur" ou "Admin"
+  if (normalized === 'ADMINISTRATEUR' || normalized === 'ADMIN') return 'ADMIN';
+  if (normalized === 'SUPERADMIN' || normalized === 'SUPER_ADMIN') return 'SUPERADMIN';
+  // Directeur : accepter "DIRECTION" ou variantes
+  if (normalized === 'DIRECTION' || normalized === 'DIRECTEUR') return 'DIRECTEUR';
+  // Secrétaire (backend peut envoyer "Secrétaire" ou "SECRETAIRE")
+  if (normalized === 'SECRÉTAIRE' || normalized === 'SECRETAIRE') return 'SECRETAIRE';
+
+  return normalized;
 }
 
 /**
@@ -639,8 +641,12 @@ function shouldShowNavItem(item, admin) {
   // Si pas d'admin, ne pas afficher les items protégés
   if (!admin) return false;
   
-  const roleSource = admin.role || admin.service || '';
-  if (!roleSource) return false;
+  // Rôle : chaîne ou objet { name, slug } selon la source (login / stockage)
+  const roleRaw = admin.role ?? admin.service ?? '';
+  const roleSource = typeof roleRaw === 'object' && roleRaw !== null
+    ? (roleRaw.name || roleRaw.slug || '')
+    : String(roleRaw || '');
+  if (!roleSource.trim()) return false;
   
   const adminRole = normalizeRole(roleSource);
   const protectedRoles = item.protected.map(normalizeRole);

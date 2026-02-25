@@ -1,6 +1,9 @@
 import { routesName } from 'src/constants/routes';
 
 import SvgColor from 'src/components/svg-color';
+
+// Rôles utilisés par le backend : 'ADMIN', 'DIRECTEUR', 'MEDECIN', 'INFIRMIER', etc.
+// Les valeurs dans protected doivent correspondre à ces noms (après normalisation dans nav.jsx).
 // ----------------------------------------------------------------------
 
 const icon = (name) => (
@@ -13,6 +16,9 @@ const navConfig = [
     path: routesName.adminUsers,
     childrenPath: [
       routesName.adminUsers,
+      routesName.adminMedecins,
+      routesName.adminInfirmiers,
+      routesName.adminSecretaires,
       routesName.adminRolesPermissions,
       routesName.siteAdminServices,
       routesName.adminActivityLog,
@@ -39,7 +45,7 @@ const navConfig = [
       // sont accessibles uniquement depuis la vue de détails d'un patient
     ],
     icon: icon('ic_user'),
-    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER'], // Administrateur, Directeur, Médecin, Infirmier
+    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER', 'SECRETAIRE'], // Admin, Directeur, Infirmier, Secrétaire (accueil et création patient)
   },
   {
     title: 'Médecins',
@@ -53,8 +59,15 @@ const navConfig = [
     icon: icon('ic_lock'), // You may want to use a medical icon
     protected: ['ADMIN', 'DIRECTEUR', 'MEDECIN'], // Administrateur, Directeur, Médecin
   },
+  {
+    title: 'Infirmiers',
+    path: routesName.nursesMyConsultations,
+    childrenPath: [routesName.nursesMyConsultations],
+    icon: icon('ic_user'),
+    protected: ['ADMIN', 'DIRECTEUR', 'INFIRMIER'], // Onglet Infirmiers : uniquement "Mes consultations"
+  },
   // {
-  //   title: 'Infirmiers',
+  //   title: 'Infirmiers (Planning & Soins)',
   //   path: routesName.nursesPlanning, // Default sub-route for nurses
   //   childrenPath: [
   //     routesName.nurses,

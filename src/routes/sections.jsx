@@ -148,6 +148,8 @@ export default function Router() {
         // Administration & Paramétrage (Module 4.1)
         { path: routesName.adminUsers, element: <AdminUsersGuard /> },
         { path: routesName.adminMedecins, element: <AdministrationView /> },
+        { path: routesName.adminInfirmiers, element: <AdminInfirmiersGuard /> },
+        { path: routesName.adminSecretaires, element: <AdministrationView /> },
         { path: routesName.adminRolesPermissions, element: <AdministrationView /> },
         { path: routesName.adminConfiguration, element: <AdministrationView /> },
         { path: routesName.adminActivityLog, element: <AdministrationView /> },
@@ -183,6 +185,7 @@ export default function Router() {
         
         // Infirmiers (Module 4.4)
         { path: routesName.nurses, element: <NursesView /> },
+        { path: routesName.nursesMyConsultations, element: <NursesView /> },
         { path: routesName.nursesPlanning, element: <NursesView /> },
         { path: routesName.nursesTraitements, element: <NursesView /> },
         { path: routesName.nursesSignesVitaux, element: <NursesView /> },
@@ -320,6 +323,19 @@ function AdminUsersGuard() {
   const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
   if (role === 'MEDECIN') {
     return <Navigate to={routesName.doctorsMyConsultations} replace />;
+  }
+  return <AdministrationView />;
+}
+
+/**
+ * Garde pour la route /admin/infirmiers : réservée à ADMIN et DIRECTEUR.
+ * L'INFIRMIER est redirigé vers la gestion des patients (ses patients affectés).
+ */
+function AdminInfirmiersGuard() {
+  const admin = AdminStorage.getInfoAdmin();
+  const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+  if (role === 'INFIRMIER') {
+    return <Navigate to={routesName.patientsAccueil} replace />;
   }
   return <AdministrationView />;
 }

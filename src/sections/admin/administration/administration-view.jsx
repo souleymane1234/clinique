@@ -7,6 +7,8 @@ import { usePathname } from 'src/routes/hooks';
 // Import des vues
 import UsersView from '../users/users-view';
 import MedecinsView from '../medecins/medecins-view';
+import InfirmiersView from '../infirmiers/infirmiers-view';
+import SecretairesView from '../secretaires/secretaires-view';
 import ActivityLogView from '../activity-log/activity-log-view';
 import MultiClinicsView from '../multi-clinics/multi-clinics-view';
 import ServicesListView from '../../site-admin/services-list-view';
@@ -26,6 +28,12 @@ export default function AdministrationView() {
     }
     if (pathname.includes('/medecins')) {
       return <MedecinsView />;
+    }
+    if (pathname.includes('/infirmiers')) {
+      return <InfirmiersView />;
+    }
+    if (pathname.includes('/secretaires')) {
+      return <SecretairesView />;
     }
     if (pathname.includes('/roles-permissions')) {
       return <RolesPermissionsView />;

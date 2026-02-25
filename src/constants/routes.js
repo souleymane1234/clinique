@@ -39,6 +39,12 @@ export const routesName = {
   
   // Administration - Médecins Management
   adminMedecins: '/admin/medecins',
+
+  // Administration - Infirmiers Management
+  adminInfirmiers: '/admin/infirmiers',
+
+  // Administration - Secrétaires Management
+  adminSecretaires: '/admin/secretaires',
   
   // Stations Management
   adminStations: '/admin/stations',
@@ -115,6 +121,7 @@ export const routesName = {
   
   // Infirmiers Management (Module 4.4)
   nurses: '/nurses',
+  nursesMyConsultations: '/nurses/mes-consultations',
   nursesPlanning: '/nurses/planning',
   nursesTraitements: '/nurses/traitements',
   nursesSignesVitaux: '/nurses/signes-vitaux',

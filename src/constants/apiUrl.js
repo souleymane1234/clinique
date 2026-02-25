@@ -1,6 +1,5 @@
-const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
-// const base_url = 'https://api.annour-travel.com';
-// const base_url = 'http://localhost:3010';
+// const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
+const base_url = 'http://localhost:3000/api';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
@@ -237,6 +236,18 @@ export const apiUrl = {
   updateMedecin: (id) => `${base_url}/medecin/${id}`,
   deleteMedecin: (id) => `${base_url}/medecin/${id}`,
   medecinsPaginated: `${base_url}/medecin/paginated`,
+
+  // Infirmiers
+  infirmiers: `${base_url}/infirmier`,
+  infirmierById: (id) => `${base_url}/infirmier/${id}`,
+  updateInfirmier: (id) => `${base_url}/infirmier/${id}`,
+  deleteInfirmier: (id) => `${base_url}/infirmier/${id}`,
+
+  // Secrétaires
+  secretaires: `${base_url}/secretaire`,
+  secretaireById: (id) => `${base_url}/secretaire/${id}`,
+  updateSecretaire: (id) => `${base_url}/secretaire/${id}`,
+  deleteSecretaire: (id) => `${base_url}/secretaire/${id}`,
 };
 
 export const apiUrlAsset = {
