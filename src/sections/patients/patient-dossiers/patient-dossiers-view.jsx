@@ -722,7 +722,7 @@ export default function PatientDossiersView() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Email"
+                  label="Email (optionnel)"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -732,7 +732,7 @@ export default function PatientDossiersView() {
 
             <TextField
               fullWidth
-              label="Adresse"
+              label="Adresse (optionnel)"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               multiline
@@ -1029,7 +1029,7 @@ export default function PatientDossiersView() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Email"
+                  label="Email (optionnel)"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -1039,7 +1039,7 @@ export default function PatientDossiersView() {
 
             <TextField
               fullWidth
-              label="Adresse"
+              label="Adresse (optionnel)"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               multiline

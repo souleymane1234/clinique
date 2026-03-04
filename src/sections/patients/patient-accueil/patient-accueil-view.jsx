@@ -726,7 +726,7 @@ export default function PatientAccueilView() {
                 <TextField
                   fullWidth
                   type="email"
-                  label="Email"
+                  label="Email (optionnel)"
                   value={newPatientForm.email}
                   onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
                 />
@@ -734,7 +734,7 @@ export default function PatientAccueilView() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Adresse"
+                  label="Adresse (optionnel)"
                   value={newPatientForm.address}
                   onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
                 />

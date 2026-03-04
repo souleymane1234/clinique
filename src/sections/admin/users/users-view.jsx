@@ -254,7 +254,7 @@ export default function UsersView() {
       console.error('Error updating user status:', error);
       showError('Erreur', 'Impossible de modifier le statut de l\'utilisateur');
     } finally {
-      setStatusDialog({ ...statusDialog, loading: false });
+      setStatusDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -267,12 +267,8 @@ export default function UsersView() {
 
     setRoleDialog({ ...roleDialog, loading: true });
     try {
-      // Si newRole est un ID de rôle, l'utiliser directement, sinon chercher l'ID
-      const roleId = typeof roleDialog.newRole === 'string' && roleDialog.newRole.length > 20 
-        ? roleDialog.newRole 
-        : roleDialog.newRole; // Supposons que c'est déjà un ID ou qu'il faut le convertir
-      
-      const result = await ConsumApi.updateUserNew(roleDialog.user.id, { role_id: roleId });
+      // Utiliser l'endpoint dédié aux rôles (évite les validations sur prénom/nom/email)
+      const result = await ConsumApi.updateRolesUserRole(roleDialog.user.id, roleDialog.newRole);
       const processed = showApiResponse(result, {
         successTitle: 'Rôle modifié',
         errorTitle: 'Erreur de modification',
@@ -286,7 +282,7 @@ export default function UsersView() {
       console.error('Error updating user role:', error);
       showError('Erreur', 'Impossible de modifier le rôle de l\'utilisateur');
     } finally {
-      setRoleDialog({ ...roleDialog, loading: false });
+      setRoleDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -315,7 +311,7 @@ export default function UsersView() {
       console.error('Error changing password:', error);
       showError('Erreur', 'Impossible de modifier le mot de passe');
     } finally {
-      setPasswordDialog({ ...passwordDialog, loading: false });
+      setPasswordDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -374,7 +370,7 @@ export default function UsersView() {
       console.error('Error creating user:', error);
       showError('Erreur', 'Impossible de créer l\'utilisateur');
     } finally {
-      setCreateUserDialog({ open: true, loading: false });
+      setCreateUserDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -558,17 +554,6 @@ export default function UsersView() {
                                     <Iconify icon={(user.is_locked || user.isLocked || user.isSuspended) ? 'solar:user-check-bold' : 'solar:user-block-bold'} width={18} />
                                   </IconButton>
                                 </Tooltip>
-                                {user.role !== 'SUPERADMIN' && (
-                                  <Tooltip title="Modifier le rôle">
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => openRoleDialog(user)}
-                                      color="info"
-                                    >
-                                      <Iconify icon="solar:user-id-bold" width={18} />
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
                                 <Tooltip title="Changer le mot de passe">
                                   <IconButton
                                     size="small"
