@@ -36,6 +36,8 @@ export const routesName = {
   
   // Administration - Users Management
   adminUsers: '/admin/users',
+  adminPricing: '/admin/pricing',
+  adminInsuranceTypes: '/admin/insurance-types',
   
   // Administration - Médecins Management
   adminMedecins: '/admin/medecins',
@@ -70,6 +72,7 @@ export const routesName = {
   patientsCreateConsultation: '/patients/consultation/create/:patientId',
   patientsAppointments: '/patients/appointments',
   patientsQueue: '/patients/queue',
+  patientsTimeTracking: '/patients/time-tracking',
   
   // Clients Management
   clients: '/clients',

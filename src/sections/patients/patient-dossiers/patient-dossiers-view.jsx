@@ -789,11 +789,12 @@ export default function PatientDossiersView() {
               </Grid>
             </Grid>
 
-            <Typography variant="subtitle2" sx={{ mt: 2 }}>
-              Contact d&apos;urgence
-            </Typography>
-
             <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mt: 1, mb: 0 }}>
+                  Contact d&apos;urgence
+                </Typography>
+              </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
@@ -1096,11 +1097,12 @@ export default function PatientDossiersView() {
               </Grid>
             </Grid>
 
-            <Typography variant="subtitle2" sx={{ mt: 2 }}>
-              Contact d&apos;urgence
-            </Typography>
-
             <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" sx={{ mt: 1, mb: 0 }}>
+                  Contact d&apos;urgence
+                </Typography>
+              </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth

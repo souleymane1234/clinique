@@ -25,6 +25,7 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDate } from 'src/utils/format-time';
 
 import ConsumApi from 'src/services_workers/consum_api';
+import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
 
@@ -47,9 +48,26 @@ export default function PatientDetailsView() {
   const router = useRouter();
   const { contextHolder, showApiResponse, showError } = useNotification();
 
+  const admin = AdminStorage.getInfoAdmin();
+  const roleRaw = admin?.role ?? admin?.service;
+  const roleSource =
+    typeof roleRaw === 'object' && roleRaw !== null
+      ? (roleRaw.name || roleRaw.slug || roleRaw.label || '')
+      : String(roleRaw || '');
+  const currentRole = roleSource.trim().toUpperCase().replace(/\s+/g, '_');
+  const isSecretary = currentRole === 'SECRETAIRE' || currentRole === 'SECRÉTAIRE';
+  const isAdminOrDirector =
+    currentRole === 'ADMIN' ||
+    currentRole === 'ADMINISTRATEUR' ||
+    currentRole === 'DIRECTEUR' ||
+    currentRole === 'DIRECTION';
+
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState('overview');
+  const [timeTrackingLoading, setTimeTrackingLoading] = useState(false);
+  const [patientVisits, setPatientVisits] = useState([]);
+  const [serviceAggregates, setServiceAggregates] = useState([]);
 
   useEffect(() => {
     loadPatient();
@@ -93,6 +111,41 @@ export default function PatientDetailsView() {
     }
     return age;
   };
+
+  const formatDuration = (minutes) => {
+    if (minutes == null || Number.isNaN(Number(minutes))) return 'N/A';
+    const total = Math.max(0, Math.round(Number(minutes)));
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return `${h}h ${m}min`;
+  };
+
+  const loadTimeTracking = async () => {
+    if (!id) return;
+    setTimeTrackingLoading(true);
+    try {
+      const [visitsRes, aggrRes] = await Promise.all([
+        ConsumApi.getPatientVisitsWithDurations(id),
+        ConsumApi.getServiceAggregates(),
+      ]);
+      const visits = Array.isArray(visitsRes?.data) ? visitsRes.data : visitsRes?.data?.data || [];
+      const aggr = Array.isArray(aggrRes?.data) ? aggrRes.data : aggrRes?.data?.data || [];
+      setPatientVisits(Array.isArray(visits) ? visits : []);
+      setServiceAggregates(Array.isArray(aggr) ? aggr : []);
+    } catch (error) {
+      console.error('Error loading time tracking:', error);
+      setPatientVisits([]);
+      setServiceAggregates([]);
+    } finally {
+      setTimeTrackingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === 'timeTracking' && isAdminOrDirector) {
+      loadTimeTracking();
+    }
+  }, [currentTab, isAdminOrDirector, id]);
 
   if (loading) {
     return (
@@ -208,50 +261,67 @@ export default function PatientDetailsView() {
             </Stack>
           </Card>
 
-          {/* Tabs */}
-          <Card sx={{ mb: 3 }}>
-            <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} sx={{ px: 2.5, pt: 1 }}>
-              <Tab
-                label="Vue d'ensemble"
-                value="overview"
-                icon={<Iconify icon="solar:widget-5-bold" />}
-                iconPosition="start"
-              />
-              <Tab
-                label="Historique médical"
-                value="history"
-                icon={<Iconify icon="solar:history-bold" />}
-                iconPosition="start"
-              />
-              <Tab
-                label="Antécédents"
-                value="antecedents"
-                icon={<Iconify icon="solar:heart-pulse-bold" />}
-                iconPosition="start"
-              />
-              <Tab
-                label="Allergies"
-                value="allergies"
-                icon={<Iconify icon="solar:heart-pulse-bold" />}
-                iconPosition="start"
-              />
-              <Tab
-                label="Documents médicaux"
-                value="documents"
-                icon={<Iconify icon="solar:document-bold" />}
-                iconPosition="start"
-              />
-              <Tab
-                label="Suivi consultations"
-                value="consultations"
-                icon={<Iconify icon="solar:notes-medical-bold" />}
-                iconPosition="start"
-              />
-            </Tabs>
-          </Card>
+          {/* Tabs : masqués pour la secrétaire (elle ne voit que la vue d'ensemble) */}
+          {!isSecretary && (
+            <Card sx={{ mb: 3 }}>
+              <Tabs
+                value={currentTab}
+                onChange={(e, newValue) => setCurrentTab(newValue)}
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
+                sx={{ px: 2.5, pt: 1 }}
+              >
+                <Tab
+                  label="Vue d'ensemble"
+                  value="overview"
+                  icon={<Iconify icon="solar:widget-5-bold" />}
+                  iconPosition="start"
+                />
+                {/* <Tab
+                  label="Historique médical"
+                  value="history"
+                  icon={<Iconify icon="solar:history-bold" />}
+                  iconPosition="start"
+                /> */}
+                <Tab
+                  label="Antécédents"
+                  value="antecedents"
+                  icon={<Iconify icon="solar:heart-pulse-bold" />}
+                  iconPosition="start"
+                />
+                <Tab
+                  label="Allergies"
+                  value="allergies"
+                  icon={<Iconify icon="solar:heart-pulse-bold" />}
+                  iconPosition="start"
+                />
+                {/* <Tab
+                  label="Documents médicaux"
+                  value="documents"
+                  icon={<Iconify icon="solar:document-bold" />}
+                  iconPosition="start"
+                />
+                <Tab
+                  label="Suivi consultations"
+                  value="consultations"
+                  icon={<Iconify icon="solar:notes-medical-bold" />}
+                  iconPosition="start"
+                /> */}
+                {isAdminOrDirector && (
+                  <Tab
+                    label="Time Tracking"
+                    value="timeTracking"
+                    icon={<Iconify icon="solar:clock-circle-bold" />}
+                    iconPosition="start"
+                  />
+                )}
+              </Tabs>
+            </Card>
+          )}
 
-          {/* Tab Content */}
-          {currentTab === 'overview' && (
+          {/* Tab Content : secrétaire = uniquement vue d'ensemble */}
+          {(currentTab === 'overview' || isSecretary) && (
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Card sx={{ p: 3 }}>
@@ -325,34 +395,127 @@ export default function PatientDetailsView() {
             </Grid>
           )}
 
-          {currentTab === 'history' && (
+          {!isSecretary && currentTab === 'history' && (
             <Box sx={{ position: 'relative' }}>
               <PatientHistoryView patientId={id} />
             </Box>
           )}
 
-          {currentTab === 'antecedents' && (
+          {!isSecretary && currentTab === 'antecedents' && (
             <Box sx={{ position: 'relative' }}>
               <PatientAntecedentsView patientId={id} />
             </Box>
           )}
 
-          {currentTab === 'allergies' && (
+          {!isSecretary && currentTab === 'allergies' && (
             <Box sx={{ position: 'relative' }}>
               <PatientAllergiesView patientId={id} />
             </Box>
           )}
 
-          {currentTab === 'documents' && (
+          {!isSecretary && currentTab === 'documents' && (
             <Box sx={{ position: 'relative' }}>
               <PatientDocumentsView patientId={id} />
             </Box>
           )}
 
-          {currentTab === 'consultations' && (
+          {!isSecretary && currentTab === 'consultations' && (
             <Box sx={{ position: 'relative' }}>
               <PatientConsultationsView patientId={id} />
             </Box>
+          )}
+
+          {!isSecretary && isAdminOrDirector && currentTab === 'timeTracking' && (
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 2 }}>
+                    Visites du patient
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  {(() => {
+                    if (timeTrackingLoading) {
+                      return (
+                        <Typography variant="body2" color="text.secondary">
+                          Chargement...
+                        </Typography>
+                      );
+                    }
+                    if (patientVisits.length === 0) {
+                      return (
+                        <Typography variant="body2" color="text.secondary">
+                          Aucune visite enregistrée.
+                        </Typography>
+                      );
+                    }
+                    return (
+                      <Stack spacing={1.5}>
+                        {patientVisits.map((visit) => (
+                          <Box
+                            key={visit.id}
+                            sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+                          >
+                            <Typography variant="subtitle2">Visite #{String(visit.id).slice(0, 8)}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Arrivée: {visit.arriveAt ? new Date(visit.arriveAt).toLocaleString() : 'N/A'}
+                            </Typography>
+                            <br />
+                            <Typography variant="caption" color="text.secondary">
+                              Sortie: {visit.leaveAt ? new Date(visit.leaveAt).toLocaleString() : 'En cours'}
+                            </Typography>
+                            <br />
+                            <Typography variant="caption" color="text.secondary">
+                              Durée: {formatDuration(visit.durationMinutes)}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    );
+                  })()}
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 2 }}>
+                    Temps par service (global)
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  {(() => {
+                    if (timeTrackingLoading) {
+                      return (
+                        <Typography variant="body2" color="text.secondary">
+                          Chargement...
+                        </Typography>
+                      );
+                    }
+                    if (serviceAggregates.length === 0) {
+                      return (
+                        <Typography variant="body2" color="text.secondary">
+                          Aucune statistique disponible.
+                        </Typography>
+                      );
+                    }
+                    return (
+                      <Stack spacing={1.2}>
+                        {serviceAggregates.map((item, idx) => (
+                          <Box
+                            key={`${item.serviceType || item.service || 'service'}-${idx}`}
+                            sx={{ display: 'flex', justifyContent: 'space-between' }}
+                          >
+                            <Typography variant="body2">{item.serviceType || item.service || 'Service'}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Moy: {formatDuration(item.averageMinutes ?? item.avgMinutes ?? item.avg)} | Max:{' '}
+                              {formatDuration(item.maxMinutes ?? item.max)}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    );
+                  })()}
+                </Card>
+              </Grid>
+            </Grid>
           )}
         </Stack>
       </Container>

@@ -94,7 +94,7 @@ export default function UsersView() {
   const [statusDialog, setStatusDialog] = useState({ open: false, user: null, loading: false });
   const [roleDialog, setRoleDialog] = useState({ open: false, user: null, newRole: '', loading: false });
   const [passwordDialog, setPasswordDialog] = useState({ open: false, user: null, newPassword: '', showPassword: false, loading: false });
-  const [createUserDialog, setCreateUserDialog] = useState({ open: false, loading: false });
+  const [createUserDialog, setCreateUserDialog] = useState({ open: false, loading: false, showPassword: false });
   const [roles, setRoles] = useState([]);
   const [createUserForm, setCreateUserForm] = useState({
     first_name: '',
@@ -258,10 +258,6 @@ export default function UsersView() {
     }
   };
 
-  const openRoleDialog = (user) => {
-    setRoleDialog({ open: true, user, newRole: user.role, loading: false });
-  };
-
   const handleUpdateRole = async () => {
     if (!roleDialog.user || !roleDialog.newRole) return;
 
@@ -323,11 +319,11 @@ export default function UsersView() {
       password: '',
       role_id: '',
     });
-    setCreateUserDialog({ open: true, loading: false });
+    setCreateUserDialog({ open: true, loading: false, showPassword: false });
   };
 
   const handleCloseCreateUserDialog = () => {
-    setCreateUserDialog({ open: false, loading: false });
+    setCreateUserDialog({ open: false, loading: false, showPassword: false });
     setCreateUserForm({
       first_name: '',
       last_name: '',
@@ -348,7 +344,7 @@ export default function UsersView() {
       return;
     }
 
-    setCreateUserDialog({ open: true, loading: true });
+    setCreateUserDialog((prev) => ({ ...prev, loading: true }));
     try {
       const result = await ConsumApi.createUserNew({
         first_name: createUserForm.first_name.trim(),
@@ -691,11 +687,24 @@ export default function UsersView() {
             <TextField
               fullWidth
               label="Mot de passe *"
-              type="password"
+              type={createUserDialog.showPassword ? 'text' : 'password'}
               value={createUserForm.password}
               onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
               required
               helperText="Le mot de passe doit contenir au moins 8 caractères"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setCreateUserDialog((prev) => ({ ...prev, showPassword: !prev.showPassword }))}
+                      edge="end"
+                      size="small"
+                    >
+                      <Iconify icon={createUserDialog.showPassword ? 'solar:eye-bold' : 'solar:eye-closed-bold'} />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <FormControl fullWidth required>
               <InputLabel>Rôle *</InputLabel>

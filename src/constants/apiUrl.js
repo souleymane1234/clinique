@@ -1,5 +1,5 @@
-const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
-// const base_url = 'http://localhost:3000/api';
+// const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
+const base_url = 'http://localhost:3000/api';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {
@@ -78,6 +78,35 @@ export const apiUrl = {
   rendezVousDuJour: (userId) => `${base_url}/rendez-vous/du-jour/${userId}`,
   rendezVous: `${base_url}/rendez-vous`,
   rendezVousById: (id) => `${base_url}/rendez-vous/${id}`,
+
+  // Time tracking (visites & passages par service)
+  timeTrackingCreateVisit: `${base_url}/time-tracking/visits`,
+  timeTrackingCloseVisit: (id) => `${base_url}/time-tracking/visits/${id}/close`,
+  timeTrackingVisitsByPatient: (patientId) => `${base_url}/time-tracking/visits/patient/${patientId}`,
+  timeTrackingStartServicePassage: `${base_url}/time-tracking/service-passages`,
+  timeTrackingCloseServicePassage: (id) => `${base_url}/time-tracking/service-passages/${id}/close`,
+  timeTrackingAggregatesServices: `${base_url}/time-tracking/aggregates/services`,
+  timeTrackingServicesByUser: (userId) => `${base_url}/time-tracking/services/user/${userId}`,
+
+  // Pricing (tarifs services & examens)
+  pricingServices: `${base_url}/pricing/services`,
+  pricingServiceById: (id) => `${base_url}/pricing/services/${id}`,
+  pricingServicesActive: `${base_url}/pricing/services/active`,
+  pricingExams: `${base_url}/pricing/exams`,
+  pricingExamById: (id) => `${base_url}/pricing/exams/${id}`,
+  pricingExamsActive: `${base_url}/pricing/exams/active`,
+
+  // Billing (factures pro-forma & paiements)
+  billingInvoices: `${base_url}/billing/invoices`,
+  billingInvoiceById: (id) => `${base_url}/billing/invoices/${id}`,
+  billingPayments: `${base_url}/billing/payments`,
+  billingPaymentsStatus: `${base_url}/billing/payments/status`,
+
+  // Insurance types (types d'assurance)
+  insuranceTypes: `${base_url}/insurance-types`,
+  insuranceTypeById: (id) => `${base_url}/insurance-types/${id}`,
+  insuranceTypesPaginated: `${base_url}/insurance-types/paginated`,
+  insuranceTypesActive: `${base_url}/insurance-types/active`,
   reprogrammerRendezVous: (id) => `${base_url}/rendez-vous/${id}/reprogrammer`,
   prendreRendezVous: (id) => `${base_url}/rendez-vous/${id}/prendre`,
   // Appointments (nouvelle API)

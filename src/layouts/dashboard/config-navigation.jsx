@@ -19,6 +19,8 @@ const navConfig = [
       routesName.adminMedecins,
       routesName.adminInfirmiers,
       routesName.adminSecretaires,
+      routesName.adminPricing,
+      routesName.adminInsuranceTypes,
       routesName.adminRolesPermissions,
       routesName.siteAdminServices,
       routesName.adminActivityLog,
@@ -41,6 +43,7 @@ const navConfig = [
       routesName.patientsConsultations,
       routesName.patientsAppointments,
       routesName.patientsQueue,
+      routesName.patientsTimeTracking,
       // Les routes patientsHistory, patientsAntecedents, patientsDocuments, patientsConsultations
       // sont accessibles uniquement depuis la vue de détails d'un patient
     ],
@@ -100,10 +103,17 @@ const navConfig = [
     path: routesName.laboratoryAnalyses, // Default sub-route for laboratory
     childrenPath: [
       routesName.laboratory,
+      routesName.laboratoryPrescriptions,
       routesName.laboratoryAnalyses,
+      routesName.laboratoryResultats,
+      routesName.laboratoryTransmission,
+      routesName.laboratoryImpression,
+      routesName.laboratoryConsommables,
+      routesName.laboratoryStatistiques,
     ],
     icon: icon('ic_lock'), // You may want to use a medical icon
-    protected: ['ADMIN', 'DIRECTEUR', 'LABORATOIRE', 'MEDECIN'], // Administrateur, Directeur, Laboratoire, Médecin
+    // LABORATOIRE / LABORANTIN : normalisés en LABORATOIRE dans nav.jsx
+    protected: ['ADMIN', 'DIRECTEUR', 'LABORATOIRE', 'LABORANTIN', 'MEDECIN'],
   },
   // {
   //   title: 'Pharmacie',

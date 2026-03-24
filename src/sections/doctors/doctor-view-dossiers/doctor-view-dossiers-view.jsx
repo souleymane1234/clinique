@@ -372,16 +372,6 @@ export default function DoctorViewDossiersView() {
                             >
                               Détails
                             </Button>
-                            {consultation.status === 'EN_ATTENTE' && (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={() => handleStartConsultation(consultation.id)}
-                                startIcon={<Iconify icon="solar:user-check-bold" />}
-                              >
-                                Recevoir
-                              </Button>
-                            )}
                           </Stack>
                         </TableCell>
                       </TableRow>

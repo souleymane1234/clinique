@@ -216,30 +216,40 @@ const SUB_MENUS = {
       icon: 'solar:clipboard-list-bold' 
     },
     { 
+      title: 'Consultations et Examens', 
+      path: '/admin/pricing', 
+      icon: 'solar:tag-price-bold' 
+    },
+    { 
+      title: 'Assurances', 
+      path: '/admin/insurance-types', 
+      icon: 'solar:card-bold' 
+    },
+    { 
       title: 'Rôles & Permissions', 
       path: '/admin/roles-permissions', 
       icon: 'solar:shield-user-bold' 
     },
-    { 
-      title: 'Services', 
-      path: '/admin/site/services', 
-      icon: 'solar:medical-kit-bold' 
-    },
-    { 
-      title: 'Journal d\'activité', 
-      path: '/admin/activity-log', 
-      icon: 'solar:document-text-bold' 
-    },
-    { 
-      title: 'Sauvegarde', 
-      path: '/admin/backup-restore', 
-      icon: 'solar:database-bold' 
-    },
-    { 
-      title: 'Multi-Cliniques', 
-      path: '/admin/multi-clinics', 
-      icon: 'solar:buildings-2-bold' 
-    },
+    // { 
+    //   title: 'Services', 
+    //   path: '/admin/site/services', 
+    //   icon: 'solar:medical-kit-bold' 
+    // },
+    // { 
+    //   title: 'Journal d\'activité', 
+    //   path: '/admin/activity-log', 
+    //   icon: 'solar:document-text-bold' 
+    // },
+    // { 
+    //   title: 'Sauvegarde', 
+    //   path: '/admin/backup-restore', 
+    //   icon: 'solar:database-bold' 
+    // },
+    // { 
+    //   title: 'Multi-Cliniques', 
+    //   path: '/admin/multi-clinics', 
+    //   icon: 'solar:buildings-2-bold' 
+    // },
   ],
   'Gestion des Patients': [
     { 
@@ -257,27 +267,42 @@ const SUB_MENUS = {
       path: '/patients/appointments', 
       icon: 'solar:calendar-bold' 
     },
+    // { 
+    //   title: 'File d\'attente', 
+    //   path: '/patients/queue', 
+    //   icon: 'solar:list-check-bold' 
+    // },
     { 
-      title: 'File d\'attente', 
-      path: '/patients/queue', 
-      icon: 'solar:list-check-bold' 
+      title: 'Time Tracking', 
+      path: '/patients/time-tracking', 
+      icon: 'solar:clock-circle-bold',
+      restrictedRoles: ['INFIRMIER', 'SECRETAIRE', 'MEDECIN', 'LABORATOIRE', 'PHARMACIE']
     },
   ],
   'Médecins': [
-    { 
-      title: 'Mes Consultations', 
-      path: '/doctors/mes-consultations', 
-      icon: 'solar:clipboard-list-bold' 
+    {
+      title: 'Mes Consultations',
+      path: '/doctors/mes-consultations',
+      icon: 'solar:clipboard-list-bold',
+      restrictedRoles: ['ADMIN', 'DIRECTEUR'],
     },
-    { 
-      title: 'Mes Rendez-vous', 
-      path: '/doctors/mes-rendez-vous', 
-      icon: 'solar:calendar-bold' 
+    {
+      title: 'Toutes les consultations',
+      path: '/doctors/mes-consultations',
+      icon: 'solar:clipboard-list-bold',
+      restrictedRoles: ['MEDECIN'],
     },
-    { 
-      title: 'Messagerie interne', 
-      path: '/doctors/messagerie', 
-      icon: 'solar:chat-round-bold' 
+    {
+      title: 'Mes Rendez-vous',
+      path: '/doctors/mes-rendez-vous',
+      icon: 'solar:calendar-bold',
+      restrictedRoles: ['ADMIN', 'DIRECTEUR'],
+    },
+    {
+      title: 'Tous les rendez-vous',
+      path: '/doctors/mes-rendez-vous',
+      icon: 'solar:calendar-bold',
+      restrictedRoles: ['MEDECIN'],
     },
   ],
   'Infirmiers': [
@@ -315,25 +340,43 @@ const SUB_MENUS = {
     },
   ],
   'Laboratoire': [
-    { 
-      title: 'Gestion des analyses', 
-      path: '/laboratory/analyses', 
-      icon: 'solar:test-tube-bold' 
+    {
+      title: 'Prescriptions',
+      path: '/laboratory/prescriptions',
+      icon: 'solar:document-medicine-bold',
+      restrictedRoles: ['LABORATOIRE'],
     },
-    { 
-      title: 'Impression des résultats', 
-      path: '/laboratory/impression', 
-      icon: 'solar:printer-bold' 
+    {
+      title: 'Gestion des analyses',
+      path: '/laboratory/analyses',
+      icon: 'solar:test-tube-bold',
     },
-    { 
-      title: 'Gestion des consommables', 
-      path: '/laboratory/consommables', 
-      icon: 'solar:box-bold' 
+    {
+      title: 'Résultats',
+      path: '/laboratory/resultats',
+      icon: 'solar:clipboard-check-bold',
     },
-    { 
-      title: 'Statistiques', 
-      path: '/laboratory/statistiques', 
-      icon: 'solar:chart-bold' 
+    {
+      title: 'Transmission',
+      path: '/laboratory/transmission',
+      icon: 'solar:share-bold',
+      restrictedRoles: ['LABORATOIRE'],
+    },
+    {
+      title: 'Impression des résultats',
+      path: '/laboratory/impression',
+      icon: 'solar:printer-bold',
+      restrictedRoles: ['LABORATOIRE'],
+    },
+    {
+      title: 'Gestion des consommables',
+      path: '/laboratory/consommables',
+      icon: 'solar:box-bold',
+    },
+    {
+      title: 'Statistiques',
+      path: '/laboratory/statistiques',
+      icon: 'solar:chart-bold',
     },
   ],
   'Pharmacie': [
@@ -607,6 +650,8 @@ function normalizeRole(role) {
   if (normalized === 'DIRECTION' || normalized === 'DIRECTEUR') return 'DIRECTEUR';
   // Secrétaire (backend peut envoyer "Secrétaire" ou "SECRETAIRE")
   if (normalized === 'SECRÉTAIRE' || normalized === 'SECRETAIRE') return 'SECRETAIRE';
+  // Laborantin : même accès que le rôle « Laboratoire » dans la navigation
+  if (normalized === 'LABORANTIN' || normalized === 'LABORATOIRE') return 'LABORATOIRE';
 
   return normalized;
 }

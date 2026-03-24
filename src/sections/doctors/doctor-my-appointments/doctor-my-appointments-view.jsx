@@ -55,6 +55,12 @@ const STATUS_LABELS = {
 
 export default function DoctorMyAppointmentsView() {
   const { contextHolder, showError, showSuccess, showApiResponse } = useNotification();
+  const adminInfo = AdminStorage.getInfoAdmin() || {};
+  const normalizedRole = String(adminInfo?.role?.name || adminInfo?.role || adminInfo?.service || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+  const isAdminOrDirecteur = normalizedRole === 'ADMIN' || normalizedRole === 'DIRECTEUR' || normalizedRole === 'ADMINISTRATEUR';
 
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -70,10 +76,10 @@ export default function DoctorMyAppointmentsView() {
   useEffect(() => {
     const loadCurrentMedecin = async () => {
       try {
-        const adminInfo = AdminStorage.getInfoAdmin();
+        const storedAdminInfo = AdminStorage.getInfoAdmin();
         
-        if (adminInfo.medecinId || adminInfo.medecin?.id) {
-          const medecinId = adminInfo.medecinId || adminInfo.medecin?.id;
+        if (storedAdminInfo.medecinId || storedAdminInfo.medecin?.id) {
+          const medecinId = storedAdminInfo.medecinId || storedAdminInfo.medecin?.id;
           setCurrentMedecinId(medecinId);
           return;
         }
@@ -104,8 +110,8 @@ export default function DoctorMyAppointmentsView() {
                 (m) => 
                   m.user?.id === userData.id || 
                   m.userId === userData.id ||
-                  m.user?.id === adminInfo.id ||
-                  m.userId === adminInfo.id
+                  m.user?.id === storedAdminInfo.id ||
+                  m.userId === storedAdminInfo.id
               );
               
               if (medecin) {
@@ -123,14 +129,16 @@ export default function DoctorMyAppointmentsView() {
   }, []);
 
   const loadAppointments = useCallback(async () => {
-    if (!currentMedecinId) {
+    if (!isAdminOrDirecteur && !currentMedecinId) {
       return;
     }
 
     setLoading(true);
     try {
-      // Utiliser l'endpoint spécifique pour les rendez-vous du médecin
-      const result = await ConsumApi.getAppointmentsByMedecin(currentMedecinId);
+      // Admin/Directeur: liste globale. Médecin: ses rendez-vous.
+      const result = isAdminOrDirecteur
+        ? await ConsumApi.getAppointments()
+        : await ConsumApi.getAppointmentsByMedecin(currentMedecinId);
       
       if (result.success) {
         let appointmentsData = Array.isArray(result.data) ? result.data : [];
@@ -177,13 +185,13 @@ export default function DoctorMyAppointmentsView() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, statusFilter, search, currentMedecinId]);
+  }, [page, rowsPerPage, statusFilter, search, currentMedecinId, isAdminOrDirecteur]);
 
   useEffect(() => {
-    if (currentMedecinId) {
+    if (isAdminOrDirecteur || currentMedecinId) {
       loadAppointments();
     }
-  }, [loadAppointments, currentMedecinId]);
+  }, [loadAppointments, currentMedecinId, isAdminOrDirecteur]);
 
   const handleViewDetails = async (appointment) => {
     setDetailsDialog({ open: true, appointment, loading: true });

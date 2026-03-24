@@ -10,12 +10,16 @@ import {
   Stack,
   Button,
   Dialog,
+  Select,
+  MenuItem,
   TableRow,
   TextField,
   TableBody,
   TableCell,
   TableHead,
   Typography,
+  InputLabel,
+  FormControl,
   DialogTitle,
   DialogContent,
   DialogActions,
@@ -28,210 +32,218 @@ import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
 
+import ConsumApi from 'src/services_workers/consum_api';
+
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
 
 // ----------------------------------------------------------------------
 
+const STATUS_LABELS = {
+  EN_ATTENTE: 'En attente',
+  EN_COURS: 'En cours',
+  TERMINE: 'Terminé',
+  VALIDE: 'Validé',
+  VALIDEE: 'Validée',
+  ANNULE: 'Annulé',
+};
+
+const STATUS_COLORS = {
+  EN_ATTENTE: 'warning',
+  EN_COURS: 'info',
+  TERMINE: 'success',
+  VALIDE: 'success',
+  VALIDEE: 'success',
+  ANNULE: 'error',
+};
+
+function patientLabel(p) {
+  if (!p) return '—';
+  const n = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+  return n || '—';
+}
+
+function doctorLabel(doc) {
+  if (!doc) return '—';
+  if (typeof doc === 'string') return doc;
+  const n = `${doc.firstName || ''} ${doc.lastName || ''}`.trim();
+  return n || doc.email || '—';
+}
+
 export default function LaboratoryPrescriptionsView() {
   const { contextHolder, showError } = useNotification();
 
-  const [prescriptions, setPrescriptions] = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [detailsDialog, setDetailsDialog] = useState({ open: false, item: null });
+  const [detailsDialog, setDetailsDialog] = useState({ open: false, item: null, loading: false });
 
-  const loadPrescriptions = useCallback(async () => {
+  const loadRows = useCallback(async () => {
     setLoading(true);
     try {
-      // Simuler le chargement des prescriptions reçues
-      const mockPrescriptions = Array.from({ length: 20 }, (_, i) => ({
-        id: i + 1,
-        patientId: Math.floor(Math.random() * 50) + 1,
-        patientName: `Patient ${Math.floor(Math.random() * 50) + 1}`,
-        date: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        medecin: `Dr. ${['Martin', 'Dubois', 'Bernard'][Math.floor(Math.random() * 3)]}`,
-        analyses: ['Hémogramme', 'Glycémie', 'Cholestérol', 'Créatinine'][Math.floor(Math.random() * 4)],
-        status: ['pending', 'received', 'in_progress', 'completed'][Math.floor(Math.random() * 4)],
-        prescriptionId: `PRES-${String(i + 1).padStart(6, '0')}`,
-      }));
+      const filters = {};
+      if (statusFilter) filters.status = statusFilter;
+      if (search.trim()) filters.search = search.trim();
 
-      let filtered = mockPrescriptions;
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filtered = filtered.filter(
-          (p) =>
-            p.patientName.toLowerCase().includes(searchLower) ||
-            p.analyses.toLowerCase().includes(searchLower) ||
-            p.prescriptionId.toLowerCase().includes(searchLower) ||
-            p.medecin.toLowerCase().includes(searchLower)
-        );
+      const res = await ConsumApi.getLaboratoryAnalysesPaginated(page + 1, rowsPerPage, filters);
+      if (!res.success) {
+        setRows([]);
+        setTotal(0);
+        showError('Erreur', res.message || 'Chargement impossible');
+        return;
       }
-      if (statusFilter) {
-        filtered = filtered.filter((p) => p.status === statusFilter);
-      }
-
-      setPrescriptions(filtered);
-    } catch (error) {
-      console.error('Error loading prescriptions:', error);
-      showError('Erreur', 'Impossible de charger les prescriptions');
-      setPrescriptions([]);
+      const data = res.data || [];
+      setRows(data);
+      setTotal(res.pagination?.total ?? data.length);
+    } catch (e) {
+      setRows([]);
+      setTotal(0);
+      showError('Erreur', e?.message || 'Erreur réseau');
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, statusFilter]);
+  }, [page, rowsPerPage, search, statusFilter, showError]);
 
   useEffect(() => {
-    loadPrescriptions();
-  }, [page, rowsPerPage, search, statusFilter]);
+    loadRows();
+  }, [loadRows]);
 
-  const handleViewDetails = (item) => {
-    setDetailsDialog({ open: true, item });
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'in_progress':
-        return 'warning';
-      case 'received':
-        return 'info';
-      default:
-        return 'default';
+  const handleViewDetails = async (item) => {
+    setDetailsDialog({ open: true, item: null, loading: true });
+    try {
+      const res = await ConsumApi.getLaboratoryAnalysisComplete(item.id);
+      if (res.success) {
+        setDetailsDialog({ open: true, item: res.data, loading: false });
+      } else {
+        setDetailsDialog({ open: true, item, loading: false });
+      }
+    } catch {
+      setDetailsDialog({ open: true, item, loading: false });
     }
   };
 
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'Terminée';
-      case 'in_progress':
-        return 'En cours';
-      case 'received':
-        return 'Reçue';
-      default:
-        return 'En attente';
+  const { item, loading: detailsLoading } = detailsDialog;
+
+  const renderTableBody = () => {
+    if (loading) {
+      return (
+        <TableRow>
+          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+            <LoadingButton loading>Chargement…</LoadingButton>
+          </TableCell>
+        </TableRow>
+      );
     }
+    if (rows.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+            Aucune demande trouvée
+          </TableCell>
+        </TableRow>
+      );
+    }
+    return rows.map((a) => (
+      <TableRow key={a.id} hover>
+        <TableCell>{a.prescriptionId || '—'}</TableCell>
+        <TableCell>{fDateTime(a.samplingDate || a.createdAt)}</TableCell>
+        <TableCell>{patientLabel(a.patient)}</TableCell>
+        <TableCell>{doctorLabel(a.prescribingDoctor)}</TableCell>
+        <TableCell>{a.analysisName || '—'}</TableCell>
+        <TableCell>
+          <Chip
+            label={STATUS_LABELS[a.status] || a.status}
+            size="small"
+            color={STATUS_COLORS[a.status] || 'default'}
+          />
+        </TableCell>
+        <TableCell align="right">
+          <Button variant="outlined" size="small" onClick={() => handleViewDetails(a)}>
+            Voir détails
+          </Button>
+        </TableCell>
+      </TableRow>
+    ));
   };
 
   return (
     <>
       <Helmet>
-        <title> Réception des Prescriptions | Clinique </title>
+        <title> Prescriptions laboratoire | Clinique </title>
       </Helmet>
 
       {contextHolder}
 
       <Stack spacing={3}>
         <Box>
-          <Typography variant="h4">Réception des Prescriptions</Typography>
+          <Typography variant="h4">Prescriptions & demandes d&apos;analyses</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Consulter les prescriptions d&apos;analyses reçues du service médical
+            Liste issue de <code>GET /laboratory/analyses/paginated</code> (prescription liée si présente dans les
+            données)
           </Typography>
         </Box>
 
-        {/* Filters */}
-        <Card sx={{ p: 3 }}>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              fullWidth
-              placeholder="Rechercher..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              select
-              label="Statut"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(0);
-              }}
-              sx={{ minWidth: 150 }}
-              SelectProps={{ native: true }}
-            >
-              <option value="">Tous</option>
-              <option value="pending">En attente</option>
-              <option value="received">Reçue</option>
-              <option value="in_progress">En cours</option>
-              <option value="completed">Terminée</option>
-            </TextField>
+        <Card sx={{ p: 2 }}>
+          <Stack spacing={2}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                placeholder="Rechercher…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <FormControl sx={{ minWidth: 200 }}>
+                <InputLabel>Statut</InputLabel>
+                <Select
+                  label="Statut"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(0);
+                  }}
+                >
+                  <MenuItem value="">Tous</MenuItem>
+                  <MenuItem value="EN_ATTENTE">En attente</MenuItem>
+                  <MenuItem value="EN_COURS">En cours</MenuItem>
+                  <MenuItem value="TERMINE">Terminé</MenuItem>
+                  <MenuItem value="VALIDE">Validé</MenuItem>
+                  <MenuItem value="VALIDEE">Validée</MenuItem>
+                </Select>
+              </FormControl>
+            </Stack>
           </Stack>
         </Card>
 
-        {/* Table */}
         <Card>
           <TableContainer sx={{ overflow: 'unset' }}>
             <Scrollbar>
-              <Table sx={{ minWidth: 800 }}>
+              <Table sx={{ minWidth: 960 }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell>ID Prescription</TableCell>
+                    <TableCell>ID prescription</TableCell>
                     <TableCell>Date</TableCell>
                     <TableCell>Patient</TableCell>
-                    <TableCell>Médecin</TableCell>
-                    <TableCell>Analyses</TableCell>
+                    <TableCell>Médecin prescripteur</TableCell>
+                    <TableCell>Analyse</TableCell>
                     <TableCell>Statut</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
-                <TableBody>
-                  {(() => {
-                    if (loading) {
-                      return (
-                        <TableRow>
-                          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                            <LoadingButton loading>Chargement...</LoadingButton>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
-                    if (prescriptions.length === 0) {
-                      return (
-                        <TableRow>
-                          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                            Aucune prescription trouvée
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
-                    return prescriptions.map((item, index) => (
-                      <TableRow key={`${item.patientId}-${item.id}-${index}`} hover>
-                        <TableCell>{item.prescriptionId}</TableCell>
-                        <TableCell>{fDateTime(item.date)}</TableCell>
-                        <TableCell>{item.patientName}</TableCell>
-                        <TableCell>{item.medecin}</TableCell>
-                        <TableCell>{item.analyses}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={getStatusLabel(item.status)}
-                            size="small"
-                            color={getStatusColor(item.status)}
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <Button variant="outlined" size="small" onClick={() => handleViewDetails(item)}>
-                            Voir détails
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ));
-                  })()}
-                </TableBody>
+                <TableBody>{renderTableBody()}</TableBody>
               </Table>
             </Scrollbar>
           </TableContainer>
@@ -239,57 +251,73 @@ export default function LaboratoryPrescriptionsView() {
           <TablePagination
             page={page}
             component="div"
-            count={-1}
+            count={total}
             rowsPerPage={rowsPerPage}
-            onPageChange={(e, newPage) => setPage(newPage)}
+            onPageChange={(_, newPage) => setPage(newPage)}
             onRowsPerPageChange={(e) => {
               setRowsPerPage(parseInt(e.target.value, 10));
               setPage(0);
             }}
-            labelRowsPerPage="Lignes par page:"
+            rowsPerPageOptions={[5, 10, 25]}
+            labelRowsPerPage="Lignes par page :"
           />
         </Card>
       </Stack>
 
-      {/* Details Dialog */}
-      <Dialog open={detailsDialog.open} onClose={() => setDetailsDialog({ open: false, item: null })} maxWidth="md" fullWidth>
-        <DialogTitle>Détails de la Prescription</DialogTitle>
+      <Dialog
+        open={detailsDialog.open}
+        onClose={() => setDetailsDialog({ open: false, item: null, loading: false })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Détails de la demande</DialogTitle>
         <DialogContent>
-          {detailsDialog.item && (
+          {detailsLoading && (
+            <Typography sx={{ py: 2 }} color="text.secondary">
+              Chargement…
+            </Typography>
+          )}
+          {!detailsLoading && item && (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <Box>
-                <Typography variant="subtitle2">ID Prescription</Typography>
-                <Typography variant="body2">{detailsDialog.item.prescriptionId}</Typography>
+                <Typography variant="subtitle2">ID prescription</Typography>
+                <Typography variant="body2">{item.prescriptionId || '—'}</Typography>
               </Box>
               <Box>
                 <Typography variant="subtitle2">Date</Typography>
-                <Typography variant="body2">{fDateTime(detailsDialog.item.date)}</Typography>
+                <Typography variant="body2">{fDateTime(item.samplingDate || item.createdAt)}</Typography>
               </Box>
               <Box>
                 <Typography variant="subtitle2">Patient</Typography>
-                <Typography variant="body2">{detailsDialog.item.patientName}</Typography>
+                <Typography variant="body2">{patientLabel(item.patient)}</Typography>
               </Box>
               <Box>
                 <Typography variant="subtitle2">Médecin prescripteur</Typography>
-                <Typography variant="body2">{detailsDialog.item.medecin}</Typography>
+                <Typography variant="body2">{doctorLabel(item.prescribingDoctor)}</Typography>
               </Box>
               <Box>
-                <Typography variant="subtitle2">Analyses demandées</Typography>
-                <Typography variant="body2">{detailsDialog.item.analyses}</Typography>
+                <Typography variant="subtitle2">Analyse</Typography>
+                <Typography variant="body2">{item.analysisName || '—'}</Typography>
               </Box>
               <Box>
                 <Typography variant="subtitle2">Statut</Typography>
                 <Chip
-                  label={getStatusLabel(detailsDialog.item.status)}
+                  label={STATUS_LABELS[item.status] || item.status}
                   size="small"
-                  color={getStatusColor(detailsDialog.item.status)}
+                  color={STATUS_COLORS[item.status] || 'default'}
                 />
               </Box>
+              {item.observations && (
+                <Box>
+                  <Typography variant="subtitle2">Observations</Typography>
+                  <Typography variant="body2">{item.observations}</Typography>
+                </Box>
+              )}
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDetailsDialog({ open: false, item: null })}>Fermer</Button>
+          <Button onClick={() => setDetailsDialog({ open: false, item: null, loading: false })}>Fermer</Button>
         </DialogActions>
       </Dialog>
     </>

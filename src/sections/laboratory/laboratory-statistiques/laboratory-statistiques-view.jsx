@@ -1,52 +1,129 @@
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 
 import { LoadingButton } from '@mui/lab';
-import { Box, Card, Table, Stack, TableRow, TableBody, TableCell, TableHead, Typography, TableContainer, TablePagination } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import {
+  Box,
+  Card,
+  Grid,
+  Stack,
+  Button,
+  Skeleton,
+  Typography,
+} from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
 
-import Scrollbar from 'src/components/scrollbar';
+import ConsumApi from 'src/services_workers/consum_api';
+
+import Iconify from 'src/components/iconify';
+
+// ----------------------------------------------------------------------
+
+const STAT_CONFIG = [
+  { key: 'total', label: 'Total analyses', color: 'primary', icon: 'solar:test-tube-bold' },
+  { key: 'enAttente', label: 'En attente', color: 'warning', icon: 'solar:clock-circle-bold' },
+  { key: 'enCours', label: 'En cours', color: 'info', icon: 'solar:refresh-bold' },
+  { key: 'terminee', label: 'Terminées', color: 'success', icon: 'solar:check-circle-bold' },
+  { key: 'validee', label: 'Validées', color: 'success', icon: 'solar:verified-check-bold' },
+  { key: 'annulee', label: 'Annulées', color: 'error', icon: 'solar:close-circle-bold' },
+];
 
 export default function LaboratoryStatistiquesView() {
-  const { contextHolder } = useNotification();
-  const [statistiques, setStatistiques] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const { contextHolder, showError } = useNotification();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const loadStatistiques = useCallback(async () => {
+  const loadStats = async () => {
     setLoading(true);
     try {
-      const mockStats = Array.from({ length: 15 }, (_, i) => ({
-        id: i + 1,
-        analyse: ['Hémogramme', 'Glycémie', 'Cholestérol', 'Créatinine', 'TSH'][Math.floor(Math.random() * 5)],
-        nombre: Math.floor(Math.random() * 200) + 50,
-        periode: 'Dernier mois',
-        taux: `${(Math.random() * 100).toFixed(1)}%`,
-      }));
-      setStatistiques(mockStats);
-    } catch (error) {
-      setStatistiques([]);
+      const result = await ConsumApi.getLaboratoryAnalysesStatistics();
+      if (result.success && result.data) {
+        setStats(result.data);
+      } else {
+        setStats(null);
+        showError('Erreur', result.message || 'Impossible de charger les statistiques');
+      }
+    } catch (e) {
+      setStats(null);
+      showError('Erreur', e?.message || 'Erreur réseau');
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage]);
+  };
 
   useEffect(() => {
-    loadStatistiques();
-  }, [page, rowsPerPage]);
+    loadStats();
+  }, []);
 
   return (
     <>
-      <Helmet><title> Statistiques | Clinique </title></Helmet>
+      <Helmet>
+        <title> Statistiques laboratoire | Clinique </title>
+      </Helmet>
       {contextHolder}
       <Stack spacing={3}>
-        <Box><Typography variant="h4">Statistiques</Typography><Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Statistiques des analyses effectuées</Typography></Box>
-        <Card>
-          <TableContainer sx={{ overflow: 'unset' }}><Scrollbar><Table sx={{ minWidth: 800 }}><TableHead><TableRow><TableCell>Analyse</TableCell><TableCell>Nombre</TableCell><TableCell>Période</TableCell><TableCell>Taux de réalisation</TableCell></TableRow></TableHead><TableBody>{(() => { if (loading) return <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3 }}><LoadingButton loading>Chargement...</LoadingButton></TableCell></TableRow>; if (statistiques.length === 0) return <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3 }}>Aucune statistique trouvée</TableCell></TableRow>; return statistiques.map((item, index) => (<TableRow key={`${item.id}-${index}`} hover><TableCell>{item.analyse}</TableCell><TableCell>{item.nombre}</TableCell><TableCell>{item.periode}</TableCell><TableCell>{item.taux}</TableCell></TableRow>)); })()}</TableBody></Table></Scrollbar></TableContainer>
-          <TablePagination page={page} component="div" count={-1} rowsPerPage={rowsPerPage} onPageChange={(e, newPage) => setPage(newPage)} onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }} labelRowsPerPage="Lignes par page:" />
-        </Card>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
+          <Box>
+            <Typography variant="h4">Statistiques du laboratoire</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Synthèse des analyses (API <code>/laboratory/analyses/statistics</code>)
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={<Iconify icon="solar:refresh-bold" />}
+            onClick={loadStats}
+            disabled={loading}
+          >
+            Actualiser
+          </Button>
+        </Stack>
+
+        <Grid container spacing={2}>
+          {STAT_CONFIG.map((item) => (
+            <Grid item xs={12} sm={6} md={4} key={item.key}>
+              <Card sx={{ p: 3, height: 1 }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: (theme) => alpha(theme.palette[item.color].main, 0.12),
+                        color: `${item.color}.main`,
+                      }}
+                    >
+                      <Iconify icon={item.icon} width={22} />
+                    </Box>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      {item.label}
+                    </Typography>
+                  </Stack>
+                  {loading ? (
+                    <Skeleton variant="text" width={80} height={48} />
+                  ) : (
+                    <Typography variant="h3">{stats?.[item.key] ?? 0}</Typography>
+                  )}
+                </Stack>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        {!loading && !stats && (
+          <Card sx={{ p: 3 }}>
+            <Typography color="text.secondary">Aucune donnée disponible.</Typography>
+            <LoadingButton sx={{ mt: 2 }} variant="contained" onClick={loadStats}>
+              Réessayer
+            </LoadingButton>
+          </Card>
+        )}
       </Stack>
     </>
   );

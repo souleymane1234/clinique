@@ -14,6 +14,7 @@ import {
   Button,
   Dialog,
   Select,
+  Switch,
   Divider,
   MenuItem,
   TableRow,
@@ -28,12 +29,15 @@ import {
   FormControl,
   DialogActions,
   DialogContent,
+  InputAdornment,
   TableContainer,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
+import { isBillingInvoicePaid } from 'src/utils/billing-utils';
+import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
 
 import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
@@ -71,6 +75,15 @@ const CONSULTATION_TYPES = {
 export default function PatientAccueilView() {
   const { contextHolder, showApiResponse, showError, showSuccess } = useNotification();
 
+  const admin = AdminStorage.getInfoAdmin();
+  const rawRole = admin?.role ?? admin?.service;
+  const roleStr =
+    typeof rawRole === 'object' && rawRole !== null ? (rawRole.name || rawRole.slug || rawRole.label || '') : String(rawRole || '');
+  const currentRole = roleStr.trim().toUpperCase().replace(/\s+/g, '_');
+  const isSecretary = currentRole === 'SECRÉTAIRE' || currentRole === 'SECRETAIRE';
+  const isInfirmier = currentRole === 'INFIRMIER';
+  const canViewConsultationDetails = !isSecretary;
+
   const [activeStep] = useState(0);
 
   // Patient search modal
@@ -83,6 +96,17 @@ export default function PatientAccueilView() {
   // Consultations
   const [consultations, setConsultations] = useState([]);
   const [loadingConsultations, setLoadingConsultations] = useState(false);
+
+  const [billingInvoices, setBillingInvoices] = useState([]);
+  const [loadingBilling, setLoadingBilling] = useState(false);
+  const [billingPaymentDialog, setBillingPaymentDialog] = useState({ open: false, invoice: null });
+  const [billingPaymentSubmitting, setBillingPaymentSubmitting] = useState(false);
+  const [billingPaymentForm, setBillingPaymentForm] = useState({
+    method: 'ESPECES',
+    amount: 0,
+    reference: '',
+    details: '',
+  });
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [detailsDialog, setDetailsDialog] = useState({ open: false, loading: false, editing: false });
   const [editForm, setEditForm] = useState(null);
@@ -93,6 +117,8 @@ export default function PatientAccueilView() {
 
   // Create patient dialog
   const [createPatientDialog, setCreatePatientDialog] = useState({ open: false, loading: false });
+  const [insuranceTypes, setInsuranceTypes] = useState([]);
+  const [loadingInsuranceTypes, setLoadingInsuranceTypes] = useState(false);
   const [newPatientForm, setNewPatientForm] = useState({
     firstName: '',
     lastName: '',
@@ -104,22 +130,45 @@ export default function PatientAccueilView() {
     city: '',
     country: '',
     maritalStatus: 'SINGLE',
+    occupation: '',
+    hasInsurance: false,
+    insuranceType: 'NONE', // ENUM backend: NONE | PUBLIC | PRIVATE | MIXED
+    insuranceCompanyId: '', // UUID depuis /insurance-types
     emergencyContactName: '',
     emergencyContactPhone: '',
     emergencyContactRelationship: '',
   });
 
+  const loadInsuranceTypes = useCallback(async () => {
+    setLoadingInsuranceTypes(true);
+    try {
+      const res = await ConsumApi.getInsuranceTypesActive();
+      let list = [];
+      if (res?.success) {
+        if (Array.isArray(res.data)) list = res.data;
+        else if (Array.isArray(res.data?.data)) list = res.data.data;
+        else if (Array.isArray(res.data?.items)) list = res.data.items;
+      }
+      setInsuranceTypes(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.error('Error loading insurance types:', e);
+      setInsuranceTypes([]);
+    } finally {
+      setLoadingInsuranceTypes(false);
+    }
+  }, []);
+
   const loadAllPatients = useCallback(async () => {
     setLoadingPatients(true);
     try {
-      const admin = AdminStorage.getInfoAdmin();
-      const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
-      let infirmierId = admin?.infirmierId || admin?.infirmier?.id || null;
-      if (role === 'INFIRMIER' && !infirmierId && admin?.id) {
+      const adminInfo = AdminStorage.getInfoAdmin();
+      const role = ((adminInfo?.role ?? adminInfo?.service) ?? '').toString().toUpperCase().trim();
+      let infirmierId = adminInfo?.infirmierId || adminInfo?.infirmier?.id || null;
+      if (role === 'INFIRMIER' && !infirmierId && adminInfo?.id) {
         try {
           const infResult = await ConsumApi.getInfirmiers();
           if (infResult.success && Array.isArray(infResult.data)) {
-            const me = infResult.data.find((n) => n.user?.id === admin.id || n.userId === admin.id);
+            const me = infResult.data.find((n) => n.user?.id === adminInfo.id || n.userId === adminInfo.id);
             if (me) infirmierId = me.id;
           }
         } catch (_) { /* infirmier id non trouvé */ }
@@ -158,20 +207,8 @@ export default function PatientAccueilView() {
   const loadAllConsultations = useCallback(async () => {
     setLoadingConsultations(true);
     try {
-      const admin = AdminStorage.getInfoAdmin();
-      const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
-      let infirmierId = admin?.infirmierId || admin?.infirmier?.id || null;
-      if (role === 'INFIRMIER' && !infirmierId && admin?.id) {
-        try {
-          const infResult = await ConsumApi.getInfirmiers();
-          if (infResult.success && Array.isArray(infResult.data)) {
-            const me = infResult.data.find((n) => n.user?.id === admin.id || n.userId === admin.id);
-            if (me) infirmierId = me.id;
-          }
-        } catch (_) { /* infirmier id non trouvé */ }
-      }
-      const filters = role === 'INFIRMIER' && infirmierId ? { nurseId: infirmierId } : {};
-      const result = await ConsumApi.getConsultations(filters);
+      // Les infirmiers doivent voir toutes les consultations : pas de filtre nurseId/infirmierId.
+      const result = await ConsumApi.getConsultations({});
 
       if (result.success) {
         let consultationsList = [];
@@ -181,15 +218,6 @@ export default function PatientAccueilView() {
           consultationsList = result.data.data;
         } else if (result.data && typeof result.data === 'object') {
           consultationsList = result.data.consultations || result.data.items || result.data.results || [];
-        }
-        if (role === 'INFIRMIER' && infirmierId && consultationsList.length > 0) {
-          consultationsList = consultationsList.filter(
-            (c) =>
-              c.nurseId === infirmierId ||
-              c.infirmierId === infirmierId ||
-              c.nurse?.id === infirmierId ||
-              c.infirmier?.id === infirmierId
-          );
         }
         setConsultations(consultationsList);
       } else {
@@ -204,10 +232,32 @@ export default function PatientAccueilView() {
     }
   }, []);
 
+  const loadBillingInvoices = useCallback(async () => {
+    if (!isSecretary) return;
+    setLoadingBilling(true);
+    try {
+      const res = await ConsumApi.getBillingInvoices({});
+      if (res.success && Array.isArray(res.data)) {
+        setBillingInvoices(res.data.filter((inv) => !isBillingInvoicePaid(inv)));
+      } else {
+        setBillingInvoices([]);
+      }
+    } catch (e) {
+      console.error('Error loading billing invoices:', e);
+      setBillingInvoices([]);
+    } finally {
+      setLoadingBilling(false);
+    }
+  }, [isSecretary]);
+
   useEffect(() => {
     loadAllPatients();
     loadAllConsultations();
   }, [loadAllPatients, loadAllConsultations]);
+
+  useEffect(() => {
+    if (isSecretary) loadBillingInvoices();
+  }, [isSecretary, loadBillingInvoices]);
 
   // Filtrer les patients selon la recherche
   useEffect(() => {
@@ -248,10 +298,15 @@ export default function PatientAccueilView() {
       city: '',
       country: '',
       maritalStatus: 'SINGLE',
+      occupation: '',
+      hasInsurance: false,
+      insuranceType: 'NONE',
+      insuranceCompanyId: '',
       emergencyContactName: '',
       emergencyContactPhone: '',
       emergencyContactRelationship: '',
     });
+    loadInsuranceTypes();
     setCreatePatientDialog({ open: true, loading: false });
   };
 
@@ -261,14 +316,49 @@ export default function PatientAccueilView() {
       return;
     }
 
+    // Le backend exige contact d'urgence (nom + téléphone)
     if (!newPatientForm.emergencyContactName || !newPatientForm.emergencyContactPhone) {
-      showError('Erreur', 'Veuillez remplir les informations du contact d\'urgence (Nom et Téléphone)');
+      showError('Erreur', "Veuillez remplir les informations du contact d'urgence (Nom et Téléphone)");
+      return;
+    }
+
+    if (isSecretary && newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId) {
+      showError('Erreur', "Veuillez sélectionner l'assurance");
       return;
     }
 
     setCreatePatientDialog({ ...createPatientDialog, loading: true });
     try {
-      const result = await ConsumApi.createPatient(newPatientForm);
+      const selectedInsurance =
+        isSecretary && newPatientForm.hasInsurance
+          ? insuranceTypes.find((it) => it.id === newPatientForm.insuranceCompanyId) || null
+          : null;
+
+      const payload =
+        isSecretary
+          ? {
+              firstName: newPatientForm.firstName,
+              lastName: newPatientForm.lastName,
+              gender: newPatientForm.gender,
+              dateOfBirth: newPatientForm.dateOfBirth,
+              phone: newPatientForm.phone,
+              email: newPatientForm.email,
+              address: newPatientForm.address,
+              city: newPatientForm.city,
+              country: newPatientForm.country,
+              maritalStatus: newPatientForm.maritalStatus,
+              occupation: newPatientForm.occupation,
+              // Backend: insuranceType est un ENUM (NONE | PUBLIC | PRIVATE | MIXED)
+              insuranceType: newPatientForm.hasInsurance ? 'PRIVATE' : 'NONE',
+              // Le nom de l'assurance provient de /insurance-types
+              insuranceCompany: newPatientForm.hasInsurance ? (selectedInsurance?.name || '') : '',
+              emergencyContactName: newPatientForm.emergencyContactName,
+              emergencyContactPhone: newPatientForm.emergencyContactPhone,
+              emergencyContactRelationship: newPatientForm.emergencyContactRelationship,
+            }
+          : newPatientForm;
+
+      const result = await ConsumApi.createPatient(payload);
       const processed = showApiResponse(result, {
         successTitle: 'Patient créé',
         errorTitle: 'Erreur de création',
@@ -297,6 +387,10 @@ export default function PatientAccueilView() {
           city: '',
           country: '',
           maritalStatus: 'SINGLE',
+          occupation: '',
+          hasInsurance: false,
+          insuranceType: 'NONE',
+          insuranceCompanyId: '',
           emergencyContactName: '',
           emergencyContactPhone: '',
           emergencyContactRelationship: '',
@@ -330,6 +424,7 @@ export default function PatientAccueilView() {
   };
 
   const handleOpenDetails = async (consultation) => {
+    if (!canViewConsultationDetails) return;
     setDetailsDialog({ open: true, loading: true, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
@@ -414,6 +509,24 @@ export default function PatientAccueilView() {
       if (processed.success) {
         showSuccess('Succès', 'Consultation mise à jour avec succès');
         setDetailsDialog((prev) => ({ ...prev, editing: false }));
+
+        // Time tracking: passage INFIRMIER lors de l'enregistrement des constantes
+        try {
+          const userId = admin?.id || null;
+          const pid = selectedConsultation.patientId || selectedConsultation.patient?.id;
+          if (pid) {
+            await transitionService({
+              patientId: pid,
+              serviceType: 'INFIRMIER',
+              handledByUserId: userId,
+              reason: selectedConsultation.reason || '',
+              notes: 'Prise des constantes',
+            });
+          }
+        } catch (e) {
+          console.error('Time tracking (save constantes) failed:', e);
+        }
+
         // Recharger les détails
         await handleOpenDetails({ id: selectedConsultation.id });
         // Recharger la liste des consultations
@@ -496,6 +609,17 @@ export default function PatientAccueilView() {
 
       if (processed.success) {
         showSuccess('Succès', 'Patient transféré au médecin avec succès');
+
+        // Time tracking: clôturer uniquement le passage infirmerie (le médecin démarre MEDECIN à la réception)
+        try {
+          const pid = selectedConsultation.patientId || selectedConsultation.patient?.id;
+          if (pid) {
+            await closeCurrentPassageOnly(pid);
+          }
+        } catch (e) {
+          console.error('Time tracking (close passage infirmerie after transfer) failed:', e);
+        }
+
         await handleOpenDetails({ id: selectedConsultation.id });
         await loadAllConsultations();
       }
@@ -507,6 +631,60 @@ export default function PatientAccueilView() {
     }
   };
 
+  const handleOpenBillingPayment = (invoice) => {
+    const total = Number(invoice.totalAmount ?? 0);
+    const paid = Number(invoice.paidAmount ?? 0);
+    setBillingPaymentForm({
+      method: 'ESPECES',
+      amount: Math.max(0, total - paid),
+      reference: '',
+      details: '',
+    });
+    setBillingPaymentDialog({ open: true, invoice });
+  };
+
+  const handleCloseBillingPayment = () => {
+    setBillingPaymentDialog({ open: false, invoice: null });
+    setBillingPaymentSubmitting(false);
+  };
+
+  const handleSubmitBillingPayment = async () => {
+    const inv = billingPaymentDialog.invoice;
+    if (!inv?.id) return;
+    if (Number(billingPaymentForm.amount) <= 0) {
+      showError('Erreur', 'Le montant doit être supérieur à 0.');
+      return;
+    }
+    setBillingPaymentSubmitting(true);
+    try {
+      const payRes = await ConsumApi.createBillingPayment({
+        invoiceId: inv.id,
+        method: billingPaymentForm.method,
+        amount: Number(billingPaymentForm.amount),
+        reference: billingPaymentForm.reference?.trim() || '',
+        details: billingPaymentForm.details?.trim() || '',
+      });
+      if (!payRes.success) {
+        showApiResponse(payRes, { successTitle: '', errorTitle: 'Paiement' });
+        return;
+      }
+      const paymentId = payRes.data?.id;
+      if (paymentId) {
+        const stRes = await ConsumApi.updateBillingPaymentStatus({ paymentId, status: 'VALIDEE' });
+        if (!stRes?.success) {
+          showError('Attention', 'Paiement créé mais la validation du statut a échoué. Vérifiez côté serveur.');
+        }
+      }
+      showSuccess('Succès', 'Paiement enregistré.');
+      handleCloseBillingPayment();
+      await loadBillingInvoices();
+    } catch (e) {
+      console.error('Billing payment error:', e);
+      showError('Erreur', 'Erreur lors de l’enregistrement du paiement');
+    } finally {
+      setBillingPaymentSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -524,6 +702,84 @@ export default function PatientAccueilView() {
               Enregistrement, paiement et orientation du patient
             </Typography>
           </Box>
+
+          {isSecretary && (
+            <Card sx={{ p: 3 }}>
+              <Stack spacing={2}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                  <Typography variant="h6">Factures à encaisser (analyses &amp; actes)</Typography>
+                  <Button variant="outlined" size="small" startIcon={<Iconify icon="eva:refresh-fill" />} onClick={() => loadBillingInvoices()}>
+                    Actualiser
+                  </Button>
+                </Box>
+                <Alert severity="info">
+                  Les factures pro-forma créées par le médecin (ex. analyse de laboratoire) apparaissent ici tant qu’elles ne sont pas entièrement réglées.
+                </Alert>
+                {(() => {
+                  if (loadingBilling) {
+                    return (
+                      <Box sx={{ textAlign: 'center', py: 2 }}>
+                        <LoadingButton loading>Chargement...</LoadingButton>
+                      </Box>
+                    );
+                  }
+                  if (billingInvoices.length === 0) {
+                    return (
+                      <Typography variant="body2" color="text.secondary">
+                        Aucune facture en attente de paiement.
+                      </Typography>
+                    );
+                  }
+                  return (
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>N° facture</TableCell>
+                            <TableCell>Patient</TableCell>
+                            <TableCell align="right">Montant</TableCell>
+                            <TableCell align="right">Payé</TableCell>
+                            <TableCell>Statut</TableCell>
+                            <TableCell>Note</TableCell>
+                            <TableCell align="right">Action</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {billingInvoices.map((inv) => (
+                            <TableRow key={inv.id}>
+                              <TableCell>{inv.invoiceNumber || inv.id?.slice(0, 8)}</TableCell>
+                              <TableCell>
+                                {inv.patient
+                                  ? `${inv.patient.firstName || ''} ${inv.patient.lastName || ''}`.trim() || '—'
+                                  : '—'}
+                              </TableCell>
+                              <TableCell align="right">
+                                {Number(inv.totalAmount ?? 0).toLocaleString('fr-FR')} {inv.currency || 'FCFA'}
+                              </TableCell>
+                              <TableCell align="right">
+                                {Number(inv.paidAmount ?? 0).toLocaleString('fr-FR')} {inv.currency || 'FCFA'}
+                              </TableCell>
+                              <TableCell>{inv.status || '—'}</TableCell>
+                              <TableCell sx={{ maxWidth: 220 }} noWrap title={inv.note || ''}>
+                                <Typography variant="caption" noWrap display="block">
+                                  {inv.note || '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Button size="small" variant="contained" onClick={() => handleOpenBillingPayment(inv)}>
+                                  Encaisser
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  );
+                })()}
+              </Stack>
+            </Card>
+          )}
 
           {/* Recherche et sélection du patient */}
           {activeStep === 0 && (
@@ -585,16 +841,16 @@ export default function PatientAccueilView() {
                         <TableCell>Date</TableCell>
                         <TableCell>Motif</TableCell>
                         <TableCell>Statut</TableCell>
-                        <TableCell align="right">Actions</TableCell>
+                        {canViewConsultationDetails && <TableCell align="right">Actions</TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {consultations.map((consultation) => (
                         <TableRow
                           key={consultation.id}
-                          hover
-                          sx={{ cursor: 'pointer' }}
-                          onClick={() => handleOpenDetails(consultation)}
+                          hover={canViewConsultationDetails}
+                          sx={{ cursor: canViewConsultationDetails ? 'pointer' : 'default' }}
+                          onClick={canViewConsultationDetails ? () => handleOpenDetails(consultation) : undefined}
                         >
                           <TableCell>
                             <Typography variant="subtitle2">
@@ -639,18 +895,20 @@ export default function PatientAccueilView() {
                               size="small"
                             />
                           </TableCell>
-                          <TableCell align="right">
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDetails(consultation);
-                              }}
-                            >
-                              Voir détails
-                            </Button>
-                          </TableCell>
+                          {canViewConsultationDetails && (
+                            <TableCell align="right">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDetails(consultation);
+                                }}
+                              >
+                                Voir détails
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -662,6 +920,75 @@ export default function PatientAccueilView() {
           </Card>
         </Stack>
       </Container>
+
+      <Dialog open={billingPaymentDialog.open} onClose={handleCloseBillingPayment} maxWidth="sm" fullWidth>
+        <DialogTitle>Encaisser la facture</DialogTitle>
+        <DialogContent>
+          {billingPaymentDialog.invoice && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Facture{' '}
+                <strong>{billingPaymentDialog.invoice.invoiceNumber || billingPaymentDialog.invoice.id?.slice(0, 8)}</strong>
+                {' — '}
+                Reste à payer :{' '}
+                <strong>
+                  {Math.max(
+                    0,
+                    Number(billingPaymentDialog.invoice.totalAmount ?? 0) -
+                      Number(billingPaymentDialog.invoice.paidAmount ?? 0)
+                  ).toLocaleString('fr-FR')}{' '}
+                  {billingPaymentDialog.invoice.currency || 'FCFA'}
+                </strong>
+              </Typography>
+              <FormControl fullWidth>
+                <InputLabel>Moyen de paiement</InputLabel>
+                <Select
+                  label="Moyen de paiement"
+                  value={billingPaymentForm.method}
+                  onChange={(e) => setBillingPaymentForm((p) => ({ ...p, method: e.target.value }))}
+                >
+                  <MenuItem value="ESPECES">Espèces</MenuItem>
+                  <MenuItem value="MOBILE_MONEY">Mobile money</MenuItem>
+                  <MenuItem value="CARTE_BANCAIRE">Carte bancaire</MenuItem>
+                  <MenuItem value="VIREMENT">Virement</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                type="number"
+                label="Montant"
+                value={billingPaymentForm.amount}
+                onChange={(e) => setBillingPaymentForm((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">{billingPaymentDialog.invoice.currency || 'FCFA'}</InputAdornment>
+                  ),
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Référence (optionnel)"
+                value={billingPaymentForm.reference}
+                onChange={(e) => setBillingPaymentForm((p) => ({ ...p, reference: e.target.value }))}
+              />
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                label="Détails (optionnel)"
+                value={billingPaymentForm.details}
+                onChange={(e) => setBillingPaymentForm((p) => ({ ...p, details: e.target.value }))}
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseBillingPayment}>Annuler</Button>
+          <LoadingButton variant="contained" onClick={handleSubmitBillingPayment} loading={billingPaymentSubmitting}>
+            Valider le paiement
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de création de patient */}
       <Dialog open={createPatientDialog.open} onClose={() => setCreatePatientDialog({ open: false, loading: false })} maxWidth="md" fullWidth>
@@ -771,12 +1098,13 @@ export default function PatientAccueilView() {
                 </FormControl>
               </Grid>
 
-              <Grid item xs={12}>
-                <Divider sx={{ my: 1 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Contact d&apos;urgence
-                  </Typography>
-                </Divider>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Profession"
+                  value={newPatientForm.occupation}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, occupation: e.target.value })}
+                />
               </Grid>
 
               <Grid item xs={12} sm={6}>
@@ -806,6 +1134,49 @@ export default function PatientAccueilView() {
                   placeholder="Ex: Époux(se), Parent, Frère/Sœur, etc."
                 />
               </Grid>
+
+              {isSecretary && (
+                <>
+                  <Grid item xs={12}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 1 }}>
+                      <Switch
+                        checked={newPatientForm.hasInsurance}
+                        onChange={(e) => {
+                          const {checked} = e.target;
+                          setNewPatientForm({
+                            ...newPatientForm,
+                            hasInsurance: checked,
+                            insuranceType: checked ? 'PRIVATE' : 'NONE',
+                            insuranceCompanyId: '',
+                          });
+                        }}
+                      />
+                      <Typography variant="body2">Le patient a une assurance</Typography>
+                    </Stack>
+                  </Grid>
+
+                  {newPatientForm.hasInsurance && (
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth required>
+                        <InputLabel>Assurance</InputLabel>
+                        <Select
+                         style={{ width: '160px' }}
+                          value={newPatientForm.insuranceCompanyId}
+                          label="Assurance"
+                          onChange={(e) => setNewPatientForm({ ...newPatientForm, insuranceCompanyId: e.target.value })}
+                          disabled={loadingInsuranceTypes}
+                        >
+                          {insuranceTypes.map((it) => (
+                            <MenuItem key={it.id} value={it.id}>
+                              {it.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
+                </>
+              )}
             </Grid>
           </Stack>
         </DialogContent>
@@ -820,7 +1191,8 @@ export default function PatientAccueilView() {
               !newPatientForm.lastName ||
               !newPatientForm.phone ||
               !newPatientForm.emergencyContactName ||
-              !newPatientForm.emergencyContactPhone
+              !newPatientForm.emergencyContactPhone ||
+              (isSecretary && newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId)
             }
           >
             Créer le patient
@@ -1094,6 +1466,16 @@ export default function PatientAccueilView() {
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
+                    {(() => {
+                      const hasDoctor =
+                        Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
+                      let diagnosticHelperText;
+                      if (isInfirmier) diagnosticHelperText = 'Réservé au médecin';
+                      else if (!hasDoctor) diagnosticHelperText = 'Rempli par le médecin après transfert';
+
+                      const diagnosticDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
+
+                      return (
                     <TextField
                       fullWidth
                       multiline
@@ -1101,9 +1483,11 @@ export default function PatientAccueilView() {
                       label="Diagnostic"
                       value={editForm.diagnostic}
                       onChange={(e) => setEditForm({ ...editForm, diagnostic: e.target.value })}
-                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
-                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
+                      disabled={diagnosticDisabled}
+                      helperText={diagnosticHelperText}
                     />
+                      );
+                    })()}
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
@@ -1117,6 +1501,16 @@ export default function PatientAccueilView() {
                     />
                   </Grid>
                   <Grid item xs={12}>
+                    {(() => {
+                      const hasDoctor =
+                        Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
+                      let treatmentHelperText;
+                      if (isInfirmier) treatmentHelperText = 'Réservé au médecin';
+                      else if (!hasDoctor) treatmentHelperText = 'Rempli par le médecin après transfert';
+
+                      const treatmentDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
+
+                      return (
                     <TextField
                       fullWidth
                       multiline
@@ -1124,9 +1518,11 @@ export default function PatientAccueilView() {
                       label="Traitement"
                       value={editForm.treatment}
                       onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
-                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
-                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
+                      disabled={treatmentDisabled}
+                      helperText={treatmentHelperText}
                     />
+                      );
+                    })()}
                   </Grid>
                   <Grid item xs={12}>
                     <TextField

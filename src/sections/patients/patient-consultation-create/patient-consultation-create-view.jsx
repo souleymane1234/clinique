@@ -34,8 +34,10 @@ import {
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
+import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
 
 import ConsumApi from 'src/services_workers/consum_api';
+import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
 
@@ -70,6 +72,11 @@ export default function PatientConsultationCreateView() {
   const { patientId } = useParams();
   const { showSuccess, showError, showApiResponse } = useNotification();
 
+  const admin = AdminStorage.getInfoAdmin();
+  const currentRole = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+  const canViewConsultationDetails = currentRole !== 'SECRETAIRE';
+  const isInfirmier = currentRole === 'INFIRMIER';
+
   const [loading, setLoading] = useState(false);
   const [loadingPatient, setLoadingPatient] = useState(true);
   const [, setLoadingMedecins] = useState(true);
@@ -82,13 +89,15 @@ export default function PatientConsultationCreateView() {
   const [editForm, setEditForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  const [infirmiers, setInfirmiers] = useState([]);
+  const [serviceTariffs, setServiceTariffs] = useState([]);
+  const [loadingServiceTariffs, setLoadingServiceTariffs] = useState(false);
+  const [paymentValidated, setPaymentValidated] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
     patientId: patientId || '',
     type: 'PREMIERE_CONSULTATION',
     reason: '',
     consultationDate: new Date().toISOString(),
-    infirmierId: '',
+    serviceTariffId: '',
   });
   const [transferDoctorDialog, setTransferDoctorDialog] = useState({ open: false, medecinId: '' });
 
@@ -244,53 +253,65 @@ export default function PatientConsultationCreateView() {
       }
     };
 
-    const loadInfirmiers = async () => {
+    const loadServiceTariffs = async () => {
+      setLoadingServiceTariffs(true);
       try {
-        const result = await ConsumApi.getInfirmiers();
-        if (result.success && result.data != null) {
-          const list = Array.isArray(result.data) ? result.data : [];
-          setInfirmiers(list);
+        const result = await ConsumApi.getPricingServicesActive();
+        if (result.success) {
+          const list = Array.isArray(result.data) ? result.data : result.data?.data || result.data?.items || [];
+          setServiceTariffs(Array.isArray(list) ? list : []);
         } else {
-          setInfirmiers([]);
+          setServiceTariffs([]);
         }
       } catch (e) {
-        console.error('Error loading infirmiers:', e);
-        setInfirmiers([]);
+        console.error('Error loading service tariffs:', e);
+        setServiceTariffs([]);
+      } finally {
+        setLoadingServiceTariffs(false);
       }
     };
 
     loadPatient();
     loadMedecins();
-    loadInfirmiers();
+    loadServiceTariffs();
     loadConsultations();
   }, [patientId]);
 
-  // Initialiser l'infirmier par défaut quand la liste est chargée
+  // Initialiser le tarif de service par défaut
   useEffect(() => {
-    if (infirmiers.length > 0 && !consultationForm.infirmierId) {
-      setConsultationForm((prev) => ({ ...prev, infirmierId: infirmiers[0].id }));
+    if (serviceTariffs.length > 0 && !consultationForm.serviceTariffId) {
+      setConsultationForm((prev) => ({ ...prev, serviceTariffId: serviceTariffs[0].id }));
     }
-  }, [infirmiers.length]);
+  }, [serviceTariffs.length]);
 
   const handleCreateConsultation = async () => {
     if (!consultationForm.patientId || !consultationForm.reason.trim()) {
       showError('Erreur', 'Veuillez remplir tous les champs obligatoires (patient, motif)');
       return;
     }
-    if (!consultationForm.infirmierId) {
-      showError('Erreur', 'Veuillez sélectionner un infirmier : le patient lui sera assigné pour la prise des constantes.');
+    if (!consultationForm.serviceTariffId) {
+      showError('Erreur', 'Veuillez sélectionner le service de consultation (tarif).');
+      return;
+    }
+    const fallbackMedecinId = medecins.length > 0 ? medecins[0].id : null;
+    if (!fallbackMedecinId) {
+      showError('Erreur', 'Aucun médecin actif disponible pour initialiser la consultation.');
+      return;
+    }
+    if (!paymentValidated) {
+      showError('Erreur', 'Veuillez valider le paiement avant de créer la consultation.');
       return;
     }
 
     setLoading(true);
     try {
-      // Secrétaire assigne le patient à un infirmier. Statut EN_ATTENTE à la création (exigé par l'API) ; nurseId assigne l'infirmier pour la prise des constantes.
+      // Nouvelle API: création sans choix d'infirmier à ce stade.
       const consultationData = {
         patientId: consultationForm.patientId,
-        medecinId: '', // Assigné par l'infirmier après prise des constantes
-        infirmierId: consultationForm.infirmierId,
+        // API impose medecinId à la création; l'infirmier pourra ensuite transférer au médecin choisi.
+        medecinId: fallbackMedecinId,
+        serviceTariffId: consultationForm.serviceTariffId,
         type: consultationForm.type,
-        status: 'EN_ATTENTE',
         consultationDate: consultationForm.consultationDate,
         reason: consultationForm.reason,
         clinicalExamination: '',
@@ -327,6 +348,22 @@ export default function PatientConsultationCreateView() {
 
       if (processed.success) {
         setTimeout(() => showSuccess('Succès', 'Consultation créée avec succès'), 0);
+
+        // Time tracking: arrivée + passage ACCUEIL (secrétaire)
+        try {
+          const userId = admin?.id || null;
+          await transitionService({
+            patientId: consultationForm.patientId,
+            serviceType: 'ACCUEIL',
+            handledByUserId: userId,
+            reason: consultationForm.reason,
+            notes: consultationForm.reason,
+          });
+        } catch (e) {
+          // tracking non bloquant
+          console.error('Time tracking (create consultation) failed:', e);
+        }
+
         // Recharger la liste des consultations
         const resultConsultations = await ConsumApi.getConsultations({ patientId });
         if (resultConsultations.success) {
@@ -346,8 +383,9 @@ export default function PatientConsultationCreateView() {
           type: 'PREMIERE_CONSULTATION',
           reason: '',
           consultationDate: new Date().toISOString(),
-          infirmierId: infirmiers.length > 0 ? infirmiers[0].id : '',
+          serviceTariffId: serviceTariffs.length > 0 ? serviceTariffs[0].id : '',
         });
+        setPaymentValidated(false);
       }
     } catch (error) {
       console.error('Error creating consultation:', error);
@@ -357,11 +395,22 @@ export default function PatientConsultationCreateView() {
     }
   };
 
+  const selectedTariff = serviceTariffs.find((t) => t.id === consultationForm.serviceTariffId) || null;
+  const handleValidatePayment = () => {
+    if (!consultationForm.serviceTariffId) {
+      showError('Erreur', 'Veuillez sélectionner le service de consultation avant le paiement.');
+      return;
+    }
+    setPaymentValidated(true);
+    showSuccess('Paiement', 'Paiement validé. Vous pouvez créer la consultation.');
+  };
+
   const handleCancel = () => {
     navigate('/patients/accueil');
   };
 
   const handleOpenDetails = async (consultation) => {
+    if (!canViewConsultationDetails) return;
     setDetailsDialog({ open: true, loading: true, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
@@ -447,6 +496,24 @@ export default function PatientConsultationCreateView() {
       if (processed.success) {
         showSuccess('Succès', 'Consultation mise à jour avec succès');
         setDetailsDialog((prev) => ({ ...prev, editing: false }));
+
+        // Time tracking: passage INFIRMIER lors de l'enregistrement des constantes
+        try {
+          const userId = admin?.id || null;
+          const pid = selectedConsultation.patientId || selectedConsultation.patient?.id;
+          if (pid) {
+            await transitionService({
+              patientId: pid,
+              serviceType: 'INFIRMIER',
+              handledByUserId: userId,
+              reason: selectedConsultation.reason || '',
+              notes: 'Prise des constantes',
+            });
+          }
+        } catch (e) {
+          console.error('Time tracking (save constantes) failed:', e);
+        }
+
         // Recharger les détails
         await handleOpenDetails({ id: selectedConsultation.id });
         // Recharger la liste des consultations
@@ -520,6 +587,17 @@ export default function PatientConsultationCreateView() {
 
       if (processed.success) {
         showSuccess('Succès', 'Patient transféré au médecin avec succès');
+
+        // Time tracking: clôturer uniquement le passage infirmerie (le médecin démarre MEDECIN à la réception)
+        try {
+          const pid = selectedConsultation.patientId || selectedConsultation.patient?.id;
+          if (pid) {
+            await closeCurrentPassageOnly(pid);
+          }
+        } catch (e) {
+          console.error('Time tracking (close passage infirmerie after transfer) failed:', e);
+        }
+
         await handleOpenDetails({ id: selectedConsultation.id });
         const resultConsultations = await ConsumApi.getConsultations({ patientId });
         if (resultConsultations.success) {
@@ -633,24 +711,32 @@ export default function PatientConsultationCreateView() {
 
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth required>
-                    <InputLabel>Infirmier (prise des constantes)</InputLabel>
+                    <InputLabel>Service de consultation</InputLabel>
                     <Select
-                      value={consultationForm.infirmierId || ''}
-                      label="Infirmier (prise des constantes)"
-                      onChange={(e) => setConsultationForm((prev) => ({ ...prev, infirmierId: e.target.value || '' }))}
+                      value={consultationForm.serviceTariffId || ''}
+                      label="Service de consultation"
+                      onChange={(e) => {
+                        setPaymentValidated(false);
+                        setConsultationForm((prev) => ({ ...prev, serviceTariffId: e.target.value || '' }));
+                      }}
+                      disabled={loadingServiceTariffs}
                       displayEmpty
                     >
                       <MenuItem value="">
-                        <em>{infirmiers.length === 0 ? 'Aucun infirmier disponible' : '— Sélectionner un infirmier —'}</em>
+                        <em>{loadingServiceTariffs ? 'Chargement...' : '— Sélectionner un service —'}</em>
                       </MenuItem>
-                      {infirmiers.map((inf) => (
-                        <MenuItem key={inf.id} value={inf.id}>
-                          {inf.firstName || inf.first_name} {inf.lastName || inf.last_name}
-                          {inf.speciality ? ` — ${inf.speciality}` : ''}
+                      {serviceTariffs.map((t) => (
+                        <MenuItem key={t.id} value={t.id}>
+                          {t.name} {t.category ? `— ${t.category}` : ''}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
+                  {selectedTariff && (
+                    <Typography variant="caption" color="text.secondary">
+                      Prix: <strong>{Number(selectedTariff.price ?? 0).toLocaleString()} FCFA</strong> ({selectedTariff.dayType || '—'})
+                    </Typography>
+                  )}
                 </Grid>
 
                 <Grid item xs={12}>
@@ -690,10 +776,23 @@ export default function PatientConsultationCreateView() {
               <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
                 <Button onClick={handleCancel}>Annuler</Button>
                 <LoadingButton
+                  variant="outlined"
+                  color={paymentValidated ? 'success' : 'primary'}
+                  onClick={handleValidatePayment}
+                  disabled={!consultationForm.serviceTariffId || paymentValidated}
+                >
+                  {paymentValidated ? 'Paiement validé' : 'Valider le paiement'}
+                </LoadingButton>
+                <LoadingButton
                   variant="contained"
                   onClick={handleCreateConsultation}
                   loading={loading}
-                  disabled={!consultationForm.patientId || !consultationForm.reason.trim()}
+                  disabled={
+                    !consultationForm.patientId ||
+                    !consultationForm.reason.trim() ||
+                    !consultationForm.serviceTariffId ||
+                    !paymentValidated
+                  }
                 >
                   Créer la consultation (prise de constantes)
                 </LoadingButton>
@@ -730,12 +829,17 @@ export default function PatientConsultationCreateView() {
                         <TableCell>Date</TableCell>
                         <TableCell>Motif</TableCell>
                         <TableCell>Statut</TableCell>
-                        <TableCell align="right">Actions</TableCell>
+                        {canViewConsultationDetails && <TableCell align="right">Actions</TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {consultations.map((consultation) => (
-                        <TableRow key={consultation.id} hover sx={{ cursor: 'pointer' }} onClick={() => handleOpenDetails(consultation)}>
+                        <TableRow
+                          key={consultation.id}
+                          hover={canViewConsultationDetails}
+                          sx={{ cursor: canViewConsultationDetails ? 'pointer' : 'default' }}
+                          onClick={canViewConsultationDetails ? () => handleOpenDetails(consultation) : undefined}
+                        >
                           <TableCell>
                             <Typography variant="subtitle2">
                               {consultation.consultationNumber || consultation.id?.substring(0, 8)}
@@ -770,18 +874,20 @@ export default function PatientConsultationCreateView() {
                               size="small"
                             />
                           </TableCell>
-                          <TableCell align="right">
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDetails(consultation);
-                              }}
-                            >
-                              Voir détails
-                            </Button>
-                          </TableCell>
+                          {canViewConsultationDetails && (
+                            <TableCell align="right">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDetails(consultation);
+                                }}
+                              >
+                                Voir détails
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -978,6 +1084,16 @@ export default function PatientConsultationCreateView() {
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
+                    {(() => {
+                      const hasDoctor =
+                        Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
+                      let diagnosticHelperText;
+                      if (isInfirmier) diagnosticHelperText = 'Réservé au médecin';
+                      else if (!hasDoctor) diagnosticHelperText = 'Rempli par le médecin après transfert';
+
+                      const diagnosticDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
+
+                      return (
                     <TextField
                       fullWidth
                       multiline
@@ -985,9 +1101,11 @@ export default function PatientConsultationCreateView() {
                       label="Diagnostic"
                       value={editForm.diagnostic}
                       onChange={(e) => setEditForm({ ...editForm, diagnostic: e.target.value })}
-                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
-                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
+                      disabled={diagnosticDisabled}
+                      helperText={diagnosticHelperText}
                     />
+                      );
+                    })()}
                   </Grid>
                   <Grid item xs={12}>
                     <TextField
@@ -1001,6 +1119,16 @@ export default function PatientConsultationCreateView() {
                     />
                   </Grid>
                   <Grid item xs={12}>
+                    {(() => {
+                      const hasDoctor =
+                        Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
+                      let treatmentHelperText;
+                      if (isInfirmier) treatmentHelperText = 'Réservé au médecin';
+                      else if (!hasDoctor) treatmentHelperText = 'Rempli par le médecin après transfert';
+
+                      const treatmentDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
+
+                      return (
                     <TextField
                       fullWidth
                       multiline
@@ -1008,9 +1136,11 @@ export default function PatientConsultationCreateView() {
                       label="Traitement"
                       value={editForm.treatment}
                       onChange={(e) => setEditForm({ ...editForm, treatment: e.target.value })}
-                      disabled={!detailsDialog.editing || !(selectedConsultation.medecinId || selectedConsultation.medecin?.id)}
-                      helperText={!(selectedConsultation.medecinId || selectedConsultation.medecin?.id) ? 'Rempli par le médecin après transfert' : undefined}
+                      disabled={treatmentDisabled}
+                      helperText={treatmentHelperText}
                     />
+                      );
+                    })()}
                   </Grid>
                   <Grid item xs={12}>
                     <TextField

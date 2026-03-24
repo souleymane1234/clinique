@@ -6,6 +6,19 @@ import { routesName } from 'src/constants/routes';
 import DashboardLayout from 'src/layouts/dashboard';
 import { AdminStorage } from 'src/storages/admins_storage';
 
+function normalizeRole(role) {
+  if (role == null) return '';
+  const roleStr = typeof role === 'object' ? (role.name || role.slug || role.label || '') : String(role);
+  const normalized = roleStr.trim().toUpperCase().replace(/\s+/g, '_');
+  if (!normalized) return '';
+  if (normalized === 'ADMINISTRATEUR' || normalized === 'ADMIN') return 'ADMIN';
+  if (normalized === 'DIRECTION' || normalized === 'DIRECTEUR') return 'DIRECTEUR';
+  if (normalized === 'SECRÉTAIRE' || normalized === 'SECRETAIRE') return 'SECRETAIRE';
+  if (normalized === 'SUPERADMIN' || normalized === 'SUPER_ADMIN') return 'SUPERADMIN';
+  if (normalized === 'LABORANTIN' || normalized === 'LABORATOIRE') return 'LABORATOIRE';
+  return normalized;
+}
+
 export const IndexPage = lazy(() => import('src/pages/app'));
 export const LoginPage = lazy(() => import('src/pages/login'));
 export const ResetPassWordPage = lazy(() => import('src/pages/reset-password'));
@@ -53,10 +66,13 @@ export const ConfigurationView = lazy(() => import('src/sections/admin/configura
 export const ActivityLogView = lazy(() => import('src/sections/admin/activity-log/activity-log-view'));
 export const BackupRestoreView = lazy(() => import('src/sections/admin/backup-restore/backup-restore-view'));
 export const MultiClinicsView = lazy(() => import('src/sections/admin/multi-clinics/multi-clinics-view'));
+export const PricingView = lazy(() => import('src/sections/admin/pricing/pricing-view'));
+export const InsuranceTypesView = lazy(() => import('src/sections/admin/insurance-types/insurance-types-view'));
 
 // Gestion des Patients (Module 4.2)
 export const PatientsView = lazy(() => import('src/sections/patients/patients-view'));
 export const PatientDetailsView = lazy(() => import('src/sections/patients/patient-details/patient-details-view'));
+export const PatientsTimeTrackingView = lazy(() => import('src/sections/patients/patient-time-tracking/patient-time-tracking-view'));
 
 // Médecins (Module 4.3)
 export const DoctorsView = lazy(() => import('src/sections/doctors/doctors-view'));
@@ -150,6 +166,8 @@ export default function Router() {
         { path: routesName.adminMedecins, element: <AdministrationView /> },
         { path: routesName.adminInfirmiers, element: <AdminInfirmiersGuard /> },
         { path: routesName.adminSecretaires, element: <AdministrationView /> },
+        { path: routesName.adminPricing, element: <AdminPricingGuard /> },
+        { path: routesName.adminInsuranceTypes, element: <AdminInsuranceTypesGuard /> },
         { path: routesName.adminRolesPermissions, element: <AdministrationView /> },
         { path: routesName.adminConfiguration, element: <AdministrationView /> },
         { path: routesName.adminActivityLog, element: <AdministrationView /> },
@@ -168,6 +186,7 @@ export default function Router() {
         { path: routesName.patientsCreateConsultation, element: <PatientsView /> },
         { path: routesName.patientsAppointments, element: <PatientsView /> },
         { path: routesName.patientsQueue, element: <PatientsView /> },
+        { path: routesName.patientsTimeTracking, element: <PatientsTimeTrackingGuard /> },
         
         // Médecins (Module 4.3)
         { path: routesName.doctorsConsultationDetails, element: <DoctorConsultationDetailsView /> },
@@ -320,9 +339,12 @@ ProtectRoute.propTypes = {
  */
 function AdminUsersGuard() {
   const admin = AdminStorage.getInfoAdmin();
-  const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+  const role = normalizeRole(admin?.role ?? admin?.service);
   if (role === 'MEDECIN') {
     return <Navigate to={routesName.doctorsMyConsultations} replace />;
+  }
+  if (role === 'LABORATOIRE') {
+    return <Navigate to={routesName.laboratoryAnalyses} replace />;
   }
   return <AdministrationView />;
 }
@@ -333,9 +355,45 @@ function AdminUsersGuard() {
  */
 function AdminInfirmiersGuard() {
   const admin = AdminStorage.getInfoAdmin();
-  const role = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
+  const role = normalizeRole(admin?.role ?? admin?.service);
   if (role === 'INFIRMIER') {
     return <Navigate to={routesName.patientsAccueil} replace />;
   }
   return <AdministrationView />;
+}
+
+/**
+ * Garde pour la route /admin/pricing : réservée à ADMIN et DIRECTEUR.
+ */
+function AdminPricingGuard() {
+  const admin = AdminStorage.getInfoAdmin();
+  const role = normalizeRole(admin?.role ?? admin?.service);
+  if (role !== 'ADMIN' && role !== 'DIRECTEUR') {
+    return <Navigate to={routesName.dashboard} replace />;
+  }
+  return <PricingView />;
+}
+
+/**
+ * Garde pour la route /admin/insurance-types : réservée à ADMIN et DIRECTEUR.
+ */
+function AdminInsuranceTypesGuard() {
+  const admin = AdminStorage.getInfoAdmin();
+  const role = normalizeRole(admin?.role ?? admin?.service);
+  if (role !== 'ADMIN' && role !== 'DIRECTEUR') {
+    return <Navigate to={routesName.dashboard} replace />;
+  }
+  return <InsuranceTypesView />;
+}
+
+/**
+ * Garde pour la route /patients/time-tracking : réservée à ADMIN et DIRECTEUR.
+ */
+function PatientsTimeTrackingGuard() {
+  const admin = AdminStorage.getInfoAdmin();
+  const role = normalizeRole(admin?.role ?? admin?.service);
+  if (role !== 'ADMIN' && role !== 'DIRECTEUR') {
+    return <Navigate to={routesName.patientsAccueil} replace />;
+  }
+  return <PatientsTimeTrackingView />;
 }

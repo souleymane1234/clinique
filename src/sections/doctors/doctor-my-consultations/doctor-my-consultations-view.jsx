@@ -7,6 +7,7 @@ import {
   Card,
   Chip,
   Grid,
+  Alert,
   Stack,
   Table,
   Button,
@@ -37,6 +38,8 @@ import { useRouter } from 'src/routes/hooks';
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
+import { appendBillingInvoiceTag } from 'src/utils/billing-utils';
+import { closeActiveTracking, startMedecinServicePassage } from 'src/utils/time-tracking-client';
 
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
@@ -66,9 +69,27 @@ const CONSULTATION_TYPES = {
   URGENCE: 'Urgence',
 };
 
+/** Prix unitaire renvoyé par l’API pricing/exams : calculatedPrice, sinon price, sinon baseUnitCost */
+function getPricingExamUnitPrice(ex) {
+  if (!ex || typeof ex !== 'object') return 0;
+  const calculated = Number(ex.calculatedPrice);
+  if (!Number.isNaN(calculated) && calculated > 0) return calculated;
+  const priceField = Number(ex.price);
+  if (!Number.isNaN(priceField) && priceField > 0) return priceField;
+  const base = Number(ex.baseUnitCost);
+  if (!Number.isNaN(base) && base > 0) return base;
+  return 0;
+}
+
 export default function DoctorMyConsultationsView() {
   const router = useRouter();
   const { contextHolder, showError, showSuccess, showApiResponse } = useNotification();
+  const adminInfo = AdminStorage.getInfoAdmin() || {};
+  const normalizedRole = String(adminInfo?.role?.name || adminInfo?.role || adminInfo?.service || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_');
+  const isAdminOrDirecteur = normalizedRole === 'ADMIN' || normalizedRole === 'DIRECTEUR' || normalizedRole === 'ADMINISTRATEUR';
 
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -96,6 +117,7 @@ export default function DoctorMyConsultationsView() {
     instructions: '',
     urgent: false,
   });
+  const [examTariffs, setExamTariffs] = useState([]);
   const [analysisForm, setAnalysisForm] = useState({
     analysisName: '',
     analysisType: 'HEMATOLOGIE',
@@ -103,6 +125,7 @@ export default function DoctorMyConsultationsView() {
     observations: '',
     urgent: false,
     price: 0,
+    pricingExamId: '',
   });
   const [certificatForm, setCertificatForm] = useState({
     type: 'ARRET_TRAVAIL',
@@ -120,12 +143,12 @@ export default function DoctorMyConsultationsView() {
         console.log('=== DEBUG: Loading current medecin ===');
         
         // Récupérer les informations de l'utilisateur connecté
-        const adminInfo = AdminStorage.getInfoAdmin();
-        console.log('1. Admin info from storage:', adminInfo);
+        const storedAdminInfo = AdminStorage.getInfoAdmin();
+        console.log('1. Admin info from storage:', storedAdminInfo);
         
         // Si l'utilisateur a un ID de médecin directement
-        if (adminInfo.medecinId || adminInfo.medecin?.id) {
-          const medecinId = adminInfo.medecinId || adminInfo.medecin?.id;
+        if (storedAdminInfo.medecinId || storedAdminInfo.medecin?.id) {
+          const medecinId = storedAdminInfo.medecinId || storedAdminInfo.medecin?.id;
           console.log('2. Found medecinId in adminInfo:', medecinId);
           setCurrentMedecinId(medecinId);
           return;
@@ -171,15 +194,15 @@ export default function DoctorMyConsultationsView() {
                 (m) => 
                   m.user?.id === userData.id || 
                   m.userId === userData.id ||
-                  m.user?.id === adminInfo.id ||
-                  m.userId === adminInfo.id
+                  m.user?.id === storedAdminInfo.id ||
+                  m.userId === storedAdminInfo.id
               );
               
               if (medecin) {
                 console.log('10. Found medecin:', medecin);
                 setCurrentMedecinId(medecin.id);
               } else {
-                console.warn('11. No medecin found for user:', userData.id, adminInfo.id);
+                console.warn('11. No medecin found for user:', userData.id, storedAdminInfo.id);
               }
             }
           }
@@ -196,7 +219,7 @@ export default function DoctorMyConsultationsView() {
   }, []);
 
   const loadConsultations = useCallback(async () => {
-    if (!currentMedecinId) {
+    if (!isAdminOrDirecteur && !currentMedecinId) {
       console.log('⏳ Waiting for medecin ID...');
       return;
     }
@@ -211,8 +234,10 @@ export default function DoctorMyConsultationsView() {
       const filters = {
         page: page + 1,
         limit: rowsPerPage,
-        medecinId: currentMedecinId, // Filtrer par médecin connecté
       };
+      if (!isAdminOrDirecteur) {
+        filters.medecinId = currentMedecinId; // Filtrer par médecin connecté
+      }
 
       // Si un statut est sélectionné, l'ajouter au filtre
       if (statusFilter) {
@@ -249,14 +274,18 @@ export default function DoctorMyConsultationsView() {
         console.log('Raw consultations data:', consultationsData);
         console.log('Number of consultations before filtering:', consultationsData.length);
         
-        // Filtrer aussi par médecin côté client pour être sûr
-        consultationsData = consultationsData.filter(
-          (c) => {
-            const medecinIdMatch = c.medecinId === currentMedecinId || c.medecin?.id === currentMedecinId;
-            return medecinIdMatch;
-          }
-        );
-        console.log('After medecin filter:', consultationsData.length, 'consultations');
+        if (!isAdminOrDirecteur) {
+          // Filtrer aussi par médecin côté client pour être sûr
+          consultationsData = consultationsData.filter(
+            (c) => {
+              const medecinIdMatch = c.medecinId === currentMedecinId || c.medecin?.id === currentMedecinId;
+              return medecinIdMatch;
+            }
+          );
+          console.log('After medecin filter:', consultationsData.length, 'consultations');
+        } else {
+          console.log('Admin/Directeur: consultations globales');
+        }
         
         // Si un filtre de statut est sélectionné, appliquer le filtre
         if (statusFilter) {
@@ -300,10 +329,10 @@ export default function DoctorMyConsultationsView() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, statusFilter, search, currentMedecinId]);
+  }, [page, rowsPerPage, statusFilter, search, currentMedecinId, isAdminOrDirecteur]);
 
   useEffect(() => {
-    if (!currentMedecinId) return undefined;
+    if (!isAdminOrDirecteur && !currentMedecinId) return undefined;
     
     // Charger une seule fois au montage et quand les dépendances changent
     loadConsultations();
@@ -318,7 +347,7 @@ export default function DoctorMyConsultationsView() {
     }
     
     return undefined;
-  }, [loadConsultations, statusFilter, currentMedecinId]);
+  }, [loadConsultations, statusFilter, currentMedecinId, isAdminOrDirecteur]);
 
   const handleViewDetails = async (consultation) => {
     setDetailsDialog({ open: true, consultation, loading: true, editing: false });
@@ -395,6 +424,19 @@ export default function DoctorMyConsultationsView() {
           const certificatsList = Array.isArray(certificatsResult.data) ? certificatsResult.data : [];
           setCertificats(certificatsList);
         }
+
+        // Time tracking: démarrer le passage MEDECIN lorsque le médecin ouvre une consultation en cours (réception)
+        try {
+          const pid = consultationData.patientId || consultationData.patient?.id;
+          if (pid && consultationData.status === 'EN_COURS' && currentMedecinId) {
+            await startMedecinServicePassage(pid, {
+              handledByUserId: currentMedecinId,
+              notes: 'Réception médecin',
+            });
+          }
+        } catch (e) {
+          console.error('Time tracking (MEDECIN reception on open details) failed:', e);
+        }
       } else {
         // Si l'API complète échoue, utiliser les données de base
         setDetailsDialog({ open: true, consultation, loading: false, editing: false });
@@ -417,6 +459,18 @@ export default function DoctorMyConsultationsView() {
           hospitalizationRequired: consultation.hospitalizationRequired || false,
           hospitalizationReason: consultation.hospitalizationReason || '',
         });
+
+        try {
+          const pid = consultation.patientId || consultation.patient?.id;
+          if (pid && consultation.status === 'EN_COURS' && currentMedecinId) {
+            await startMedecinServicePassage(pid, {
+              handledByUserId: currentMedecinId,
+              notes: 'Réception médecin',
+            });
+          }
+        } catch (e) {
+          console.error('Time tracking (MEDECIN reception fallback) failed:', e);
+        }
       }
     } catch (error) {
       console.error('Error loading consultation details:', error);
@@ -618,7 +672,7 @@ export default function DoctorMyConsultationsView() {
     }
   };
 
-  const handleOpenAnalysisDialog = () => {
+  const handleOpenAnalysisDialog = async () => {
     setAnalysisForm({
       analysisName: '',
       analysisType: 'HEMATOLOGIE',
@@ -626,8 +680,19 @@ export default function DoctorMyConsultationsView() {
       observations: '',
       urgent: false,
       price: 0,
+      pricingExamId: '',
     });
     setPrescriptionDialog({ open: true, loading: false, isAnalysis: true });
+    try {
+      const res = await ConsumApi.getPricingExamsActive();
+      let list = [];
+      if (Array.isArray(res?.data)) list = res.data;
+      else if (Array.isArray(res?.data?.data)) list = res.data.data;
+      setExamTariffs(list);
+    } catch (e) {
+      console.error('Error loading exam tariffs:', e);
+      setExamTariffs([]);
+    }
   };
 
   const handleCloseAnalysisDialog = () => {
@@ -639,6 +704,7 @@ export default function DoctorMyConsultationsView() {
       observations: '',
       urgent: false,
       price: 0,
+      pricingExamId: '',
     });
   };
 
@@ -653,11 +719,39 @@ export default function DoctorMyConsultationsView() {
       return;
     }
 
+    const amount = Number(analysisForm.price || 0);
+    if (amount <= 0) {
+      showError('Erreur', 'Sélectionnez un tarif d’examen ou indiquez un montant supérieur à 0.');
+      return;
+    }
+
     setPrescriptionDialog({ open: true, loading: true, isAnalysis: true });
     try {
+      const patientId = detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId;
+      const consultationId = detailsDialog.consultation.id;
+
+      const invoiceRes = await ConsumApi.createBillingInvoice({
+        patientId,
+        consultationId,
+        totalAmount: amount,
+        currency: 'FCFA',
+        note: `Analyse laboratoire: ${analysisForm.analysisName.trim()} — paiement à l’accueil avant réalisation`,
+      });
+
+      if (!invoiceRes?.success || !invoiceRes.data?.id) {
+        showApiResponse(invoiceRes, {
+          successTitle: '',
+          errorTitle: 'Facturation',
+        });
+        return;
+      }
+
+      const invoiceId = invoiceRes.data.id;
+      const observationsWithBilling = appendBillingInvoiceTag(analysisForm.observations || '', invoiceId);
+
       const analysisData = {
-        patientId: detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId,
-        consultationId: detailsDialog.consultation.id,
+        patientId,
+        consultationId,
         prescriptionId: null,
         prescribingDoctorId: currentMedecinId,
         analysisName: analysisForm.analysisName,
@@ -665,8 +759,8 @@ export default function DoctorMyConsultationsView() {
         sampleType: analysisForm.sampleType,
         status: 'EN_ATTENTE',
         urgent: analysisForm.urgent,
-        observations: analysisForm.observations || '',
-        price: analysisForm.price || 0,
+        observations: observationsWithBilling,
+        price: amount,
       };
 
       const result = await ConsumApi.createLaboratoryAnalysis(analysisData);
@@ -676,7 +770,10 @@ export default function DoctorMyConsultationsView() {
       });
 
       if (processed.success) {
-        showSuccess('Succès', 'Analyse créée avec succès');
+        showSuccess(
+          'Succès',
+          'Facture pro-forma créée et analyse enregistrée. Le patient doit payer à la secrétaire avant que le laboratoire ne réceptionne l’échantillon.'
+        );
         handleCloseAnalysisDialog();
         // Recharger les analyses
         const analysesResult = await ConsumApi.getLaboratoryAnalyses({ 
@@ -695,7 +792,7 @@ export default function DoctorMyConsultationsView() {
       console.error('Error adding analysis:', error);
       showError('Erreur', 'Erreur lors de l\'ajout de l\'analyse');
     } finally {
-      setPrescriptionDialog({ open: true, loading: false, isAnalysis: true });
+      setPrescriptionDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -973,6 +1070,20 @@ export default function DoctorMyConsultationsView() {
       const result = await ConsumApi.updateConsultationStatus(consultationId, 'EN_COURS');
       if (result.success) {
         showSuccess('Succès', 'Consultation démarrée');
+        // Time tracking: passage MEDECIN au moment où le médecin « reçoit » le patient (EN_ATTENTE → EN_COURS)
+        try {
+          const detail = await ConsumApi.getConsultationById(consultationId);
+          const c = detail.data?.consultation || detail.data;
+          const pid = c?.patientId || c?.patient?.id;
+          if (pid && currentMedecinId) {
+            await startMedecinServicePassage(pid, {
+              handledByUserId: currentMedecinId,
+              notes: 'Consultation démarrée',
+            });
+          }
+        } catch (e) {
+          console.error('Time tracking (MEDECIN on start consultation) failed:', e);
+        }
         loadConsultations();
         // Rediriger vers la page de consultation
         router.push(`/doctors/create-consultation?id=${consultationId}`);
@@ -998,6 +1109,14 @@ export default function DoctorMyConsultationsView() {
 
       if (processed.success) {
         showSuccess('Succès', 'Consultation terminée avec succès');
+
+        // Time tracking: clôturer la visite (sortie clinique) à la fin de la consultation
+        try {
+          const pid = detailsDialog.consultation.patientId || detailsDialog.consultation.patient?.id;
+          if (pid) await closeActiveTracking(pid);
+        } catch (e) {
+          console.error('Time tracking (close visit) failed:', e);
+        }
         
         // Mettre à jour le statut localement dans le dialog
         setDetailsDialog((prev) => ({
@@ -1403,16 +1522,6 @@ export default function DoctorMyConsultationsView() {
                             >
                               Détails
                             </Button>
-                            {consultation.status === 'EN_ATTENTE' && (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={() => handleStartConsultation(consultation.id)}
-                                startIcon={<Iconify icon="solar:user-check-bold" />}
-                              >
-                                Recevoir
-                              </Button>
-                            )}
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -1942,6 +2051,41 @@ export default function DoctorMyConsultationsView() {
           <DialogTitle>Créer une Analyse</DialogTitle>
           <DialogContent>
             <Stack spacing={3} sx={{ mt: 1 }}>
+              <Alert severity="info">
+                Une facture pro-forma est créée automatiquement. Le patient doit régler à la secrétaire avant que le laboratoire ne prenne en charge l’analyse.
+              </Alert>
+              <FormControl fullWidth>
+                <InputLabel>Tarif examen (barème)</InputLabel>
+                <Select
+                  value={analysisForm.pricingExamId || ''}
+                  label="Tarif examen (barème)"
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      setAnalysisForm((p) => ({ ...p, pricingExamId: '' }));
+                      return;
+                    }
+                    const ex = examTariffs.find((x) => x.id === id);
+                    const price = getPricingExamUnitPrice(ex);
+                    const name = (ex?.name || ex?.label || '').trim();
+                    const section = typeof ex?.section === 'string' ? ex.section.trim() : '';
+                    setAnalysisForm((p) => ({
+                      ...p,
+                      pricingExamId: id,
+                      price,
+                      analysisName: name || p.analysisName,
+                      ...(section ? { analysisType: section } : {}),
+                    }));
+                  }}
+                >
+                  <MenuItem value="">— Saisie manuelle du montant —</MenuItem>
+                  {examTariffs.map((ex) => (
+                    <MenuItem key={ex.id} value={ex.id}>
+                      {`${ex.name || ex.code || ex.id} — ${getPricingExamUnitPrice(ex).toLocaleString('fr-FR')} FCFA`}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 fullWidth
                 label="Nom de l&apos;analyse *"
@@ -2015,7 +2159,7 @@ export default function DoctorMyConsultationsView() {
               variant="contained"
               onClick={handleSaveAnalysis}
               loading={prescriptionDialog.loading}
-              disabled={!analysisForm.analysisName.trim()}
+              disabled={!analysisForm.analysisName.trim() || Number(analysisForm.price) <= 0}
             >
               Créer l&apos;analyse
             </LoadingButton>

@@ -188,6 +188,10 @@ export default class ConsumApi {
     if (urlLower.includes('/module-permission') || 
         urlLower.includes('/permission') || 
         urlLower.includes('/permissions') || 
+        urlLower.includes('/time-tracking') ||
+        urlLower.includes('/pricing') ||
+        urlLower.includes('/insurance-types') ||
+        urlLower.includes('/billing') ||
         urlLower.includes('/patient') ||
         urlLower.includes('/patients') ||
         urlLower.includes('/medecin') ||
@@ -225,6 +229,304 @@ export default class ConsumApi {
     // Pour les autres endpoints, utiliser le mode fake data (temporaire)
     await new Promise(resolve => setTimeout(resolve, 200));
     return this._getFakeDataForUrl(method, url, data);
+  }
+
+  // ========== TIME TRACKING ==========
+
+  static async createPatientVisit({ patientId, arriveAt, reason = '', notes = '' }) {
+    try {
+      const payload = { patientId, arriveAt, reason, notes };
+      return await this._authenticatedRequest('POST', apiUrl.timeTrackingCreateVisit, payload);
+    } catch (error) {
+      console.error('Error createPatientVisit:', error);
+      return { success: false, message: 'Erreur lors de la création de la visite', errors: [error?.message] };
+    }
+  }
+
+  static async closePatientVisit(visitId, { leaveAt }) {
+    try {
+      const payload = { leaveAt };
+      return await this._authenticatedRequest('PATCH', apiUrl.timeTrackingCloseVisit(visitId), payload);
+    } catch (error) {
+      console.error('Error closePatientVisit:', error);
+      return { success: false, message: 'Erreur lors de la clôture de la visite', errors: [error?.message] };
+    }
+  }
+
+  static async getPatientVisitsWithDurations(patientId) {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.timeTrackingVisitsByPatient(patientId));
+    } catch (error) {
+      console.error('Error getPatientVisitsWithDurations:', error);
+      return { success: false, message: 'Erreur lors du chargement des visites', errors: [error?.message] };
+    }
+  }
+
+  static async startServicePassage({ visitId, patientId, serviceType, handledByUserId, enteredAt, notes = '' }) {
+    try {
+      const payload = { visitId, patientId, serviceType, handledByUserId, enteredAt, notes };
+      return await this._authenticatedRequest('POST', apiUrl.timeTrackingStartServicePassage, payload);
+    } catch (error) {
+      console.error('Error startServicePassage:', error);
+      return { success: false, message: 'Erreur lors du démarrage du passage', errors: [error?.message] };
+    }
+  }
+
+  static async closeServicePassage(servicePassageId, { leftAt }) {
+    try {
+      const payload = { leftAt };
+      return await this._authenticatedRequest('PATCH', apiUrl.timeTrackingCloseServicePassage(servicePassageId), payload);
+    } catch (error) {
+      console.error('Error closeServicePassage:', error);
+      return { success: false, message: 'Erreur lors de la clôture du passage', errors: [error?.message] };
+    }
+  }
+
+  static async getServiceAggregates({ startDate, endDate } = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      const url = params.toString() ? `${apiUrl.timeTrackingAggregatesServices}?${params.toString()}` : apiUrl.timeTrackingAggregatesServices;
+      return await this._authenticatedRequest('GET', url);
+    } catch (error) {
+      console.error('Error getServiceAggregates:', error);
+      return { success: false, message: 'Erreur lors du chargement des statistiques', errors: [error?.message] };
+    }
+  }
+
+  static async getServiceTimesByUser(userId, { startDate, endDate } = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      const base = apiUrl.timeTrackingServicesByUser(userId);
+      const url = params.toString() ? `${base}?${params.toString()}` : base;
+      return await this._authenticatedRequest('GET', url);
+    } catch (error) {
+      console.error('Error getServiceTimesByUser:', error);
+      return { success: false, message: 'Erreur lors du chargement des statistiques utilisateur', errors: [error?.message] };
+    }
+  }
+
+  // ========== PRICING ==========
+
+  // ---- Services (tarifs) ----
+  static async createPricingService(payload) {
+    try {
+      return await this._authenticatedRequest('POST', apiUrl.pricingServices, payload);
+    } catch (error) {
+      console.error('Error createPricingService:', error);
+      return { success: false, message: 'Erreur lors de la création du tarif de service', errors: [error?.message] };
+    }
+  }
+
+  static async getPricingServices() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.pricingServices);
+    } catch (error) {
+      console.error('Error getPricingServices:', error);
+      return { success: false, message: 'Erreur lors du chargement des tarifs de service', errors: [error?.message] };
+    }
+  }
+
+  static async getPricingServicesActive() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.pricingServicesActive);
+    } catch (error) {
+      console.error('Error getPricingServicesActive:', error);
+      return { success: false, message: 'Erreur lors du chargement des tarifs actifs', errors: [error?.message] };
+    }
+  }
+
+  static async updatePricingService(id, payload) {
+    try {
+      return await this._authenticatedRequest('PUT', apiUrl.pricingServiceById(id), payload);
+    } catch (error) {
+      console.error('Error updatePricingService:', error);
+      return { success: false, message: 'Erreur lors de la mise à jour du tarif de service', errors: [error?.message] };
+    }
+  }
+
+  // ---- Exams (tarifs) ----
+  static async createPricingExam(payload) {
+    try {
+      return await this._authenticatedRequest('POST', apiUrl.pricingExams, payload);
+    } catch (error) {
+      console.error('Error createPricingExam:', error);
+      return { success: false, message: 'Erreur lors de la création du tarif d’examen', errors: [error?.message] };
+    }
+  }
+
+  static async getPricingExams() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.pricingExams);
+    } catch (error) {
+      console.error('Error getPricingExams:', error);
+      return { success: false, message: 'Erreur lors du chargement des tarifs d’examen', errors: [error?.message] };
+    }
+  }
+
+  static async getPricingExamsActive() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.pricingExamsActive);
+    } catch (error) {
+      console.error('Error getPricingExamsActive:', error);
+      return { success: false, message: 'Erreur lors du chargement des tarifs d’examen actifs', errors: [error?.message] };
+    }
+  }
+
+  static async updatePricingExam(id, payload) {
+    try {
+      return await this._authenticatedRequest('PUT', apiUrl.pricingExamById(id), payload);
+    } catch (error) {
+      console.error('Error updatePricingExam:', error);
+      return { success: false, message: 'Erreur lors de la mise à jour du tarif d’examen', errors: [error?.message] };
+    }
+  }
+
+  // ========== INSURANCE TYPES ==========
+
+  static async createInsuranceType(payload) {
+    try {
+      return await this._authenticatedRequest('POST', apiUrl.insuranceTypes, payload);
+    } catch (error) {
+      console.error('Error createInsuranceType:', error);
+      return { success: false, message: "Erreur lors de la création du type d'assurance", errors: [error?.message] };
+    }
+  }
+
+  static async getInsuranceTypes() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.insuranceTypes);
+    } catch (error) {
+      console.error('Error getInsuranceTypes:', error);
+      return { success: false, message: "Erreur lors du chargement des types d'assurance", errors: [error?.message] };
+    }
+  }
+
+  static async getInsuranceTypesActive() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.insuranceTypesActive);
+    } catch (error) {
+      console.error('Error getInsuranceTypesActive:', error);
+      return { success: false, message: "Erreur lors du chargement des types d'assurance actifs", errors: [error?.message] };
+    }
+  }
+
+  static async getInsuranceTypeById(id) {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.insuranceTypeById(id));
+    } catch (error) {
+      console.error('Error getInsuranceTypeById:', error);
+      return { success: false, message: "Erreur lors du chargement du type d'assurance", errors: [error?.message] };
+    }
+  }
+
+  static async updateInsuranceType(id, payload) {
+    try {
+      return await this._authenticatedRequest('PUT', apiUrl.insuranceTypeById(id), payload);
+    } catch (error) {
+      console.error('Error updateInsuranceType:', error);
+      return { success: false, message: "Erreur lors de la mise à jour du type d'assurance", errors: [error?.message] };
+    }
+  }
+
+  static async deleteInsuranceType(id) {
+    try {
+      return await this._authenticatedRequest('DELETE', apiUrl.insuranceTypeById(id));
+    } catch (error) {
+      console.error('Error deleteInsuranceType:', error);
+      return { success: false, message: "Erreur lors de la suppression du type d'assurance", errors: [error?.message] };
+    }
+  }
+
+  // ========== BILLING (factures pro-forma & paiements) ==========
+
+  static _normalizeBillingInvoice(raw) {
+    if (!raw) return null;
+    if (raw.invoice) return raw.invoice;
+    return raw;
+  }
+
+  static async createBillingInvoice({ patientId, consultationId, totalAmount, currency = 'FCFA', note = '' }) {
+    try {
+      const payload = { patientId, consultationId, totalAmount: Number(totalAmount), currency, note };
+      const result = await this._authenticatedRequest('POST', apiUrl.billingInvoices, payload);
+      if (result?.success && result.data) {
+        const inv = ConsumApi._normalizeBillingInvoice(result.data);
+        if (inv) result.data = inv;
+      }
+      return result;
+    } catch (error) {
+      console.error('Error createBillingInvoice:', error);
+      return { success: false, message: 'Erreur lors de la création de la facture', errors: [error?.message] };
+    }
+  }
+
+  static async getBillingInvoices({ status, patientId } = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (patientId) params.set('patientId', patientId);
+      const qs = params.toString();
+      const url = qs ? `${apiUrl.billingInvoices}?${qs}` : apiUrl.billingInvoices;
+      const result = await this._authenticatedRequest('GET', url);
+      if (result?.success && result.data) {
+        const rawList = Array.isArray(result.data) ? result.data : result.data?.data || result.data?.items || [];
+        if (Array.isArray(rawList)) {
+          result.data = rawList.map((row) => ConsumApi._normalizeBillingInvoice(row)).filter(Boolean);
+        }
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getBillingInvoices:', error);
+      return { success: false, message: 'Erreur lors du chargement des factures', errors: [error?.message], data: [] };
+    }
+  }
+
+  static async getBillingInvoiceById(id) {
+    try {
+      const result = await this._authenticatedRequest('GET', apiUrl.billingInvoiceById(id));
+      if (result?.success && result.data) {
+        const inv = ConsumApi._normalizeBillingInvoice(result.data);
+        if (inv) result.data = inv;
+      }
+      return result;
+    } catch (error) {
+      console.error('Error getBillingInvoiceById:', error);
+      return { success: false, message: 'Erreur lors du chargement de la facture', errors: [error?.message] };
+    }
+  }
+
+  static async createBillingPayment({ invoiceId, method, amount, reference = '', details = '' }) {
+    try {
+      const payload = {
+        invoiceId,
+        method,
+        amount: Number(amount),
+        reference: reference || '',
+        details: details || '',
+      };
+      const result = await this._authenticatedRequest('POST', apiUrl.billingPayments, payload);
+      if (result?.success && result.data) {
+        const pay = result.data.payment || result.data;
+        if (pay) result.data = pay;
+      }
+      return result;
+    } catch (error) {
+      console.error('Error createBillingPayment:', error);
+      return { success: false, message: 'Erreur lors de la création du paiement', errors: [error?.message] };
+    }
+  }
+
+  static async updateBillingPaymentStatus({ paymentId, status }) {
+    try {
+      return await this._authenticatedRequest('PATCH', apiUrl.billingPaymentsStatus, { paymentId, status });
+    } catch (error) {
+      console.error('Error updateBillingPaymentStatus:', error);
+      return { success: false, message: 'Erreur lors de la validation du paiement', errors: [error?.message] };
+    }
   }
 
   // Générateur de données factices basé sur l'URL
@@ -2704,8 +3006,6 @@ export default class ConsumApi {
     };
     
     const normalizedData = {
-      // Identité
-      patientNumber: data.patientNumber || data.patientId || `PAT-${Date.now()}`,
       firstName: data.firstName || data.firstname || '',
       lastName: data.lastName || data.lastname || '',
       
@@ -3498,17 +3798,17 @@ export default class ConsumApi {
   }
 
   static async createConsultation(data) {
-    // Schéma API POST /api/consultations: patientId, medecinId?, nurseId?, type, status, consultationDate, reason + champs cliniques
+    // Schéma API POST /api/consultations: patientId, medecinId?, serviceTariffId?, type, consultationDate, reason + champs cliniques
     // Ne pas envoyer medecinId/nurseId quand vides (évite 400 si le backend valide en UUID)
     const medecinId = data.medecinId && String(data.medecinId).trim() ? data.medecinId : undefined;
     let nurseId = data.nurseId && String(data.nurseId).trim() ? data.nurseId : undefined;
     if (nurseId === undefined && data.infirmierId && String(data.infirmierId).trim()) nurseId = data.infirmierId;
     const nextAppointment = data.nextAppointment != null && String(data.nextAppointment).trim() !== '' ? String(data.nextAppointment) : undefined;
+    const serviceTariffId = data.serviceTariffId && String(data.serviceTariffId).trim() ? data.serviceTariffId : undefined;
 
     const normalizedData = {
       patientId: data.patientId || '',
       type: data.type || 'PREMIERE_CONSULTATION',
-      status: data.status || 'EN_ATTENTE',
       consultationDate: data.consultationDate || new Date().toISOString(),
       reason: data.reason || '',
       clinicalExamination: data.clinicalExamination || '',
@@ -3528,8 +3828,10 @@ export default class ConsumApi {
       hospitalizationRequired: Boolean(data.hospitalizationRequired),
       hospitalizationReason: data.hospitalizationReason || '',
     };
+    if (data.status) normalizedData.status = data.status;
     if (medecinId) normalizedData.medecinId = medecinId;
     if (nurseId) normalizedData.nurseId = nurseId;
+    if (serviceTariffId) normalizedData.serviceTariffId = serviceTariffId;
     if (nextAppointment !== undefined) normalizedData.nextAppointment = nextAppointment;
 
     const result = await this._authenticatedRequest('POST', apiUrl.consultations, normalizedData);
@@ -4087,15 +4389,75 @@ export default class ConsumApi {
     return this._authenticatedRequest('DELETE', apiUrl.removeFromQueue(patientId));
   }
 
+  // ========== LABORATORY (query string pour GET) ==========
+
+  static _urlWithQuery(baseUrl, query = {}) {
+    if (!query || typeof query !== 'object') return baseUrl;
+    const q = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        q.append(key, String(value));
+      }
+    });
+    const s = q.toString();
+    if (!s) return baseUrl;
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}${s}`;
+  }
+
+  static _normalizeLaboratoryPaginatedResponse(result, page, limit) {
+    const raw = result?.data;
+    if (!result?.success || raw === undefined || raw === null) {
+      return {
+        success: result?.success ?? false,
+        data: [],
+        pagination: { page, limit, total: 0 },
+        message: result?.message || 'Erreur',
+        errors: result?.errors || [],
+      };
+    }
+    if (Array.isArray(raw)) {
+      return {
+        success: true,
+        data: raw,
+        pagination: { page, limit, total: raw.length },
+        message: 'Analyses récupérées avec succès',
+        errors: [],
+      };
+    }
+    let list = [];
+    if (Array.isArray(raw.data)) {
+      list = raw.data;
+    } else if (Array.isArray(raw.items)) {
+      list = raw.items;
+    } else if (Array.isArray(raw.results)) {
+      list = raw.results;
+    }
+    const total = raw.total ?? raw.count ?? list.length;
+    return {
+      success: true,
+      data: list,
+      pagination: {
+        page: raw.page ?? page,
+        limit: raw.limit ?? limit,
+        total,
+      },
+      message: 'Analyses récupérées avec succès',
+      errors: [],
+    };
+  }
+
   // ========== LABORATORY ANALYSES ==========
 
   static async getLaboratoryAnalyses(filters = {}) {
     try {
-      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalyses, null, filters);
+      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalyses, filters);
+      const result = await this._authenticatedRequest('GET', url);
       if (result.success && result.data) {
+        const data = Array.isArray(result.data) ? result.data : result.data?.data || [];
         return {
           success: true,
-          data: Array.isArray(result.data) ? result.data : [],
+          data: Array.isArray(data) ? data : [],
           message: 'Analyses récupérées avec succès',
           errors: [],
         };
@@ -4115,17 +4477,9 @@ export default class ConsumApi {
   static async getLaboratoryAnalysesPaginated(page = 1, limit = 10, filters = {}) {
     try {
       const params = { page, limit, ...filters };
-      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysesPaginated, null, params);
-      if (result.success && result.data) {
-        return {
-          success: true,
-          data: result.data.data || result.data,
-          pagination: result.data.pagination || { page, limit, total: 0 },
-          message: 'Analyses récupérées avec succès',
-          errors: [],
-        };
-      }
-      return result;
+      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalysesPaginated, params);
+      const result = await this._authenticatedRequest('GET', url);
+      return ConsumApi._normalizeLaboratoryPaginatedResponse(result, page, limit);
     } catch (error) {
       console.error('Error getting paginated laboratory analyses:', error);
       return {
@@ -4302,10 +4656,19 @@ export default class ConsumApi {
   static async getLaboratoryAnalysesStatistics() {
     try {
       const result = await this._authenticatedRequest('GET', apiUrl.laboratoryAnalysesStatistics);
-      if (result.success && result.data) {
+      if (result.success) {
+        const d = result.data || {};
         return {
           success: true,
-          data: result.data,
+          data: {
+            total: d.total ?? 0,
+            enAttente: d.enAttente ?? 0,
+            enCours: d.enCours ?? 0,
+            terminee: d.terminee ?? 0,
+            validee: d.validee ?? 0,
+            annulee: d.annulee ?? 0,
+            ...d,
+          },
           message: 'Statistiques récupérées avec succès',
           errors: [],
         };
@@ -4466,11 +4829,13 @@ export default class ConsumApi {
 
   static async getLaboratoryConsommables(filters = {}) {
     try {
-      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommables, null, filters);
+      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryConsommables, filters);
+      const result = await this._authenticatedRequest('GET', url);
       if (result.success && result.data) {
+        const data = Array.isArray(result.data) ? result.data : result.data?.data || [];
         return {
           success: true,
-          data: Array.isArray(result.data) ? result.data : [],
+          data: Array.isArray(data) ? data : [],
           message: 'Consommables récupérés avec succès',
           errors: [],
         };
@@ -4490,17 +4855,13 @@ export default class ConsumApi {
   static async getLaboratoryConsommablesPaginated(page = 1, limit = 10, filters = {}) {
     try {
       const params = { page, limit, ...filters };
-      const result = await this._authenticatedRequest('GET', apiUrl.laboratoryConsommablesPaginated, null, params);
-      if (result.success && result.data) {
-        return {
-          success: true,
-          data: result.data.data || result.data,
-          pagination: result.data.pagination || { page, limit, total: 0 },
-          message: 'Consommables récupérés avec succès',
-          errors: [],
-        };
-      }
-      return result;
+      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryConsommablesPaginated, params);
+      const result = await this._authenticatedRequest('GET', url);
+      const norm = ConsumApi._normalizeLaboratoryPaginatedResponse(result, page, limit);
+      return {
+        ...norm,
+        message: norm.success ? 'Consommables récupérés avec succès' : norm.message,
+      };
     } catch (error) {
       console.error('Error getting paginated laboratory consommables:', error);
       return {
@@ -4539,11 +4900,11 @@ export default class ConsumApi {
   static async createLaboratoryConsommable(data) {
     try {
       const result = await this._authenticatedRequest('POST', apiUrl.laboratoryConsommables, data);
-      if (result.success && result.data) {
+      if (result.success) {
         return {
           success: true,
-          data: result.data.consommable || result.data,
-          message: result.data.message || 'Consommable créé avec succès',
+          data: result.data?.consommable || result.data || null,
+          message: result.data?.message || result.message || 'Consommable créé avec succès',
           errors: [],
         };
       }
@@ -4654,11 +5015,11 @@ export default class ConsumApi {
   static async createLaboratoryConsommableMouvement(data) {
     try {
       const result = await this._authenticatedRequest('POST', apiUrl.laboratoryConsommablesMouvements, data);
-      if (result.success && result.data) {
+      if (result.success) {
         return {
           success: true,
-          data: result.data.mouvement || result.data,
-          message: result.data.message || 'Mouvement enregistré avec succès',
+          data: result.data?.mouvement || result.data || null,
+          message: result.data?.message || result.message || 'Mouvement enregistré avec succès',
           errors: [],
         };
       }

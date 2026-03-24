@@ -31,6 +31,8 @@ import {
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDate } from 'src/utils/format-time';
+import { getCurrentStaffDisplayName } from 'src/utils/lab-user';
+import { isBillingInvoicePaid, extractBillingInvoiceIdFromObservations } from 'src/utils/billing-utils';
 
 import ConsumApi from 'src/services_workers/consum_api';
 
@@ -44,6 +46,7 @@ const STATUS_COLORS = {
   EN_COURS: 'info',
   TERMINE: 'success',
   VALIDE: 'success',
+  VALIDEE: 'success',
   ANNULE: 'error',
 };
 
@@ -52,6 +55,7 @@ const STATUS_LABELS = {
   EN_COURS: 'En cours',
   TERMINE: 'Terminé',
   VALIDE: 'Validé',
+  VALIDEE: 'Validée',
   ANNULE: 'Annulé',
 };
 
@@ -99,39 +103,23 @@ export default function LaboratoryAnalysesView() {
   const loadAnalyses = useCallback(async () => {
     setLoading(true);
     try {
-      const filters = {
-        page: page + 1,
-        limit: rowsPerPage,
-      };
-
+      const filters = {};
       if (statusFilter) {
         filters.status = statusFilter;
       }
-
       if (typeFilter) {
         filters.analysisType = typeFilter;
+      }
+      if (search.trim()) {
+        filters.search = search.trim();
       }
 
       const result = await ConsumApi.getLaboratoryAnalysesPaginated(page + 1, rowsPerPage, filters);
 
       if (result.success) {
-        let analysesData = result.data || [];
-
-        // Filtrer par recherche si présente
-        if (search) {
-          const searchLower = search.toLowerCase();
-          analysesData = analysesData.filter(
-            (a) =>
-              (a.analyseNumber || '').toLowerCase().includes(searchLower) ||
-              (a.analysisName || '').toLowerCase().includes(searchLower) ||
-              (a.patient?.firstName || '').toLowerCase().includes(searchLower) ||
-              (a.patient?.lastName || '').toLowerCase().includes(searchLower) ||
-              (a.patient?.phone || '').toLowerCase().includes(searchLower)
-          );
-        }
-
+        const analysesData = result.data || [];
         setAnalyses(analysesData);
-        setTotal(result.pagination?.total || analysesData.length);
+        setTotal(result.pagination?.total ?? analysesData.length);
       } else {
         setAnalyses([]);
         setTotal(0);
@@ -260,6 +248,24 @@ export default function LaboratoryAnalysesView() {
     setPage(0);
   };
 
+  const ensureLabBillingPaid = async (analysis) => {
+    const invoiceId = extractBillingInvoiceIdFromObservations(analysis?.observations);
+    if (!invoiceId) return true;
+    const res = await ConsumApi.getBillingInvoiceById(invoiceId);
+    if (!res.success || !res.data) {
+      showError('Erreur', 'Impossible de vérifier le paiement lié à cette analyse.');
+      return false;
+    }
+    if (!isBillingInvoicePaid(res.data)) {
+      showError(
+        'Paiement requis',
+        'La facture liée à cette analyse n’est pas réglée. Le patient doit payer à la secrétaire avant toute prise en charge au laboratoire.'
+      );
+      return false;
+    }
+    return true;
+  };
+
   return (
     <>
       {contextHolder}
@@ -294,6 +300,7 @@ export default function LaboratoryAnalysesView() {
                   <MenuItem value="EN_COURS">En cours</MenuItem>
                   <MenuItem value="TERMINE">Terminé</MenuItem>
                   <MenuItem value="VALIDE">Validé</MenuItem>
+                  <MenuItem value="VALIDEE">Validée</MenuItem>
                   <MenuItem value="ANNULE">Annulé</MenuItem>
                 </Select>
               </FormControl>
@@ -389,7 +396,7 @@ export default function LaboratoryAnalysesView() {
                               >
                                 Détails
                               </Button>
-                              {analysis.status === 'EN_COURS' && (
+                              {(analysis.status === 'EN_COURS' || analysis.status === 'TERMINE') && (
                                 <Button
                                   size="small"
                                   variant="outlined"
@@ -575,9 +582,10 @@ export default function LaboratoryAnalysesView() {
               variant="contained"
               color="info"
               onClick={async () => {
+                if (!(await ensureLabBillingPaid(detailsDialog.analysis))) return;
                 const result = await ConsumApi.receiveLaboratoryAnalysis(
                   detailsDialog.analysis.id,
-                  'Utilisateur actuel'
+                  getCurrentStaffDisplayName()
                 );
                 const processed = showApiResponse(result, {
                   successTitle: 'Échantillon réceptionné',
@@ -599,9 +607,10 @@ export default function LaboratoryAnalysesView() {
                 variant="contained"
                 color="primary"
                 onClick={async () => {
+                  if (!(await ensureLabBillingPaid(detailsDialog.analysis))) return;
                   const result = await ConsumApi.performLaboratoryAnalysis(
                     detailsDialog.analysis.id,
-                    'Utilisateur actuel'
+                    getCurrentStaffDisplayName()
                   );
                   const processed = showApiResponse(result, {
                     successTitle: 'Analyse réalisée',
@@ -632,7 +641,7 @@ export default function LaboratoryAnalysesView() {
               onClick={async () => {
                 const result = await ConsumApi.validateLaboratoryAnalysis(
                   detailsDialog.analysis.id,
-                  'Utilisateur actuel'
+                  getCurrentStaffDisplayName()
                 );
                 const processed = showApiResponse(result, {
                   successTitle: 'Résultats validés',
