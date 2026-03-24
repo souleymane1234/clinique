@@ -82,7 +82,7 @@ export default function PatientTimeTrackingView() {
   const { contextHolder, showError } = useNotification();
   const pathname = usePathname();
 
-  const [currentTab, setCurrentTab] = useState('global');
+  const [currentTab, setCurrentTab] = useState('visits');
 
   const [, setLoadingAggregates] = useState(false);
   const [, setLoadingAllUserRows] = useState(false);
