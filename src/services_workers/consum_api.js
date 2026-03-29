@@ -4405,6 +4405,25 @@ export default class ConsumApi {
     return `${baseUrl}${sep}${s}`;
   }
 
+  /** Duplique les filtres en snake_case pour les APIs Nest/Prisma qui lisent consultation_id, etc. */
+  static _laboratoryAnalysesQueryFilters(filters = {}) {
+    const query = { ...filters };
+    if (query.consultationId != null && query.consultationId !== '' && query.consultation_id == null) {
+      query.consultation_id = query.consultationId;
+    }
+    if (query.patientId != null && query.patientId !== '' && query.patient_id == null) {
+      query.patient_id = query.patientId;
+    }
+    if (
+      query.prescribingDoctorId != null &&
+      query.prescribingDoctorId !== '' &&
+      query.prescribing_doctor_id == null
+    ) {
+      query.prescribing_doctor_id = query.prescribingDoctorId;
+    }
+    return query;
+  }
+
   static _normalizeLaboratoryPaginatedResponse(result, page, limit) {
     const raw = result?.data;
     if (!result?.success || raw === undefined || raw === null) {
@@ -4451,7 +4470,7 @@ export default class ConsumApi {
 
   static async getLaboratoryAnalyses(filters = {}) {
     try {
-      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalyses, filters);
+      const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalyses, ConsumApi._laboratoryAnalysesQueryFilters(filters));
       const result = await this._authenticatedRequest('GET', url);
       if (result.success && result.data) {
         const data = Array.isArray(result.data) ? result.data : result.data?.data || [];
@@ -4476,7 +4495,7 @@ export default class ConsumApi {
 
   static async getLaboratoryAnalysesPaginated(page = 1, limit = 10, filters = {}) {
     try {
-      const params = { page, limit, ...filters };
+      const params = { page, limit, ...ConsumApi._laboratoryAnalysesQueryFilters(filters) };
       const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalysesPaginated, params);
       const result = await this._authenticatedRequest('GET', url);
       return ConsumApi._normalizeLaboratoryPaginatedResponse(result, page, limit);

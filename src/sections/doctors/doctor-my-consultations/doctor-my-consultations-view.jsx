@@ -69,6 +69,45 @@ const CONSULTATION_TYPES = {
   URGENCE: 'Urgence',
 };
 
+function laboratoryAnalysisConsultationId(analysis) {
+  if (!analysis || typeof analysis !== 'object') return undefined;
+  return (
+    analysis.consultationId ||
+    analysis.consultation_id ||
+    analysis.consultation?.id ||
+    undefined
+  );
+}
+
+function laboratoryAnalysisPatientId(analysis) {
+  if (!analysis || typeof analysis !== 'object') return undefined;
+  return (
+    analysis.patientId ||
+    analysis.patient_id ||
+    analysis.patient?.id ||
+    undefined
+  );
+}
+
+/** N’affiche que les analyses de cette consultation / ce patient (l’API peut ignorer les query params). */
+function filterLaboratoryAnalysesForConsultation(analysesList, { consultationId, patientId, medecinId }) {
+  if (!Array.isArray(analysesList)) return [];
+  return analysesList.filter((analysis) => {
+    if (medecinId) {
+      const docOk =
+        analysis.prescribingDoctor?.id === medecinId || analysis.prescribingDoctorId === medecinId;
+      if (!docOk) return false;
+    }
+    const ap = laboratoryAnalysisPatientId(analysis);
+    if (patientId != null && patientId !== '' && ap != null && ap !== patientId) return false;
+    const ac = laboratoryAnalysisConsultationId(analysis);
+    if (consultationId != null && consultationId !== '' && ac != null && ac !== consultationId) return false;
+    if (consultationId != null && consultationId !== '' && ac === consultationId) return true;
+    if (patientId != null && patientId !== '' && ap === patientId) return true;
+    return false;
+  });
+}
+
 /** Prix unitaire renvoyé par l’API pricing/exams : calculatedPrice, sinon price, sinon baseUnitCost */
 function getPricingExamUnitPrice(ex) {
   if (!ex || typeof ex !== 'object') return 0;
@@ -354,6 +393,7 @@ export default function DoctorMyConsultationsView() {
     setEditForm(null);
     setPrescriptions([]);
     setCertificats([]);
+    setAnalyses([]);
     
     try {
       // Charger les détails complets de la consultation
@@ -398,17 +438,24 @@ export default function DoctorMyConsultationsView() {
         });
         
         // Charger les analyses créées pour cette consultation
-        const analysesResult = await ConsumApi.getLaboratoryAnalyses({ 
+        const patientIdForAnalyses =
+          consultationData.patientId || consultationData.patient?.id || consultation.patientId || consultation.patient?.id;
+        const analysesResult = await ConsumApi.getLaboratoryAnalyses({
           consultationId: consultation.id,
-          prescribingDoctorId: currentMedecinId 
+          patientId: patientIdForAnalyses,
+          prescribingDoctorId: currentMedecinId,
         });
         if (analysesResult.success) {
           const analysesList = Array.isArray(analysesResult.data) ? analysesResult.data : [];
-          // Filtrer aussi côté client pour s'assurer qu'on n'affiche que les analyses du médecin
-          const filteredAnalyses = analysesList.filter(
-            (analysis) => analysis.prescribingDoctor?.id === currentMedecinId || analysis.prescribingDoctorId === currentMedecinId
+          setAnalyses(
+            filterLaboratoryAnalysesForConsultation(analysesList, {
+              consultationId: consultation.id,
+              patientId: patientIdForAnalyses,
+              medecinId: currentMedecinId,
+            })
           );
-          setAnalyses(filteredAnalyses);
+        } else {
+          setAnalyses([]);
         }
         
         // Charger les prescriptions
@@ -471,10 +518,30 @@ export default function DoctorMyConsultationsView() {
         } catch (e) {
           console.error('Time tracking (MEDECIN reception fallback) failed:', e);
         }
+
+        const pidFallback = consultation.patientId || consultation.patient?.id;
+        const analysesFallback = await ConsumApi.getLaboratoryAnalyses({
+          consultationId: consultation.id,
+          patientId: pidFallback,
+          prescribingDoctorId: currentMedecinId,
+        });
+        if (analysesFallback.success) {
+          const list = Array.isArray(analysesFallback.data) ? analysesFallback.data : [];
+          setAnalyses(
+            filterLaboratoryAnalysesForConsultation(list, {
+              consultationId: consultation.id,
+              patientId: pidFallback,
+              medecinId: currentMedecinId,
+            })
+          );
+        } else {
+          setAnalyses([]);
+        }
       }
     } catch (error) {
       console.error('Error loading consultation details:', error);
       setDetailsDialog({ open: true, consultation, loading: false, editing: false });
+      setAnalyses([]);
     }
   };
 
@@ -483,6 +550,7 @@ export default function DoctorMyConsultationsView() {
     setEditForm(null);
     setPrescriptions([]);
     setCertificats([]);
+    setAnalyses([]);
   };
 
   const handleToggleEdit = () => {
@@ -776,16 +844,24 @@ export default function DoctorMyConsultationsView() {
         );
         handleCloseAnalysisDialog();
         // Recharger les analyses
-        const analysesResult = await ConsumApi.getLaboratoryAnalyses({ 
+        const patientIdReload =
+          detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId;
+        const analysesResult = await ConsumApi.getLaboratoryAnalyses({
           consultationId: detailsDialog.consultation.id,
-          prescribingDoctorId: currentMedecinId 
+          patientId: patientIdReload,
+          prescribingDoctorId: currentMedecinId,
         });
         if (analysesResult.success) {
           const analysesList = Array.isArray(analysesResult.data) ? analysesResult.data : [];
-          const filteredAnalyses = analysesList.filter(
-            (analysis) => analysis.prescribingDoctor?.id === currentMedecinId || analysis.prescribingDoctorId === currentMedecinId
+          setAnalyses(
+            filterLaboratoryAnalysesForConsultation(analysesList, {
+              consultationId: detailsDialog.consultation.id,
+              patientId: patientIdReload,
+              medecinId: currentMedecinId,
+            })
           );
-          setAnalyses(filteredAnalyses);
+        } else {
+          setAnalyses([]);
         }
       }
     } catch (error) {

@@ -1,5 +1,5 @@
-const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
-// const base_url = 'http://localhost:3000/api';
+// const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
+const base_url = 'http://localhost:3000/api';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
 export const apiUrl = {

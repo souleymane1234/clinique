@@ -14,6 +14,7 @@ import {
   Button,
   Select,
   Dialog,
+  Switch,
   Divider,
   MenuItem,
   TableRow,
@@ -29,6 +30,7 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
+  FormControlLabel,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
@@ -70,7 +72,7 @@ const STATUS_LABELS = {
 export default function PatientConsultationCreateView() {
   const navigate = useNavigate();
   const { patientId } = useParams();
-  const { showSuccess, showError, showApiResponse } = useNotification();
+  const { contextHolder, showSuccess, showError, showApiResponse } = useNotification();
 
   const admin = AdminStorage.getInfoAdmin();
   const currentRole = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
@@ -92,6 +94,7 @@ export default function PatientConsultationCreateView() {
   const [serviceTariffs, setServiceTariffs] = useState([]);
   const [loadingServiceTariffs, setLoadingServiceTariffs] = useState(false);
   const [paymentValidated, setPaymentValidated] = useState(false);
+  const [hasInsurance, setHasInsurance] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
     patientId: patientId || '',
     type: 'PREMIERE_CONSULTATION',
@@ -113,7 +116,10 @@ export default function PatientConsultationCreateView() {
       try {
         const result = await ConsumApi.getPatientById(patientId);
         if (result.success) {
-          setPatient(result.data?.patient || result.data);
+          const patientData = result.data?.patient || result.data;
+          setPatient(patientData);
+          const insuranceType = String(patientData?.insuranceType || patientData?.insurance?.type || 'NONE').toUpperCase();
+          setHasInsurance(insuranceType !== 'NONE');
           setConsultationForm((prev) => ({ ...prev, patientId }));
         } else {
           showError('Erreur', 'Impossible de charger les informations du patient');
@@ -152,6 +158,9 @@ export default function PatientConsultationCreateView() {
           if (Array.isArray(result.data)) {
             medecinsList = result.data;
             console.log('Using direct array, length:', medecinsList.length);
+          } else if (result.data && Array.isArray(result.data.medecins)) {
+            medecinsList = result.data.medecins;
+            console.log('Using medecins key format, length:', medecinsList.length);
           } else if (result.data && Array.isArray(result.data.data)) {
             // Format paginé
             medecinsList = result.data.data;
@@ -165,9 +174,16 @@ export default function PatientConsultationCreateView() {
           console.log('Medecins list before filter:', medecinsList.length);
           
           // Filtrer pour ne garder que les médecins actifs
-          const activeMedecins = medecinsList.filter(
-            (medecin) => medecin.status === 'ACTIVE' || medecin.isActive === true
-          );
+          const activeMedecins = medecinsList.filter((medecin) => {
+            const status = String(medecin.status || medecin.etat || '').toUpperCase();
+            const isActiveByStatus =
+              status === 'ACTIVE' || status === 'ACTIF' || status === 'EN_SERVICE' || status === '';
+            const isActiveFlag =
+              medecin.isActive === true || medecin.active === true || medecin.is_active === true;
+            // Si le backend ne renvoie aucun indicateur, on considère la ligne exploitable.
+            const hasNoFlag = medecin.isActive === undefined && medecin.active === undefined && medecin.is_active === undefined;
+            return isActiveByStatus || isActiveFlag || hasNoFlag;
+          });
           
           console.log('Active medecins:', activeMedecins.length);
           
@@ -181,7 +197,10 @@ export default function PatientConsultationCreateView() {
           
           if (finalMedecinsList.length === 0) {
             console.warn('Aucun médecin trouvé dans la base de données');
-            showError('Avertissement', 'Aucun médecin disponible. Veuillez contacter l\'administrateur.');
+            showError(
+              'Avertissement',
+              'Aucun médecin enregistré dans la table medecins. Créez d’abord un médecin côté backend avant de créer une consultation.'
+            );
           } else {
             console.log(`Chargé ${finalMedecinsList.length} médecin(s)`);
           }
@@ -295,7 +314,10 @@ export default function PatientConsultationCreateView() {
     }
     const fallbackMedecinId = medecins.length > 0 ? medecins[0].id : null;
     if (!fallbackMedecinId) {
-      showError('Erreur', 'Aucun médecin actif disponible pour initialiser la consultation.');
+      showError(
+        'Erreur',
+        'Aucun médecin disponible dans la table medecins. Veuillez créer un médecin côté backend avant de créer la consultation.'
+      );
       return;
     }
     if (!paymentValidated) {
@@ -396,6 +418,13 @@ export default function PatientConsultationCreateView() {
   };
 
   const selectedTariff = serviceTariffs.find((t) => t.id === consultationForm.serviceTariffId) || null;
+  const createDisabledReason = (() => {
+    if (!consultationForm.patientId) return 'Patient manquant';
+    if (!consultationForm.reason.trim()) return 'Veuillez saisir le motif de consultation';
+    if (!consultationForm.serviceTariffId) return 'Veuillez sélectionner le service de consultation';
+    if (!paymentValidated) return 'Veuillez valider le paiement avant de créer la consultation';
+    return '';
+  })();
   const handleValidatePayment = () => {
     if (!consultationForm.serviceTariffId) {
       showError('Erreur', 'Veuillez sélectionner le service de consultation avant le paiement.');
@@ -644,6 +673,7 @@ export default function PatientConsultationCreateView() {
       <Helmet>
         <title> Création Consultation | PREVENTIC </title>
       </Helmet>
+      {contextHolder}
       <Container maxWidth="lg">
         <Stack spacing={3}>
           <Box>
@@ -692,6 +722,25 @@ export default function PatientConsultationCreateView() {
               </Alert>
 
               <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={hasInsurance}
+                        onChange={(e) => setHasInsurance(e.target.checked)}
+                      />
+                    }
+                    label="Le patient a une assurance"
+                  />
+                  {hasInsurance && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {patient?.insuranceCompany || patient?.insurance?.company
+                        ? `Assurance: ${patient.insuranceCompany || patient.insurance?.company}`
+                        : 'Assurance sélectionnée'}
+                    </Typography>
+                  )}
+                </Grid>
+
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth required>
                     <InputLabel>Type de consultation</InputLabel>
@@ -787,16 +836,16 @@ export default function PatientConsultationCreateView() {
                   variant="contained"
                   onClick={handleCreateConsultation}
                   loading={loading}
-                  disabled={
-                    !consultationForm.patientId ||
-                    !consultationForm.reason.trim() ||
-                    !consultationForm.serviceTariffId ||
-                    !paymentValidated
-                  }
+                  disabled={Boolean(createDisabledReason)}
                 >
                   Créer la consultation (prise de constantes)
                 </LoadingButton>
               </Stack>
+              {createDisabledReason && (
+                <Typography variant="caption" color="error" sx={{ display: 'block', textAlign: 'right', mt: 1 }}>
+                  {createDisabledReason}
+                </Typography>
+              )}
             </Stack>
           </Card>
 

@@ -322,41 +322,37 @@ export default function PatientAccueilView() {
       return;
     }
 
-    if (isSecretary && newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId) {
+    if (newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId) {
       showError('Erreur', "Veuillez sélectionner l'assurance");
       return;
     }
 
     setCreatePatientDialog({ ...createPatientDialog, loading: true });
     try {
-      const selectedInsurance =
-        isSecretary && newPatientForm.hasInsurance
-          ? insuranceTypes.find((it) => it.id === newPatientForm.insuranceCompanyId) || null
-          : null;
+      const selectedInsurance = newPatientForm.hasInsurance
+        ? insuranceTypes.find((it) => it.id === newPatientForm.insuranceCompanyId) || null
+        : null;
 
-      const payload =
-        isSecretary
-          ? {
-              firstName: newPatientForm.firstName,
-              lastName: newPatientForm.lastName,
-              gender: newPatientForm.gender,
-              dateOfBirth: newPatientForm.dateOfBirth,
-              phone: newPatientForm.phone,
-              email: newPatientForm.email,
-              address: newPatientForm.address,
-              city: newPatientForm.city,
-              country: newPatientForm.country,
-              maritalStatus: newPatientForm.maritalStatus,
-              occupation: newPatientForm.occupation,
-              // Backend: insuranceType est un ENUM (NONE | PUBLIC | PRIVATE | MIXED)
-              insuranceType: newPatientForm.hasInsurance ? 'PRIVATE' : 'NONE',
-              // Le nom de l'assurance provient de /insurance-types
-              insuranceCompany: newPatientForm.hasInsurance ? (selectedInsurance?.name || '') : '',
-              emergencyContactName: newPatientForm.emergencyContactName,
-              emergencyContactPhone: newPatientForm.emergencyContactPhone,
-              emergencyContactRelationship: newPatientForm.emergencyContactRelationship,
-            }
-          : newPatientForm;
+      const payload = {
+        firstName: newPatientForm.firstName,
+        lastName: newPatientForm.lastName,
+        gender: newPatientForm.gender,
+        dateOfBirth: newPatientForm.dateOfBirth,
+        phone: newPatientForm.phone,
+        email: newPatientForm.email,
+        address: newPatientForm.address,
+        city: newPatientForm.city,
+        country: newPatientForm.country,
+        maritalStatus: newPatientForm.maritalStatus,
+        occupation: newPatientForm.occupation,
+        // Backend: insuranceType est un ENUM (NONE | PUBLIC | PRIVATE | MIXED)
+        insuranceType: newPatientForm.hasInsurance ? 'PRIVATE' : 'NONE',
+        // Le nom de l'assurance provient de /insurance-types
+        insuranceCompany: newPatientForm.hasInsurance ? (selectedInsurance?.name || '') : '',
+        emergencyContactName: newPatientForm.emergencyContactName,
+        emergencyContactPhone: newPatientForm.emergencyContactPhone,
+        emergencyContactRelationship: newPatientForm.emergencyContactRelationship,
+      };
 
       const result = await ConsumApi.createPatient(payload);
       const processed = showApiResponse(result, {
@@ -1135,48 +1131,46 @@ export default function PatientAccueilView() {
                 />
               </Grid>
 
-              {isSecretary && (
-                <>
-                  <Grid item xs={12}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 1 }}>
-                      <Switch
-                        checked={newPatientForm.hasInsurance}
-                        onChange={(e) => {
-                          const {checked} = e.target;
-                          setNewPatientForm({
-                            ...newPatientForm,
-                            hasInsurance: checked,
-                            insuranceType: checked ? 'PRIVATE' : 'NONE',
-                            insuranceCompanyId: '',
-                          });
-                        }}
-                      />
-                      <Typography variant="body2">Le patient a une assurance</Typography>
-                    </Stack>
-                  </Grid>
+              <>
+                <Grid item xs={12}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ pt: 1 }}>
+                    <Switch
+                      checked={newPatientForm.hasInsurance}
+                      onChange={(e) => {
+                        const { checked } = e.target;
+                        setNewPatientForm({
+                          ...newPatientForm,
+                          hasInsurance: checked,
+                          insuranceType: checked ? 'PRIVATE' : 'NONE',
+                          insuranceCompanyId: '',
+                        });
+                      }}
+                    />
+                    <Typography variant="body2">Le patient a une assurance</Typography>
+                  </Stack>
+                </Grid>
 
-                  {newPatientForm.hasInsurance && (
-                    <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth required>
-                        <InputLabel>Assurance</InputLabel>
-                        <Select
-                         style={{ width: '160px' }}
-                          value={newPatientForm.insuranceCompanyId}
-                          label="Assurance"
-                          onChange={(e) => setNewPatientForm({ ...newPatientForm, insuranceCompanyId: e.target.value })}
-                          disabled={loadingInsuranceTypes}
-                        >
-                          {insuranceTypes.map((it) => (
-                            <MenuItem key={it.id} value={it.id}>
-                              {it.name}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                  )}
-                </>
-              )}
+                {newPatientForm.hasInsurance && (
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth required>
+                      <InputLabel>Assurance</InputLabel>
+                      <Select
+                        style={{ width: '160px' }}
+                        value={newPatientForm.insuranceCompanyId}
+                        label="Assurance"
+                        onChange={(e) => setNewPatientForm({ ...newPatientForm, insuranceCompanyId: e.target.value })}
+                        disabled={loadingInsuranceTypes}
+                      >
+                        {insuranceTypes.map((it) => (
+                          <MenuItem key={it.id} value={it.id}>
+                            {it.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
+              </>
             </Grid>
           </Stack>
         </DialogContent>
@@ -1192,7 +1186,7 @@ export default function PatientAccueilView() {
               !newPatientForm.phone ||
               !newPatientForm.emergencyContactName ||
               !newPatientForm.emergencyContactPhone ||
-              (isSecretary && newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId)
+              (newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId)
             }
           >
             Créer le patient
