@@ -69,6 +69,49 @@ const CONSULTATION_TYPES = {
   URGENCE: 'Urgence',
 };
 
+const DEFAULT_COUNTRY = "Côte d'Ivoire";
+
+const COUNTRY_OPTIONS = [
+  "Afrique du Sud",
+  "Algerie",
+  "Allemagne",
+  "Belgique",
+  "Benin",
+  "Burkina Faso",
+  "Cameroun",
+  "Canada",
+  "Centrafrique",
+  "Chine",
+  "Comores",
+  "Congo",
+  "Côte d'Ivoire",
+  "Egypte",
+  "Espagne",
+  "Etats-Unis",
+  "France",
+  "Gabon",
+  "Ghana",
+  "Guinee",
+  "Guinee-Bissau",
+  "Guinee equatoriale",
+  "Italie",
+  "Liberia",
+  "Mali",
+  "Maroc",
+  "Mauritanie",
+  "Niger",
+  "Nigeria",
+  "RDC",
+  "Royaume-Uni",
+  "Rwanda",
+  "Senegal",
+  "Sierra Leone",
+  "Suisse",
+  "Tchad",
+  "Togo",
+  "Tunisie",
+];
+
 // ----------------------------------------------------------------------
 
 
@@ -124,19 +167,28 @@ export default function PatientAccueilView() {
     lastName: '',
     gender: 'MALE',
     dateOfBirth: '',
+    placeOfBirth: '',
+    nationality: DEFAULT_COUNTRY,
     phone: '',
     email: '',
-    address: '',
-    city: '',
-    country: '',
+    currentResidenceAddress: '',
+    permanentResidenceAddress: '',
+    city: 'Abidjan',
+    country: DEFAULT_COUNTRY,
+    bloodGroup: '',
+    height: '',
+    weight: '',
     maritalStatus: 'SINGLE',
     occupation: '',
     hasInsurance: false,
     insuranceType: 'NONE', // ENUM backend: NONE | PUBLIC | PRIVATE | MIXED
     insuranceCompanyId: '', // UUID depuis /insurance-types
+    insuranceNumber: '',
+    insuranceValidUntil: '',
     emergencyContactName: '',
     emergencyContactPhone: '',
     emergencyContactRelationship: '',
+    notes: '',
   });
 
   const loadInsuranceTypes = useCallback(async () => {
@@ -292,66 +344,72 @@ export default function PatientAccueilView() {
       lastName: '',
       gender: 'MALE',
       dateOfBirth: '',
+      placeOfBirth: '',
+      nationality: DEFAULT_COUNTRY,
       phone: '',
       email: '',
-      address: '',
-      city: '',
-      country: '',
+      currentResidenceAddress: '',
+      permanentResidenceAddress: '',
+      city: 'Abidjan',
+      country: DEFAULT_COUNTRY,
+      bloodGroup: '',
+      height: '',
+      weight: '',
       maritalStatus: 'SINGLE',
       occupation: '',
       hasInsurance: false,
       insuranceType: 'NONE',
       insuranceCompanyId: '',
+      insuranceNumber: '',
+      insuranceValidUntil: '',
       emergencyContactName: '',
       emergencyContactPhone: '',
       emergencyContactRelationship: '',
+      notes: '',
     });
     loadInsuranceTypes();
     setCreatePatientDialog({ open: true, loading: false });
   };
 
   const handleCreatePatient = async () => {
-    if (!newPatientForm.firstName || !newPatientForm.lastName || !newPatientForm.phone) {
-      showError('Erreur', 'Veuillez remplir les champs obligatoires (Nom, Prénom, Téléphone)');
-      return;
-    }
-
-    // Le backend exige contact d'urgence (nom + téléphone)
-    if (!newPatientForm.emergencyContactName || !newPatientForm.emergencyContactPhone) {
-      showError('Erreur', "Veuillez remplir les informations du contact d'urgence (Nom et Téléphone)");
-      return;
-    }
-
-    if (newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId) {
-      showError('Erreur', "Veuillez sélectionner l'assurance");
-      return;
-    }
-
     setCreatePatientDialog({ ...createPatientDialog, loading: true });
     try {
       const selectedInsurance = newPatientForm.hasInsurance
         ? insuranceTypes.find((it) => it.id === newPatientForm.insuranceCompanyId) || null
         : null;
+      const fallbackEmail = `patient-${Date.now()}@no-email.local`;
+      const emailToSend = newPatientForm.email?.trim() || fallbackEmail;
 
       const payload = {
         firstName: newPatientForm.firstName,
         lastName: newPatientForm.lastName,
         gender: newPatientForm.gender,
         dateOfBirth: newPatientForm.dateOfBirth,
+        placeOfBirth: newPatientForm.placeOfBirth,
+        nationality: newPatientForm.nationality,
         phone: newPatientForm.phone,
-        email: newPatientForm.email,
-        address: newPatientForm.address,
+        email: emailToSend,
+        currentResidenceAddress: newPatientForm.currentResidenceAddress,
+        permanentResidenceAddress: newPatientForm.permanentResidenceAddress,
         city: newPatientForm.city,
         country: newPatientForm.country,
+        bloodGroup: newPatientForm.bloodGroup,
+        height: newPatientForm.height,
+        weight: newPatientForm.weight,
         maritalStatus: newPatientForm.maritalStatus,
         occupation: newPatientForm.occupation,
         // Backend: insuranceType est un ENUM (NONE | PUBLIC | PRIVATE | MIXED)
         insuranceType: newPatientForm.hasInsurance ? 'PRIVATE' : 'NONE',
         // Le nom de l'assurance provient de /insurance-types
         insuranceCompany: newPatientForm.hasInsurance ? (selectedInsurance?.name || '') : '',
+        insuranceNumber: newPatientForm.hasInsurance ? newPatientForm.insuranceNumber : '',
+        insuranceValidUntil: newPatientForm.hasInsurance ? newPatientForm.insuranceValidUntil : '',
+        status: 'ACTIVE',
+        isActive: true,
         emergencyContactName: newPatientForm.emergencyContactName,
         emergencyContactPhone: newPatientForm.emergencyContactPhone,
         emergencyContactRelationship: newPatientForm.emergencyContactRelationship,
+        notes: newPatientForm.notes,
       };
 
       const result = await ConsumApi.createPatient(payload);
@@ -377,19 +435,28 @@ export default function PatientAccueilView() {
           lastName: '',
           gender: 'MALE',
           dateOfBirth: '',
+          placeOfBirth: '',
+          nationality: DEFAULT_COUNTRY,
           phone: '',
           email: '',
-          address: '',
-          city: '',
-          country: '',
+          currentResidenceAddress: '',
+          permanentResidenceAddress: '',
+          city: 'Abidjan',
+          country: DEFAULT_COUNTRY,
+          bloodGroup: '',
+          height: '',
+          weight: '',
           maritalStatus: 'SINGLE',
           occupation: '',
           hasInsurance: false,
           insuranceType: 'NONE',
           insuranceCompanyId: '',
+          insuranceNumber: '',
+          insuranceValidUntil: '',
           emergencyContactName: '',
           emergencyContactPhone: '',
           emergencyContactRelationship: '',
+          notes: '',
         });
       }
     } catch (error) {
@@ -486,14 +553,18 @@ export default function PatientAccueilView() {
 
     setSaving(true);
     try {
+      const editableFields = { ...editForm };
+      delete editableFields.selectedMedecinId;
+
       const updateData = {
-        ...editForm,
+        ...editableFields,
         patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
         medecinId: selectedMedecinId,
+        serviceTariffId: selectedConsultation.serviceTariffId || selectedConsultation.serviceTariff?.id,
         type: selectedConsultation.type,
+        category: selectedConsultation.category || 'CONSULTATION_NORMALE',
         status: selectedConsultation.status,
         consultationDate: selectedConsultation.consultationDate,
-        reason: selectedConsultation.reason,
       };
 
       const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
@@ -835,7 +906,6 @@ export default function PatientAccueilView() {
                         <TableCell>Médecin</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Date</TableCell>
-                        <TableCell>Motif</TableCell>
                         <TableCell>Statut</TableCell>
                         {canViewConsultationDetails && <TableCell align="right">Actions</TableCell>}
                       </TableRow>
@@ -877,11 +947,6 @@ export default function PatientAccueilView() {
                           <TableCell>
                             <Typography variant="body2">
                               {fDateTime(consultation.consultationDate || consultation.createdAt)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                              {consultation.reason || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -1039,6 +1104,30 @@ export default function PatientAccueilView() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  label="Lieu de naissance"
+                  value={newPatientForm.placeOfBirth}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, placeOfBirth: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Nationalité</InputLabel>
+                  <Select
+                    value={newPatientForm.nationality}
+                    label="Nationalité"
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, nationality: e.target.value })}
+                  >
+                    {COUNTRY_OPTIONS.map((country) => (
+                      <MenuItem key={`nationality-${country}`} value={country}>
+                        {country}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
                   required
                   label="Téléphone"
                   value={newPatientForm.phone}
@@ -1057,9 +1146,17 @@ export default function PatientAccueilView() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Adresse (optionnel)"
-                  value={newPatientForm.address}
-                  onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
+                  label="Adresse de résidence actuelle (optionnel)"
+                  value={newPatientForm.currentResidenceAddress}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, currentResidenceAddress: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Adresse de résidence permanente (optionnel)"
+                  value={newPatientForm.permanentResidenceAddress}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, permanentResidenceAddress: e.target.value })}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -1070,13 +1167,48 @@ export default function PatientAccueilView() {
                   onChange={(e) => setNewPatientForm({ ...newPatientForm, city: e.target.value })}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Pays"
-                  value={newPatientForm.country}
-                  onChange={(e) => setNewPatientForm({ ...newPatientForm, country: e.target.value })}
+                  label="Groupe sanguin"
+                  value={newPatientForm.bloodGroup}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, bloodGroup: e.target.value })}
+                  placeholder="Ex: A+, O-, AB+"
                 />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Taille (cm)"
+                  value={newPatientForm.height}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, height: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Poids (kg)"
+                  value={newPatientForm.weight}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, weight: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Pays</InputLabel>
+                  <Select
+                    value={newPatientForm.country}
+                    label="Pays"
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, country: e.target.value })}
+                  >
+                    {COUNTRY_OPTIONS.map((country) => (
+                      <MenuItem key={`country-${country}`} value={country}>
+                        {country}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
@@ -1170,7 +1302,39 @@ export default function PatientAccueilView() {
                     </FormControl>
                   </Grid>
                 )}
+                {newPatientForm.hasInsurance && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Numéro d'assurance"
+                      value={newPatientForm.insuranceNumber}
+                      onChange={(e) => setNewPatientForm({ ...newPatientForm, insuranceNumber: e.target.value })}
+                    />
+                  </Grid>
+                )}
+                {newPatientForm.hasInsurance && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      type="date"
+                      label="Validité assurance"
+                      value={newPatientForm.insuranceValidUntil}
+                      onChange={(e) => setNewPatientForm({ ...newPatientForm, insuranceValidUntil: e.target.value })}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                )}
               </>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  label="Notes (optionnel)"
+                  value={newPatientForm.notes}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, notes: e.target.value })}
+                />
+              </Grid>
             </Grid>
           </Stack>
         </DialogContent>
@@ -1180,14 +1344,6 @@ export default function PatientAccueilView() {
             variant="contained"
             onClick={handleCreatePatient}
             loading={createPatientDialog.loading}
-            disabled={
-              !newPatientForm.firstName ||
-              !newPatientForm.lastName ||
-              !newPatientForm.phone ||
-              !newPatientForm.emergencyContactName ||
-              !newPatientForm.emergencyContactPhone ||
-              (newPatientForm.hasInsurance && !newPatientForm.insuranceCompanyId)
-            }
           >
             Créer le patient
           </LoadingButton>
@@ -1448,7 +1604,7 @@ export default function PatientAccueilView() {
                     <TextField
                       fullWidth
                       type="number"
-                      label="Taille (m)"
+                      label="Taille (cm)"
                       value={editForm.height}
                       onChange={(e) => setEditForm({ ...editForm, height: parseFloat(e.target.value) || 0 })}
                       disabled={!detailsDialog.editing}
@@ -1457,6 +1613,8 @@ export default function PatientAccueilView() {
                   </Grid>
                 </Grid>
 
+                {!isInfirmier && (
+                  <>
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
@@ -1583,6 +1741,8 @@ export default function PatientAccueilView() {
                     </Grid>
                   )}
                 </Grid>
+                  </>
+                )}
               </Stack>
             )
           )}

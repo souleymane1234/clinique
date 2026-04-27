@@ -352,11 +352,6 @@ const SUB_MENUS = {
       icon: 'solar:test-tube-bold',
     },
     {
-      title: 'Résultats',
-      path: '/laboratory/resultats',
-      icon: 'solar:clipboard-check-bold',
-    },
-    {
       title: 'Transmission',
       path: '/laboratory/transmission',
       icon: 'solar:share-bold',

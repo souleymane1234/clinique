@@ -38,7 +38,7 @@ import { useRouter } from 'src/routes/hooks';
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
-import { appendBillingInvoiceTag } from 'src/utils/billing-utils';
+import { appendBillingInvoiceTag, BILLING_INVOICE_ID_REGEX } from 'src/utils/billing-utils';
 import { closeActiveTracking, startMedecinServicePassage } from 'src/utils/time-tracking-client';
 
 import ConsumApi from 'src/services_workers/consum_api';
@@ -120,6 +120,141 @@ function getPricingExamUnitPrice(ex) {
   return 0;
 }
 
+function sanitizeAnalysisObservations(observations) {
+  if (!observations || typeof observations !== 'string') return '';
+  return observations.replace(BILLING_INVOICE_ID_REGEX, '').trim();
+}
+
+const HEMATOLOGY_CONFIG = {
+  globules_blancs: { label: 'Globules blancs', unite: '10³/mm³', normeMin: 4, normeMax: 10 },
+  globules_rouges: { label: 'Globules rouges', unite: '10⁶/mm³', normeMin: 4.5, normeMax: 6 },
+  hemoglobine: { label: 'Hémoglobine', unite: 'g/dl', normeMin: 13, normeMax: 18 },
+  hematocrite: { label: 'Hématocrite', unite: '%', normeMin: 40, normeMax: 52 },
+  vgm: { label: 'VGM', unite: 'μm³', normeMin: 80, normeMax: 95 },
+  tcmh: { label: 'TCMH', unite: 'pg', normeMin: 27, normeMax: 31 },
+  ccmh: { label: 'CCMH', unite: 'g/dl', normeMin: 32, normeMax: 36 },
+  plaquettes: { label: 'Plaquettes', unite: '10³/mm³', normeMin: 150, normeMax: 400 },
+  lymphocytes: { label: 'Lymphocytes', unite: '%', normeMin: 19, normeMax: 48 },
+  monocytes: { label: 'Monocytes', unite: '%', normeMin: 3.4, normeMax: 9 },
+  granulocytes: { label: 'Granulocytes', unite: '%', normeMin: 40, normeMax: 74 },
+};
+
+function normalizeToSlug(value) {
+  if (!value || typeof value !== 'string') return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function extractResultMap(results) {
+  const out = {};
+  if (!Array.isArray(results)) return out;
+  results.forEach((entry) => {
+    if (entry?.input) out[String(entry.input)] = entry.resultat ?? entry.value ?? '';
+    if (entry?.parameter) out[normalizeToSlug(String(entry.parameter))] = entry.value ?? entry.resultat ?? '';
+    if (Array.isArray(entry?.resultats)) {
+      entry.resultats.forEach((r) => {
+        if (r?.input) out[String(r.input)] = r.resultat ?? '';
+      });
+    }
+  });
+  return out;
+}
+
+function evaluateRangeStatus(value, min, max) {
+  if (Number.isNaN(value)) return 'normal';
+  if (value < min) return 'bas';
+  if (value > max) return 'eleve';
+  return 'normal';
+}
+
+function getStatusUi(status) {
+  if (status === 'eleve') return { label: '🔴 Élevé', color: 'error' };
+  if (status === 'bas') return { label: '🟠 Bas', color: 'warning' };
+  return { label: '🟢 Normal', color: 'success' };
+}
+
+function transformHematologyResults(results) {
+  const resultMap = extractResultMap(results);
+  return Object.entries(HEMATOLOGY_CONFIG).map(([input, config]) => {
+    const rawValue = resultMap[input];
+    const parsedValue = Number.parseFloat(rawValue);
+    const hasValue = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '';
+    const status = hasValue ? evaluateRangeStatus(parsedValue, config.normeMin, config.normeMax) : 'normal';
+    return {
+      key: input,
+      name: config.label,
+      nameWithUnit: `${config.label} (${config.unite})`,
+      value: hasValue ? rawValue : '—',
+      unit: config.unite,
+      norme: `${config.normeMin}–${config.normeMax}`,
+      status,
+      hasValue,
+    };
+  });
+}
+
+function normalizeAnalysisEntity(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload?.analyseNumber || payload?.analysisType || payload?.sampleType) return payload;
+  if (payload?.analyse && typeof payload.analyse === 'object' && !Array.isArray(payload.analyse)) {
+    return payload.analyse;
+  }
+  return payload;
+}
+
+function flattenResults(results) {
+  const out = [];
+  (Array.isArray(results) ? results : []).forEach((entry) => {
+    if (Array.isArray(entry?.resultats)) {
+      entry.resultats.forEach((row) => {
+        out.push({
+          ...row,
+          acteBiologieId: entry?.acteBiologieId || entry?.actes_biologies || row?.acteBiologieId,
+          parameter: row?.parameter || row?.name || row?.input,
+          value: row?.value ?? row?.resultat ?? '',
+        });
+      });
+      return;
+    }
+    out.push({
+      ...entry,
+      parameter: entry?.parameter || entry?.name || entry?.input,
+      value: entry?.value ?? entry?.resultat ?? '',
+    });
+  });
+  return out;
+}
+
+function isHematologyAnalysis(analysis) {
+  const type = String(analysis?.analysisType || '').toUpperCase();
+  if (type === 'HEMATOLOGIE') return true;
+  const analyseEntries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+  return analyseEntries.some((entry) => String(entry?.name || '').toUpperCase().includes('HEMATOLOGIE'));
+}
+
+function isHematologyResults(results) {
+  const knownKeys = new Set(Object.keys(HEMATOLOGY_CONFIG));
+  const values = Array.isArray(results) ? results : [];
+  for (const entry of values) {
+    if (Array.isArray(entry?.resultats)) {
+      for (const row of entry.resultats) {
+        const key = normalizeToSlug(String(row?.input || row?.parameter || row?.name || ''));
+        if (knownKeys.has(key)) return true;
+      }
+      continue;
+    }
+    const key = normalizeToSlug(String(entry?.input || entry?.parameter || entry?.name || ''));
+    if (knownKeys.has(key)) return true;
+  }
+  return false;
+}
+
+const DEFAULT_ARRET_CONTENT = 'Certificat établi pour servir et valoir ce que de droit.';
+
 export default function DoctorMyConsultationsView() {
   const router = useRouter();
   const { contextHolder, showError, showSuccess, showApiResponse } = useNotification();
@@ -144,7 +279,15 @@ export default function DoctorMyConsultationsView() {
   const [prescriptions, setPrescriptions] = useState([]);
   const [certificats, setCertificats] = useState([]);
   const [analyses, setAnalyses] = useState([]);
-  const [analysisResultsDialog, setAnalysisResultsDialog] = useState({ open: false, analysisId: null, results: [], loading: false });
+  const [actesBiologies, setActesBiologies] = useState([]);
+  const [actesBiologiesItemsMap, setActesBiologiesItemsMap] = useState({});
+  const [analysisResultsDialog, setAnalysisResultsDialog] = useState({
+    open: false,
+    analysisId: null,
+    analysis: null,
+    results: [],
+    loading: false,
+  });
   const [prescriptionDialog, setPrescriptionDialog] = useState({ open: false, loading: false, isAnalysis: false });
   const [certificatDialog, setCertificatDialog] = useState({ open: false, loading: false });
   const [prescriptionForm, setPrescriptionForm] = useState({
@@ -156,7 +299,6 @@ export default function DoctorMyConsultationsView() {
     instructions: '',
     urgent: false,
   });
-  const [examTariffs, setExamTariffs] = useState([]);
   const [analysisForm, setAnalysisForm] = useState({
     analysisName: '',
     analysisType: 'HEMATOLOGIE',
@@ -164,16 +306,17 @@ export default function DoctorMyConsultationsView() {
     observations: '',
     urgent: false,
     price: 0,
-    pricingExamId: '',
+    analyse: [],
   });
   const [certificatForm, setCertificatForm] = useState({
     type: 'ARRET_TRAVAIL',
-    content: '',
+    content: DEFAULT_ARRET_CONTENT,
     durationDays: 0,
     startDate: '',
     endDate: '',
   });
   const [currentMedecinId, setCurrentMedecinId] = useState(null);
+  const clinicLogoUrl = `${window.location.origin}/assets/logo.jpeg`;
 
   // Récupérer l'ID du médecin connecté
   useEffect(() => {
@@ -477,7 +620,7 @@ export default function DoctorMyConsultationsView() {
           const pid = consultationData.patientId || consultationData.patient?.id;
           if (pid && consultationData.status === 'EN_COURS' && currentMedecinId) {
             await startMedecinServicePassage(pid, {
-              handledByUserId: currentMedecinId,
+              handledByUserId: adminInfo?.id || null,
               notes: 'Réception médecin',
             });
           }
@@ -511,7 +654,7 @@ export default function DoctorMyConsultationsView() {
           const pid = consultation.patientId || consultation.patient?.id;
           if (pid && consultation.status === 'EN_COURS' && currentMedecinId) {
             await startMedecinServicePassage(pid, {
-              handledByUserId: currentMedecinId,
+              handledByUserId: adminInfo?.id || null,
               notes: 'Réception médecin',
             });
           }
@@ -646,6 +789,7 @@ export default function DoctorMyConsultationsView() {
       observations: '',
       urgent: false,
       price: 0,
+      analyse: [],
     });
     setPrescriptionDialog({ open: true, loading: false, isAnalysis: false });
   };
@@ -660,55 +804,7 @@ export default function DoctorMyConsultationsView() {
       return;
     }
 
-    // Si le type est ANALYSE, créer une analyse au lieu d'une prescription
-    if (prescriptionForm.type === 'ANALYSE') {
-      if (!analysisForm.analysisName.trim()) {
-        showError('Erreur', 'Veuillez remplir au moins le nom de l\'analyse');
-        return;
-      }
-
-      setPrescriptionDialog({ open: true, loading: true });
-      try {
-        const analysisData = {
-          patientId: detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId,
-          consultationId: detailsDialog.consultation.id,
-          prescriptionId: null, // Peut être null pour une analyse directe
-          prescribingDoctorId: currentMedecinId,
-          analysisName: analysisForm.analysisName,
-          analysisType: analysisForm.analysisType,
-          sampleType: analysisForm.sampleType,
-          status: 'EN_ATTENTE',
-          urgent: analysisForm.urgent,
-          observations: analysisForm.observations || '',
-          price: analysisForm.price || 0,
-        };
-
-        const result = await ConsumApi.createLaboratoryAnalysis(analysisData);
-        const processed = showApiResponse(result, {
-          successTitle: 'Analyse créée',
-          errorTitle: 'Erreur d&apos;ajout',
-        });
-
-        if (processed.success) {
-          showSuccess('Succès', 'Analyse créée avec succès');
-          handleClosePrescriptionDialog();
-          // Recharger les prescriptions (pour afficher l'analyse si elle est liée)
-          const prescriptionsResult = await ConsumApi.getConsultationPrescriptions(detailsDialog.consultation.id);
-          if (prescriptionsResult.success) {
-            const prescriptionsList = Array.isArray(prescriptionsResult.data) ? prescriptionsResult.data : [];
-            setPrescriptions(prescriptionsList);
-          }
-        }
-      } catch (error) {
-        console.error('Error adding analysis:', error);
-        showError('Erreur', 'Erreur lors de l\'ajout de l\'analyse');
-      } finally {
-        setPrescriptionDialog({ open: true, loading: false });
-      }
-      return;
-    }
-
-    // Sinon, créer une prescription normale
+    // Créer une prescription médicament
     if (!prescriptionForm.label.trim()) {
       showError('Erreur', 'Veuillez remplir au moins le nom du médicament');
       return;
@@ -716,14 +812,17 @@ export default function DoctorMyConsultationsView() {
 
     setPrescriptionDialog({ open: true, loading: true });
     try {
-      const result = await ConsumApi.addConsultationPrescription(detailsDialog.consultation.id, prescriptionForm);
+      const result = await ConsumApi.addConsultationPrescription(detailsDialog.consultation.id, {
+        ...prescriptionForm,
+        type: 'MEDICAMENT',
+      });
       const processed = showApiResponse(result, {
-        successTitle: 'Prescription ajoutée',
+        successTitle: 'Ordonnace ajoutée',
         errorTitle: 'Erreur d&apos;ajout',
       });
 
       if (processed.success) {
-        showSuccess('Succès', 'Prescription ajoutée avec succès');
+        showSuccess('Succès', 'Ordonnace ajoutée avec succès');
         handleClosePrescriptionDialog();
         // Recharger les prescriptions
         const prescriptionsResult = await ConsumApi.getConsultationPrescriptions(detailsDialog.consultation.id);
@@ -736,7 +835,7 @@ export default function DoctorMyConsultationsView() {
       console.error('Error adding prescription:', error);
       showError('Erreur', 'Erreur lors de l\'ajout de la prescription');
     } finally {
-      setPrescriptionDialog({ open: true, loading: false });
+      setPrescriptionDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -748,18 +847,50 @@ export default function DoctorMyConsultationsView() {
       observations: '',
       urgent: false,
       price: 0,
-      pricingExamId: '',
+      analyse: [],
     });
+    setActesBiologies([]);
+    setActesBiologiesItemsMap({});
     setPrescriptionDialog({ open: true, loading: false, isAnalysis: true });
     try {
-      const res = await ConsumApi.getPricingExamsActive();
-      let list = [];
-      if (Array.isArray(res?.data)) list = res.data;
-      else if (Array.isArray(res?.data?.data)) list = res.data.data;
-      setExamTariffs(list);
+      const actesRes = await ConsumApi.getActesBiologies();
+      console.log('=== DEBUG ACTES BIOLOGIES ===');
+      console.log('actesRes:', actesRes);
+      console.log('actesRes.success:', actesRes?.success);
+      console.log('actesRes.message:', actesRes?.message);
+      console.log('actesRes.data:', actesRes?.data);
+      if (!actesRes?.success) {
+        showError('Actes biologiques', actesRes?.message || 'Impossible de charger les catégories.');
+      }
+      let actes = [];
+      if (Array.isArray(actesRes?.data)) actes = actesRes.data;
+      else if (Array.isArray(actesRes?.data?.data)) actes = actesRes.data.data;
+      console.log('actes parsed:', actes);
+      setActesBiologies(actes);
+
+      const itemsEntries = await Promise.all(
+        actes.map(async (acte) => {
+          const itemsRes = await ConsumApi.getActesBiologieItems(acte.id);
+          console.log(`=== DEBUG ACTES BIOLOGIES ITEMS [${acte.id}] ===`);
+          console.log('itemsRes:', itemsRes);
+          console.log('itemsRes.success:', itemsRes?.success);
+          console.log('itemsRes.message:', itemsRes?.message);
+          console.log('itemsRes.data:', itemsRes?.data);
+          const { data } = itemsRes || {};
+          const { items: dataItems } = data || {};
+          let items = [];
+          if (Array.isArray(data)) items = data;
+          else if (Array.isArray(dataItems)) items = dataItems;
+          console.log(`items parsed [${acte.id}]:`, items);
+          return [acte.id, items];
+        })
+      );
+      console.log('actes items map entries:', itemsEntries);
+      setActesBiologiesItemsMap(Object.fromEntries(itemsEntries));
     } catch (e) {
-      console.error('Error loading exam tariffs:', e);
-      setExamTariffs([]);
+      console.error('Error loading analysis data:', e);
+      setActesBiologies([]);
+      setActesBiologiesItemsMap({});
     }
   };
 
@@ -772,18 +903,55 @@ export default function DoctorMyConsultationsView() {
       observations: '',
       urgent: false,
       price: 0,
-      pricingExamId: '',
+      analyse: [],
+    });
+    setActesBiologies([]);
+    setActesBiologiesItemsMap({});
+  };
+
+  const handleToggleActeBiologieItem = (acteId, itemId) => {
+    setAnalysisForm((prev) => {
+      const currentAnalyse = Array.isArray(prev.analyse) ? prev.analyse : [];
+      const existingActe = currentAnalyse.find((entry) => entry.actes_biologies === acteId);
+      const currentItems = Array.isArray(existingActe?.actes_biologies_items)
+        ? existingActe.actes_biologies_items
+        : [];
+      const itemAlreadySelected = currentItems.includes(itemId);
+      const nextItems = itemAlreadySelected
+        ? currentItems.filter((id) => id !== itemId)
+        : [...currentItems, itemId];
+
+      const others = currentAnalyse.filter((entry) => entry.actes_biologies !== acteId);
+      const nextAnalyse = nextItems.length > 0
+        ? [...others, { actes_biologies: acteId, actes_biologies_items: nextItems }]
+        : others;
+
+      const nextTotal = nextAnalyse.reduce((sum, group) => {
+        const items = group.actes_biologies_items || [];
+        const lineTotal = items.reduce((sub, selectedItemId) => {
+          const item = (actesBiologiesItemsMap[group.actes_biologies] || []).find((x) => x.id === selectedItemId);
+          const price = getPricingExamUnitPrice(item?.examTariff);
+          return sub + price;
+        }, 0);
+        return sum + lineTotal;
+      }, 0);
+      return { ...prev, analyse: nextAnalyse, price: nextTotal };
     });
   };
 
   const handleSaveAnalysis = async () => {
-    if (!detailsDialog.consultation || !analysisForm.analysisName.trim()) {
-      showError('Erreur', 'Veuillez remplir au moins le nom de l\'analyse');
+    if (!detailsDialog.consultation) {
+      showError('Erreur', 'Consultation introuvable');
       return;
     }
 
     if (!currentMedecinId) {
       showError('Erreur', 'Médecin non identifié');
+      return;
+    }
+
+    if (!Array.isArray(analysisForm.analyse) || analysisForm.analyse.length === 0) {
+      showError('Erreur', 'Veuillez sélectionner au moins une catégorie et un examen.');
       return;
     }
 
@@ -803,7 +971,7 @@ export default function DoctorMyConsultationsView() {
         consultationId,
         totalAmount: amount,
         currency: 'FCFA',
-        note: `Analyse laboratoire: ${analysisForm.analysisName.trim()} — paiement à l’accueil avant réalisation`,
+        note: 'Analyse laboratoire — paiement à l’accueil avant réalisation',
       });
 
       if (!invoiceRes?.success || !invoiceRes.data?.id) {
@@ -816,31 +984,27 @@ export default function DoctorMyConsultationsView() {
 
       const invoiceId = invoiceRes.data.id;
       const observationsWithBilling = appendBillingInvoiceTag(analysisForm.observations || '', invoiceId);
-
       const analysisData = {
         patientId,
         consultationId,
         prescriptionId: null,
         prescribingDoctorId: currentMedecinId,
-        analysisName: analysisForm.analysisName,
-        analysisType: analysisForm.analysisType,
-        sampleType: analysisForm.sampleType,
+        analyse: analysisForm.analyse,
+        sampleType: 'SANG',
         status: 'EN_ATTENTE',
         urgent: analysisForm.urgent,
         observations: observationsWithBilling,
         price: amount,
       };
-
       const result = await ConsumApi.createLaboratoryAnalysis(analysisData);
       const processed = showApiResponse(result, {
         successTitle: 'Analyse créée',
         errorTitle: 'Erreur d&apos;ajout',
       });
-
       if (processed.success) {
         showSuccess(
           'Succès',
-          'Facture pro-forma créée et analyse enregistrée. Le patient doit payer à la secrétaire avant que le laboratoire ne réceptionne l’échantillon.'
+          'Facture pro-forma créée et analyse enregistrée. Le laboratoire effectuera le prélèvement après paiement à l’accueil.'
         );
         handleCloseAnalysisDialog();
         // Recharger les analyses
@@ -873,17 +1037,28 @@ export default function DoctorMyConsultationsView() {
   };
 
   const handleViewAnalysisResults = async (analysisId) => {
-    setAnalysisResultsDialog({ open: true, analysisId, results: [], loading: true });
+    setAnalysisResultsDialog({ open: true, analysisId, analysis: null, results: [], loading: true });
     try {
-      const result = await ConsumApi.getLaboratoryAnalysisResults(analysisId);
+      const [result, complete] = await Promise.all([
+        ConsumApi.getLaboratoryAnalysisResults(analysisId),
+        ConsumApi.getLaboratoryAnalysisComplete(analysisId),
+      ]);
+      const analysisData = complete.success ? normalizeAnalysisEntity(complete.data) : null;
+      const normalizedResults = flattenResults(result.data || []);
       if (result.success) {
-        setAnalysisResultsDialog({ open: true, analysisId, results: result.data || [], loading: false });
+        setAnalysisResultsDialog({
+          open: true,
+          analysisId,
+          analysis: analysisData,
+          results: normalizedResults,
+          loading: false,
+        });
       } else {
-        setAnalysisResultsDialog({ open: true, analysisId, results: [], loading: false });
+        setAnalysisResultsDialog({ open: true, analysisId, analysis: analysisData, results: [], loading: false });
       }
     } catch (error) {
       console.error('Error loading analysis results:', error);
-      setAnalysisResultsDialog({ open: true, analysisId, results: [], loading: false });
+      setAnalysisResultsDialog({ open: true, analysisId, analysis: null, results: [], loading: false });
     }
   };
 
@@ -908,145 +1083,240 @@ export default function DoctorMyConsultationsView() {
     const { consultation } = detailsDialog;
     const patient = consultation?.patient;
     const medecin = consultation?.medecin;
+    const isHema = isHematologyAnalysis(analysisDetails) || isHematologyResults(results);
+    const transformedHema = transformHematologyResults(results);
 
     const printWindow = window.open('', '_blank');
-    const printContent = `
+    if (!printWindow) {
+      showError('Erreur', 'Impossible d’ouvrir la fenêtre d’impression');
+      return;
+    }
+
+    const hemoRows = transformedHema.filter((row) =>
+      ['globules_blancs', 'globules_rouges', 'hemoglobine', 'hematocrite', 'vgm', 'tcmh', 'ccmh', 'plaquettes'].includes(row.key)
+    ).filter((row) => row.hasValue);
+    const leucoRows = transformedHema.filter((row) =>
+      ['lymphocytes', 'monocytes', 'granulocytes'].includes(row.key)
+    ).filter((row) => row.hasValue);
+
+    const printContent = isHema
+      ? `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Résultats d&apos;Analyse</title>
+          <title>Hématologie - Résultats</title>
           <style>
             @media print {
               @page {
                 size: A4;
-                margin: 2cm;
+                margin: 1.2cm;
               }
             }
             body {
               font-family: Arial, sans-serif;
-              max-width: 800px;
+              font-size: 12px;
+              line-height: 1.35;
+              max-width: 900px;
               margin: 0 auto;
-              padding: 20px;
+              padding: 10px;
             }
             .header {
               text-align: center;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
-            }
-            .header h1 {
-              margin: 0;
-              font-size: 24px;
-            }
-            .info-section {
-              margin-bottom: 30px;
-            }
-            .info-row {
-              display: flex;
-              justify-content: space-between;
+              border-bottom: 1px solid #000;
+              padding-bottom: 8px;
               margin-bottom: 10px;
             }
-            .info-label {
+            .header img {
+              max-width: 320px;
+              width: 100%;
+              height: auto;
+              margin: 0 auto 6px auto;
+              display: block;
+            }
+            .header h1 {
+              margin: 2px 0;
+              font-size: 18px;
+              letter-spacing: 0.4px;
+            }
+            .header h2 {
+              margin: 2px 0;
+              font-size: 15px;
+            }
+            .meta-grid {
+              display: flex;
+              justify-content: space-between;
+              flex-wrap: wrap;
+              gap: 6px 24px;
+              margin: 8px 0 10px 0;
+            }
+            .meta-item {
+              min-width: 260px;
+            }
+            .label {
               font-weight: bold;
             }
-            .analysis-details {
-              border: 1px solid #000;
-              padding: 20px;
-              margin: 20px 0;
+            .section {
+              margin-top: 10px;
             }
-            .results-table {
+            .section-title {
+              font-weight: bold;
+              margin: 6px 0;
+              text-transform: uppercase;
+            }
+            .subtitle {
+              font-weight: bold;
+              margin: 8px 0 4px 0;
+            }
+            table {
               width: 100%;
               border-collapse: collapse;
-              margin-top: 20px;
             }
-            .results-table th,
-            .results-table td {
+            th, td {
               border: 1px solid #000;
-              padding: 10px;
+              padding: 6px;
               text-align: left;
+              vertical-align: top;
             }
-            .results-table th {
+            th {
               background-color: #f0f0f0;
               font-weight: bold;
             }
-            .abnormal {
-              color: red;
+            .status-normal {
+              color: #1f7a1f;
               font-weight: bold;
             }
-            .footer {
-              margin-top: 50px;
-              text-align: right;
+            .status-high {
+              color: #c62828;
+              font-weight: bold;
+            }
+            .status-low {
+              color: #ef6c00;
+              font-weight: bold;
             }
             .signature {
-              margin-top: 50px;
-              border-top: 1px solid #000;
-              padding-top: 20px;
+              margin-top: 20px;
+              text-align: right;
+              font-weight: bold;
             }
           </style>
         </head>
         <body>
           <div class="header">
-            <h1>RÉSULTATS D&apos;ANALYSE</h1>
+            <img src="${clinicLogoUrl}" alt="Logo clinique" />
+            <div>LABORATOIRE D&apos;ANALYSES MEDICALES - TEL 89 63 26 46 / 40 88 44 00</div>
+            <div>Soigner avec amour</div>
+            <h1>HEMATOLOGIE</h1>
+            <h2>RESULTATS D&apos;ANALYSE</h2>
           </div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <span class="info-label">Date de l&apos;analyse:</span>
-              <span>${analysisDetails?.samplingDate ? new Date(analysisDetails.samplingDate).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Numéro d&apos;analyse:</span>
-              <span>${analysisDetails?.analyseNumber || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Patient:</span>
-              <span>${patient?.firstName || ''} ${patient?.lastName || ''}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Date de naissance:</span>
-              <span>${patient?.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Médecin prescripteur:</span>
-              <span>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''} - ${medecin?.speciality || ''}</span>
-            </div>
+
+          <div class="meta-grid">
+            ${patient?.lastName ? `<div class="meta-item"><span class="label">NOM:</span> ${patient.lastName}</div>` : ''}
+            ${patient?.firstName ? `<div class="meta-item"><span class="label">PRENOMS:</span> ${patient.firstName}</div>` : ''}
+            ${patient?.gender ? `<div class="meta-item"><span class="label">SEXE:</span> ${patient.gender}</div>` : ''}
+            ${patient?.dateOfBirth ? `<div class="meta-item"><span class="label">AGE:</span> ${Math.max(0, new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear())} ANS</div>` : ''}
+            ${(medecin?.firstName || medecin?.lastName) ? `<div class="meta-item"><span class="label">PRESCRIPTEUR:</span> DR ${medecin?.firstName || ''} ${medecin?.lastName || ''}</div>` : ''}
+            <div class="meta-item"><span class="label">DATE:</span> ${analysisDetails?.samplingDate ? new Date(analysisDetails.samplingDate).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}</div>
+            ${analysisDetails?.analyseNumber ? `<div class="meta-item"><span class="label">NUMERO DE DOSSIER:</span> ${analysisDetails.analyseNumber}</div>` : ''}
           </div>
-          
-          <div class="analysis-details">
-            <h2>Détails de l&apos;analyse</h2>
-            <div class="info-row">
-              <span class="info-label">Nom de l&apos;analyse:</span>
-              <span>${analysisDetails?.analysisName || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Type d&apos;analyse:</span>
-              <span>${analysisDetails?.analysisType || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Type d&apos;échantillon:</span>
-              <span>${analysisDetails?.sampleType || 'N/A'}</span>
-            </div>
-            ${analysisDetails?.observations ? `
-            <div class="info-row">
-              <span class="info-label">Observations:</span>
-              <span>${analysisDetails.observations}</span>
-            </div>
-            ` : ''}
-            ${analysisDetails?.urgent ? '<p class="abnormal">⚠️ ANALYSE URGENTE</p>' : ''}
-          </div>
-          
-          <div class="analysis-details">
-            <h2>Résultats</h2>
-            <table class="results-table">
+
+          <div class="section">
+            <div class="subtitle">HEMOGRAMME SUR COMPTEUR MINDRAY BC 30 S</div>
+            <table>
               <thead>
                 <tr>
-                  <th>Paramètre</th>
-                  <th>Valeur</th>
+                  <th>Analyse</th>
+                  <th>Résultat</th>
+                  <th>Norme</th>
                   <th>Unité</th>
-                  <th>Valeurs de référence</th>
                   <th>Statut</th>
                 </tr>
               </thead>
+              <tbody>
+                ${hemoRows.map((row) => {
+                  const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                  const statusLabel = getStatusUi(row.status).label;
+                  return `<tr>
+                    <td>${row.name}</td>
+                    <td>${row.value}</td>
+                    <td>${row.norme}</td>
+                    <td>${row.unit || ''}</td>
+                    <td class="${statusClass}">${statusLabel}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <div class="subtitle">FORMULE LEUCOCYTAIRE</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Analyse</th>
+                  <th>Résultat</th>
+                  <th>Norme</th>
+                  <th>Unité</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${leucoRows.map((row) => {
+                  const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                  const statusLabel = getStatusUi(row.status).label;
+                  return `<tr>
+                    <td>${row.name}</td>
+                    <td>${row.value}</td>
+                    <td>${row.norme}</td>
+                    <td>${row.unit || ''}</td>
+                    <td class="${statusClass}">${statusLabel}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="signature">
+            SIGNATURE BIOLOGISTE
+          </div>
+        </body>
+      </html>
+    `
+      : `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Résultats d&apos;Analyse</title>
+          <style>
+            @media print { @page { size: A4; margin: 2cm; } }
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .header img { max-width: 320px; width: 100%; height: auto; margin: 0 auto 8px auto; display: block; }
+            .info-section { margin-bottom: 30px; }
+            .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+            .info-label { font-weight: bold; }
+            .analysis-details { border: 1px solid #000; padding: 20px; margin: 20px 0; }
+            .results-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            .results-table th, .results-table td { border: 1px solid #000; padding: 10px; text-align: left; }
+            .results-table th { background-color: #f0f0f0; font-weight: bold; }
+            .abnormal { color: red; font-weight: bold; }
+            .footer { margin-top: 50px; text-align: right; }
+            .signature { margin-top: 50px; border-top: 1px solid #000; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header"><img src="${clinicLogoUrl}" alt="Logo clinique" /><h1>RÉSULTATS D&apos;ANALYSE</h1></div>
+          <div class="info-section">
+            <div class="info-row"><span class="info-label">Date de l&apos;analyse:</span><span>${analysisDetails?.samplingDate ? new Date(analysisDetails.samplingDate).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}</span></div>
+            <div class="info-row"><span class="info-label">Numéro d&apos;analyse:</span><span>${analysisDetails?.analyseNumber || 'N/A'}</span></div>
+            <div class="info-row"><span class="info-label">Patient:</span><span>${patient?.firstName || ''} ${patient?.lastName || ''}</span></div>
+            <div class="info-row"><span class="info-label">Date de naissance:</span><span>${patient?.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</span></div>
+            <div class="info-row"><span class="info-label">Médecin prescripteur:</span><span>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''} - ${medecin?.speciality || ''}</span></div>
+          </div>
+          <div class="analysis-details">
+            <h2>Résultats</h2>
+            <table class="results-table">
+              <thead><tr><th>Paramètre</th><th>Valeur</th><th>Unité</th><th>Valeurs de référence</th><th>Statut</th></tr></thead>
               <tbody>
                 ${results.map((result) => `
                   <tr>
@@ -1056,18 +1326,10 @@ export default function DoctorMyConsultationsView() {
                     <td>${result.referenceValueMin && result.referenceValueMax ? `${result.referenceValueMin} - ${result.referenceValueMax} ${result.unit || ''}` : 'N/A'}</td>
                     <td class="${result.abnormal ? 'abnormal' : ''}">${result.abnormal ? 'Anormal' : 'Normal'}</td>
                   </tr>
-                  ${result.comment ? `
-                  <tr>
-                    <td colspan="5" style="font-style: italic; padding-left: 30px;">
-                      <strong>Commentaire:</strong> ${result.comment}
-                    </td>
-                  </tr>
-                  ` : ''}
                 `).join('')}
               </tbody>
             </table>
           </div>
-          
           <div class="footer">
             <div class="signature">
               <p>Signature et cachet du médecin</p>
@@ -1091,13 +1353,13 @@ export default function DoctorMyConsultationsView() {
   };
 
   const handleCloseAnalysisResults = () => {
-    setAnalysisResultsDialog({ open: false, analysisId: null, results: [], loading: false });
+    setAnalysisResultsDialog({ open: false, analysisId: null, analysis: null, results: [], loading: false });
   };
 
   const handleOpenCertificatDialog = () => {
     setCertificatForm({
       type: 'ARRET_TRAVAIL',
-      content: '',
+      content: DEFAULT_ARRET_CONTENT,
       durationDays: 0,
       startDate: '',
       endDate: '',
@@ -1110,21 +1372,25 @@ export default function DoctorMyConsultationsView() {
   };
 
   const handleSaveCertificat = async () => {
-    if (!detailsDialog.consultation || !certificatForm.content.trim()) {
-      showError('Erreur', 'Veuillez remplir le contenu du certificat');
+    if (!detailsDialog.consultation) {
+      showError('Erreur', 'Consultation introuvable');
       return;
     }
 
     setCertificatDialog({ open: true, loading: true });
     try {
-      const result = await ConsumApi.addConsultationCertificat(detailsDialog.consultation.id, certificatForm);
+      const result = await ConsumApi.addConsultationCertificat(detailsDialog.consultation.id, {
+        ...certificatForm,
+        type: 'ARRET_TRAVAIL',
+        content: certificatForm.content || DEFAULT_ARRET_CONTENT,
+      });
       const processed = showApiResponse(result, {
-        successTitle: 'Certificat ajouté',
+        successTitle: 'Arrêt de travail ajouté',
         errorTitle: 'Erreur d&apos;ajout',
       });
 
       if (processed.success) {
-        showSuccess('Succès', 'Certificat ajouté avec succès');
+        showSuccess('Succès', 'Arrêt de travail ajouté avec succès');
         handleCloseCertificatDialog();
         // Recharger les certificats
         const certificatsResult = await ConsumApi.getConsultationCertificats(detailsDialog.consultation.id);
@@ -1135,9 +1401,9 @@ export default function DoctorMyConsultationsView() {
       }
     } catch (error) {
       console.error('Error adding certificat:', error);
-      showError('Erreur', 'Erreur lors de l\'ajout du certificat');
+      showError('Erreur', 'Erreur lors de l\'ajout de l\'arrêt de travail');
     } finally {
-      setCertificatDialog({ open: true, loading: false });
+      setCertificatDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -1153,7 +1419,7 @@ export default function DoctorMyConsultationsView() {
           const pid = c?.patientId || c?.patient?.id;
           if (pid && currentMedecinId) {
             await startMedecinServicePassage(pid, {
-              handledByUserId: currentMedecinId,
+              handledByUserId: adminInfo?.id || null,
               notes: 'Consultation démarrée',
             });
           }
@@ -1224,72 +1490,129 @@ export default function DoctorMyConsultationsView() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Prescription Médicale</title>
+          <title>Ordonnace Médicale</title>
           <style>
             @media print {
               @page {
                 size: A4;
-                margin: 2cm;
+                margin: 0.8cm;
               }
             }
             body {
               font-family: Arial, sans-serif;
               max-width: 800px;
               margin: 0 auto;
-              padding: 20px;
+              padding: 6px;
+              font-size: 12px;
+              line-height: 1.25;
+              min-height: calc(100vh - 1.6cm);
+              display: flex;
+              flex-direction: column;
             }
             .header {
               text-align: center;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
+              border-bottom: 1px solid #000;
+              padding-bottom: 6px;
+              margin-bottom: 8px;
             }
             .header h1 {
-              margin: 0;
-              font-size: 24px;
+              margin: 2px 0 0 0;
+              font-size: 20px;
+              letter-spacing: 1px;
+            }
+            .header img {
+              max-width: 240px;
+              width: 100%;
+              height: auto;
+              margin: 0 auto 4px auto;
+              display: block;
+            }
+            .header .subtitle {
+              margin-top: 0;
+              font-size: 11px;
+              color: #555;
             }
             .info-section {
-              margin-bottom: 30px;
+              margin-bottom: 8px;
+              border: 1px solid #ddd;
+              border-radius: 6px;
+              padding: 6px 8px;
             }
             .info-row {
               display: flex;
               justify-content: space-between;
-              margin-bottom: 10px;
+              margin-bottom: 4px;
+              gap: 8px;
             }
             .info-label {
               font-weight: bold;
             }
             .prescription-details {
               border: 1px solid #000;
-              padding: 20px;
-              margin: 20px 0;
+              padding: 8px;
+              margin: 6px 0;
+              min-height: 0;
             }
-            .prescription-item {
-              margin-bottom: 15px;
-              padding-bottom: 15px;
-              border-bottom: 1px solid #ddd;
+            .drug-name {
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 12px;
+              text-transform: uppercase;
             }
-            .prescription-item:last-child {
-              border-bottom: none;
+            .line {
+              margin: 8px 0;
+              font-size: 15px;
+            }
+            .line strong {
+              display: inline-block;
+              min-width: 110px;
+            }
+            .ord-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 12px;
+            }
+            .ord-table th,
+            .ord-table td {
+              border: 1px solid #000;
+              padding: 4px 6px;
+              text-align: left;
+              vertical-align: top;
+              font-size: 12px;
+            }
+            .ord-table th {
+              background: #f3f3f3;
+              font-weight: bold;
+            }
+            .ord-note {
+              margin-top: 6px;
+              font-size: 11px;
+              color: #333;
             }
             .urgent {
               color: red;
               font-weight: bold;
             }
             .footer {
-              margin-top: 50px;
+              margin-top: auto;
               text-align: right;
             }
             .signature {
-              margin-top: 50px;
+              margin-top: 16px;
               border-top: 1px solid #000;
-              padding-top: 20px;
+              padding-top: 8px;
+              display: inline-block;
+              min-width: 220px;
+              text-align: center;
+              font-size: 12px;
             }
           </style>
         </head>
         <body>
           <div class="header">
-            <h1>PRESCRIPTION MÉDICALE</h1>
+            <img src="${clinicLogoUrl}" alt="Logo clinique" />
+            <h1>ORDONNACE MÉDICALE</h1>
+            <div class="subtitle">Prévenir - Soigner - Surveiller</div>
           </div>
           
           <div class="info-section">
@@ -1306,21 +1629,36 @@ export default function DoctorMyConsultationsView() {
               <span>${patient?.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Médecin:</span>
+              <span class="info-label">Prescripteur:</span>
               <span>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''} - ${medecin?.speciality || ''}</span>
             </div>
           </div>
           
           <div class="prescription-details">
-            <h2>Prescription</h2>
-            <div class="prescription-item">
-              <p><strong>Médicament/Produit:</strong> ${prescription.label || 'N/A'} ${prescription.urgent ? '<span class="urgent">(URGENT)</span>' : ''}</p>
-              <p><strong>Type:</strong> ${prescription.type || 'N/A'}</p>
-              <p><strong>Dosage:</strong> ${prescription.dosage || 'N/A'}</p>
-              <p><strong>Durée:</strong> ${prescription.duration || 'N/A'}</p>
-              <p><strong>Quantité:</strong> ${prescription.quantity || 'N/A'}</p>
-              <p><strong>Instructions:</strong> ${prescription.instructions || 'N/A'}</p>
-            </div>
+            <table class="ord-table">
+              <thead>
+                <tr>
+                  <th>Médicament</th>
+                  <th>Dosage</th>
+                  <th>Durée</th>
+                  <th>Quantité</th>
+                  <th>Instructions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    ${prescription.label || '—'}
+                    ${prescription.urgent ? '<div class="urgent">(URGENT)</div>' : ''}
+                  </td>
+                  <td>${prescription.dosage || '—'}</td>
+                  <td>${prescription.duration || '—'}</td>
+                  <td>${prescription.quantity || '—'}</td>
+                  <td>${prescription.instructions || '—'}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ord-note">Respecter strictement cette ordonnance selon les indications du médecin.</div>
           </div>
           
           <div class="footer">
@@ -1359,57 +1697,93 @@ export default function DoctorMyConsultationsView() {
             @media print {
               @page {
                 size: A4;
-                margin: 2cm;
+                margin: 1.2cm;
               }
             }
             body {
               font-family: Arial, sans-serif;
               max-width: 800px;
               margin: 0 auto;
-              padding: 20px;
+              padding: 10px;
+              line-height: 1.35;
             }
             .header {
               text-align: center;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
+              border-bottom: 1px solid #000;
+              padding-bottom: 10px;
+              margin-bottom: 16px;
             }
             .header h1 {
-              margin: 0;
-              font-size: 24px;
+              margin: 4px 0 2px 0;
+              font-size: 22px;
+            }
+            .header img {
+              max-width: 320px;
+              width: 100%;
+              height: auto;
+              margin: 0 auto 6px auto;
+              display: block;
+            }
+            .header .subtitle {
+              font-size: 12px;
+              color: #555;
             }
             .info-section {
-              margin-bottom: 30px;
+              margin-bottom: 12px;
+              border: 1px solid #ddd;
+              border-radius: 6px;
+              padding: 10px;
             }
             .info-row {
               display: flex;
               justify-content: space-between;
-              margin-bottom: 10px;
+              margin-bottom: 6px;
+              gap: 12px;
             }
             .info-label {
               font-weight: bold;
             }
             .certificat-content {
               border: 1px solid #000;
-              padding: 30px;
-              margin: 30px 0;
-              min-height: 200px;
+              padding: 16px;
+              margin: 14px 0;
+              min-height: 320px;
               text-align: justify;
             }
+            .cert-title {
+              text-align: center;
+              font-size: 18px;
+              font-weight: bold;
+              text-transform: uppercase;
+              margin: 0 0 14px 0;
+            }
+            .cert-body p {
+              margin: 0 0 10px 0;
+              font-size: 14px;
+            }
+            .cert-strong {
+              font-weight: bold;
+              text-transform: uppercase;
+            }
             .footer {
-              margin-top: 50px;
+              margin-top: 24px;
               text-align: right;
             }
             .signature {
-              margin-top: 50px;
+              margin-top: 32px;
               border-top: 1px solid #000;
-              padding-top: 20px;
+              padding-top: 10px;
+              display: inline-block;
+              min-width: 260px;
+              text-align: center;
             }
           </style>
         </head>
         <body>
           <div class="header">
+            <img src="${clinicLogoUrl}" alt="Logo clinique" />
             <h1>CERTIFICAT MÉDICAL</h1>
+            <div class="subtitle">Prévenir - Soigner - Surveiller</div>
           </div>
           
           <div class="info-section">
@@ -1432,17 +1806,34 @@ export default function DoctorMyConsultationsView() {
           </div>
           
           <div class="certificat-content">
-            <h2>${certificat.type || 'Certificat Médical'}</h2>
-            <p>${certificat.content || 'N/A'}</p>
-            ${certificat.durationDays ? `<p><strong>Durée:</strong> ${certificat.durationDays} jours</p>` : ''}
-            ${certificat.startDate ? `<p><strong>Du:</strong> ${new Date(certificat.startDate).toLocaleDateString('fr-FR')}</p>` : ''}
-            ${certificat.endDate ? `<p><strong>Au:</strong> ${new Date(certificat.endDate).toLocaleDateString('fr-FR')}</p>` : ''}
+            <div class="cert-title">CERTIFICAT MÉDICAL D&apos;ARRÊT DE TRAVAIL</div>
+            <div class="cert-body">
+              <p>
+                Je soussigné(e), <span class="cert-strong">Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''}</span>,
+                certifie avoir examiné ce jour :
+              </p>
+              <p>
+                <span class="cert-strong">M./Mme ${patient?.firstName || ''} ${patient?.lastName || ''}</span>
+                ${patient?.dateOfBirth ? `, né(e) le ${new Date(patient.dateOfBirth).toLocaleDateString('fr-FR')}` : ''}.
+              </p>
+              <p>
+                L&apos;état de santé du/de la patient(e) nécessite un arrêt de travail
+                ${certificat.durationDays ? ` de <span class="cert-strong">${certificat.durationDays} jour(s)</span>` : ''}.
+              </p>
+              ${(certificat.startDate || certificat.endDate) ? `
+                <p>
+                  ${certificat.startDate ? `À compter du <span class="cert-strong">${new Date(certificat.startDate).toLocaleDateString('fr-FR')}</span>` : ''}
+                  ${certificat.endDate ? ` jusqu&apos;au <span class="cert-strong">${new Date(certificat.endDate).toLocaleDateString('fr-FR')}</span>` : ''}.
+                </p>
+              ` : ''}
+              <p>Certificat établi pour servir et valoir ce que de droit.</p>
+            </div>
           </div>
           
           <div class="footer">
             <div class="signature">
               <p>Signature et cachet du médecin</p>
-              <br><br>
+              <br>
               <p>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''}</p>
               <p>${medecin?.speciality || ''}</p>
             </div>
@@ -1914,45 +2305,40 @@ export default function DoctorMyConsultationsView() {
                     {analyses.map((analysis, index) => (
                       <Card key={analysis.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
                         <Stack spacing={1}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="subtitle2">
-                              {analysis.analysisName || 'N/A'} ({analysis.analyseNumber || 'N/A'})
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                              {analysis.urgent && <Chip label="Urgent" color="error" size="small" />}
-                              {(() => {
-                                const getStatusLabel = (status) => {
-                                  if (status === 'EN_ATTENTE') return 'En attente';
-                                  if (status === 'EN_COURS') return 'En cours';
-                                  if (status === 'TERMINE') return 'Terminé';
-                                  if (status === 'VALIDE') return 'Validé';
-                                  return status || 'N/A';
-                                };
-                                const getStatusColor = (status) => {
-                                  if (status === 'EN_ATTENTE') return 'warning';
-                                  if (status === 'EN_COURS') return 'info';
-                                  if (status === 'TERMINE') return 'success';
-                                  if (status === 'VALIDE') return 'success';
-                                  return 'default';
-                                };
-                                return (
-                                  <Chip
-                                    label={getStatusLabel(analysis.status)}
-                                    size="small"
-                                    color={getStatusColor(analysis.status)}
-                                  />
-                                );
-                              })()}
-                            </Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Chip
+                              label={
+                                analysis.status === 'EN_ATTENTE'
+                                  ? 'En attente'
+                                  : analysis.status === 'EN_COURS'
+                                    ? 'En cours'
+                                    : analysis.status === 'TERMINE'
+                                      ? 'Terminé'
+                                      : analysis.status === 'VALIDE'
+                                        ? 'Validé'
+                                        : analysis.status || 'N/A'
+                              }
+                              size="small"
+                              color={
+                                analysis.status === 'EN_ATTENTE'
+                                  ? 'warning'
+                                  : analysis.status === 'EN_COURS'
+                                    ? 'info'
+                                    : analysis.status === 'TERMINE' || analysis.status === 'VALIDE'
+                                      ? 'success'
+                                      : 'default'
+                              }
+                            />
                           </Box>
-                          <Typography variant="body2">
-                            <strong>Type:</strong> {analysis.analysisType || 'N/A'} | <strong>Échantillon:</strong> {analysis.sampleType || 'N/A'}
-                          </Typography>
-                          {analysis.observations && (
+                          {(() => {
+                            const cleanObservations = sanitizeAnalysisObservations(analysis.observations);
+                            if (!cleanObservations) return null;
+                            return (
                             <Typography variant="body2">
-                              <strong>Observations:</strong> {analysis.observations}
+                              <strong>Observations:</strong> {cleanObservations}
                             </Typography>
-                          )}
+                            );
+                          })()}
                           {analysis.price && (
                             <Typography variant="body2">
                               <strong>Prix:</strong> {analysis.price} FCFA
@@ -1983,7 +2369,7 @@ export default function DoctorMyConsultationsView() {
 
                 <Divider>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <Typography>Prescriptions</Typography>
+                    <Typography>Ordonnaces</Typography>
                     {!detailsDialog.editing && (
                       <Button
                         variant="outlined"
@@ -1998,7 +2384,7 @@ export default function DoctorMyConsultationsView() {
                 </Divider>
                 {prescriptions.length === 0 ? (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    Aucune prescription
+                    Aucune ordonnace
                   </Typography>
                 ) : (
                   <Stack spacing={1}>
@@ -2069,15 +2455,12 @@ export default function DoctorMyConsultationsView() {
                             </Button>
                           </Box>
                           <Typography variant="body2">
-                            <strong>Contenu:</strong> {certificat.content || 'N/A'}
-                          </Typography>
-                          <Typography variant="body2">
                             <strong>Durée:</strong> {certificat.durationDays || 'N/A'} jours
                             {certificat.startDate && (
-                              <> | <strong>Du:</strong> {fDateTime(certificat.startDate)}</>
+                              <> | <strong>Du:</strong> {new Date(certificat.startDate).toLocaleDateString('fr-FR')}</>
                             )}
                             {certificat.endDate && (
-                              <> | <strong>Au:</strong> {fDateTime(certificat.endDate)}</>
+                              <> | <strong>Au:</strong> {new Date(certificat.endDate).toLocaleDateString('fr-FR')}</>
                             )}
                           </Typography>
                         </Stack>
@@ -2130,75 +2513,51 @@ export default function DoctorMyConsultationsView() {
               <Alert severity="info">
                 Une facture pro-forma est créée automatiquement. Le patient doit régler à la secrétaire avant que le laboratoire ne prenne en charge l’analyse.
               </Alert>
-              <FormControl fullWidth>
-                <InputLabel>Tarif examen (barème)</InputLabel>
-                <Select
-                  value={analysisForm.pricingExamId || ''}
-                  label="Tarif examen (barème)"
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (!id) {
-                      setAnalysisForm((p) => ({ ...p, pricingExamId: '' }));
-                      return;
-                    }
-                    const ex = examTariffs.find((x) => x.id === id);
-                    const price = getPricingExamUnitPrice(ex);
-                    const name = (ex?.name || ex?.label || '').trim();
-                    const section = typeof ex?.section === 'string' ? ex.section.trim() : '';
-                    setAnalysisForm((p) => ({
-                      ...p,
-                      pricingExamId: id,
-                      price,
-                      analysisName: name || p.analysisName,
-                      ...(section ? { analysisType: section } : {}),
-                    }));
-                  }}
-                >
-                  <MenuItem value="">— Saisie manuelle du montant —</MenuItem>
-                  {examTariffs.map((ex) => (
-                    <MenuItem key={ex.id} value={ex.id}>
-                      {`${ex.name || ex.code || ex.id} — ${getPricingExamUnitPrice(ex).toLocaleString('fr-FR')} FCFA`}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                fullWidth
-                label="Nom de l&apos;analyse *"
-                value={analysisForm.analysisName}
-                onChange={(e) => setAnalysisForm({ ...analysisForm, analysisName: e.target.value })}
-                required
-                placeholder="Ex: NFS, Glycémie, Cholestérol..."
-              />
-              <FormControl fullWidth>
-                <InputLabel>Type d&apos;analyse</InputLabel>
-                <Select
-                  value={analysisForm.analysisType}
-                  label="Type d&apos;analyse"
-                  onChange={(e) => setAnalysisForm({ ...analysisForm, analysisType: e.target.value })}
-                >
-                  <MenuItem value="HEMATOLOGIE">Hématologie</MenuItem>
-                  <MenuItem value="BIOCHIMIE">Biochimie</MenuItem>
-                  <MenuItem value="IMMUNOLOGIE">Immunologie</MenuItem>
-                  <MenuItem value="MICROBIOLOGIE">Microbiologie</MenuItem>
-                  <MenuItem value="SEROLOGIE">Sérologie</MenuItem>
-                  <MenuItem value="PARASITOLOGIE">Parasitologie</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel>Type d&apos;échantillon</InputLabel>
-                <Select
-                  value={analysisForm.sampleType}
-                  label="Type d&apos;échantillon"
-                  onChange={(e) => setAnalysisForm({ ...analysisForm, sampleType: e.target.value })}
-                >
-                  <MenuItem value="SANG">Sang</MenuItem>
-                  <MenuItem value="URINE">Urine</MenuItem>
-                  <MenuItem value="SELLES">Selles</MenuItem>
-                  <MenuItem value="SALIVE">Salive</MenuItem>
-                  <MenuItem value="AUTRE">Autre</MenuItem>
-                </Select>
-              </FormControl>
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Catégories et examens
+                </Typography>
+                {actesBiologies.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Aucune catégorie disponible.
+                  </Typography>
+                ) : (
+                  <Stack spacing={1.5}>
+                    {actesBiologies.map((acte) => {
+                      const items = actesBiologiesItemsMap[acte.id] || [];
+                      const selectedItems =
+                        analysisForm.analyse.find((entry) => entry.actes_biologies === acte.id)?.actes_biologies_items || [];
+                      return (
+                        <Card key={acte.id} variant="outlined" sx={{ p: 1.5 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                            {acte.name}
+                          </Typography>
+                          {items.length === 0 ? (
+                            <Typography variant="caption" color="text.secondary">
+                              Aucun examen dans cette catégorie.
+                            </Typography>
+                          ) : (
+                            <Stack spacing={0.5}>
+                              {items.map((item) => (
+                                <FormControlLabel
+                                  key={item.id}
+                                  control={
+                                    <Checkbox
+                                      checked={selectedItems.includes(item.id)}
+                                      onChange={() => handleToggleActeBiologieItem(acte.id, item.id)}
+                                    />
+                                  }
+                                  label={`${item.name || item.id} — ${getPricingExamUnitPrice(item.examTariff).toLocaleString('fr-FR')} FCFA`}
+                                />
+                              ))}
+                            </Stack>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Box>
               <TextField
                 fullWidth
                 multiline
@@ -2208,16 +2567,9 @@ export default function DoctorMyConsultationsView() {
                 onChange={(e) => setAnalysisForm({ ...analysisForm, observations: e.target.value })}
                 placeholder="Observations ou notes sur l&apos;analyse..."
               />
-              <TextField
-                fullWidth
-                type="number"
-                label="Prix (FCFA)"
-                value={analysisForm.price}
-                onChange={(e) => setAnalysisForm({ ...analysisForm, price: parseFloat(e.target.value) || 0 })}
-                InputProps={{
-                  endAdornment: <InputAdornment position="end">FCFA</InputAdornment>,
-                }}
-              />
+              <Alert severity="info">
+                Coût total : <strong>{Number(analysisForm.price || 0).toLocaleString('fr-FR')} FCFA</strong>
+              </Alert>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -2235,7 +2587,7 @@ export default function DoctorMyConsultationsView() {
               variant="contained"
               onClick={handleSaveAnalysis}
               loading={prescriptionDialog.loading}
-              disabled={!analysisForm.analysisName.trim() || Number(analysisForm.price) <= 0}
+              disabled={analysisForm.analyse.length === 0 || Number(analysisForm.price) <= 0}
             >
               Créer l&apos;analyse
             </LoadingButton>
@@ -2243,114 +2595,18 @@ export default function DoctorMyConsultationsView() {
         </Dialog>
       )}
 
-      {/* Prescription Dialog */}
+      {/* Ordonnace Dialog */}
       {!prescriptionDialog.isAnalysis && (
         <Dialog open={prescriptionDialog.open} onClose={handleClosePrescriptionDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {prescriptionForm.type === 'ANALYSE' ? 'Créer une Analyse' : 'Ajouter une Prescription'}
+          Ajouter une Ordonnace
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select
-                value={prescriptionForm.type}
-                label="Type"
-                onChange={(e) => {
-                  setPrescriptionForm({ ...prescriptionForm, type: e.target.value });
-                  // Réinitialiser le formulaire d'analyse si on change de type
-                  if (e.target.value === 'ANALYSE') {
-                    setAnalysisForm({
-                      analysisName: '',
-                      analysisType: 'HEMATOLOGIE',
-                      sampleType: 'SANG',
-                      observations: '',
-                      urgent: false,
-                      price: 0,
-                    });
-                  }
-                }}
-              >
-                <MenuItem value="MEDICAMENT">Médicament</MenuItem>
-                <MenuItem value="ANALYSE">Analyse</MenuItem>
-                <MenuItem value="EXAMEN">Examen</MenuItem>
-                <MenuItem value="AUTRE">Autre</MenuItem>
-              </Select>
-            </FormControl>
-
-            {prescriptionForm.type === 'ANALYSE' ? (
-              <>
+            <>
                 <TextField
                   fullWidth
-                  label="Nom de l&apos;analyse *"
-                  value={analysisForm.analysisName}
-                  onChange={(e) => setAnalysisForm({ ...analysisForm, analysisName: e.target.value })}
-                  required
-                  placeholder="Ex: NFS, Glycémie, Cholestérol..."
-                />
-                <FormControl fullWidth>
-                  <InputLabel>Type d&apos;analyse</InputLabel>
-                  <Select
-                    value={analysisForm.analysisType}
-                    label="Type d&apos;analyse"
-                    onChange={(e) => setAnalysisForm({ ...analysisForm, analysisType: e.target.value })}
-                  >
-                    <MenuItem value="HEMATOLOGIE">Hématologie</MenuItem>
-                    <MenuItem value="BIOCHIMIE">Biochimie</MenuItem>
-                    <MenuItem value="IMMUNOLOGIE">Immunologie</MenuItem>
-                    <MenuItem value="MICROBIOLOGIE">Microbiologie</MenuItem>
-                    <MenuItem value="SEROLOGIE">Sérologie</MenuItem>
-                    <MenuItem value="PARASITOLOGIE">Parasitologie</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth>
-                  <InputLabel>Type d&apos;échantillon</InputLabel>
-                  <Select
-                    value={analysisForm.sampleType}
-                    label="Type d&apos;échantillon"
-                    onChange={(e) => setAnalysisForm({ ...analysisForm, sampleType: e.target.value })}
-                  >
-                    <MenuItem value="SANG">Sang</MenuItem>
-                    <MenuItem value="URINE">Urine</MenuItem>
-                    <MenuItem value="SELLES">Selles</MenuItem>
-                    <MenuItem value="SALIVE">Salive</MenuItem>
-                    <MenuItem value="AUTRE">Autre</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Observations"
-                  value={analysisForm.observations}
-                  onChange={(e) => setAnalysisForm({ ...analysisForm, observations: e.target.value })}
-                  placeholder="Observations ou notes sur l&apos;analyse..."
-                />
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Prix (FCFA)"
-                  value={analysisForm.price}
-                  onChange={(e) => setAnalysisForm({ ...analysisForm, price: parseFloat(e.target.value) || 0 })}
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">FCFA</InputAdornment>,
-                  }}
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={analysisForm.urgent}
-                      onChange={(e) => setAnalysisForm({ ...analysisForm, urgent: e.target.checked })}
-                    />
-                  }
-                  label="Urgent"
-                />
-              </>
-            ) : (
-              <>
-                <TextField
-                  fullWidth
-                  label="Nom du médicament / Examen"
+                  label="Nom du médicament"
                   value={prescriptionForm.label}
                   onChange={(e) => setPrescriptionForm({ ...prescriptionForm, label: e.target.value })}
                   required
@@ -2391,8 +2647,7 @@ export default function DoctorMyConsultationsView() {
                   }
                   label="Urgent"
                 />
-              </>
-            )}
+            </>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -2401,58 +2656,44 @@ export default function DoctorMyConsultationsView() {
             variant="contained"
             onClick={handleSavePrescription}
             loading={prescriptionDialog.loading}
-            disabled={
-              prescriptionForm.type === 'ANALYSE'
-                ? !analysisForm.analysisName.trim()
-                : !prescriptionForm.label.trim()
-            }
+            disabled={!prescriptionForm.label.trim()}
           >
-            {prescriptionForm.type === 'ANALYSE' ? 'Créer l&apos;analyse' : 'Ajouter'}
+            Ajouter
           </LoadingButton>
         </DialogActions>
       </Dialog>
       )}
 
-      {/* Certificat Dialog */}
+      {/* Arrêt de travail Dialog */}
       <Dialog open={certificatDialog.open} onClose={handleCloseCertificatDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Ajouter un Certificat Médical</DialogTitle>
+        <DialogTitle>Ajouter un Arrêt de travail</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
-            <FormControl fullWidth>
-              <InputLabel>Type de certificat</InputLabel>
-              <Select
-                value={certificatForm.type}
-                label="Type de certificat"
-                onChange={(e) => setCertificatForm({ ...certificatForm, type: e.target.value })}
-              >
-                <MenuItem value="ARRET_TRAVAIL">Arrêt de travail</MenuItem>
-                <MenuItem value="CERTIFICAT_MEDICAL">Certificat médical</MenuItem>
-                <MenuItem value="CERTIFICAT_APTITUDE">Certificat d&apos;aptitude</MenuItem>
-                <MenuItem value="AUTRE">Autre</MenuItem>
-              </Select>
-            </FormControl>
             <TextField
               fullWidth
-              multiline
-              rows={4}
-              label="Contenu du certificat"
-              value={certificatForm.content}
-              onChange={(e) => setCertificatForm({ ...certificatForm, content: e.target.value })}
-              required
-            />
-            <TextField
-              fullWidth
-              type="number"
-              label="Durée (en jours)"
-              value={certificatForm.durationDays}
-              onChange={(e) => setCertificatForm({ ...certificatForm, durationDays: parseInt(e.target.value, 10) || 0 })}
+              label="Type"
+              value="Arrêt de travail"
+              InputProps={{ readOnly: true }}
             />
             <TextField
               fullWidth
               type="date"
               label="Date de début"
               value={certificatForm.startDate}
-              onChange={(e) => setCertificatForm({ ...certificatForm, startDate: e.target.value })}
+              onChange={(e) =>
+                setCertificatForm((prev) => {
+                  const startDate = e.target.value;
+                  const endDate = prev.endDate;
+                  let durationDays = 0;
+                  if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
+                    const diff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+                    durationDays = diff >= 0 ? diff + 1 : 0;
+                  }
+                  return { ...prev, startDate, durationDays };
+                })
+              }
               InputLabelProps={{ shrink: true }}
             />
             <TextField
@@ -2460,8 +2701,28 @@ export default function DoctorMyConsultationsView() {
               type="date"
               label="Date de fin"
               value={certificatForm.endDate}
-              onChange={(e) => setCertificatForm({ ...certificatForm, endDate: e.target.value })}
+              onChange={(e) =>
+                setCertificatForm((prev) => {
+                  const endDate = e.target.value;
+                  const startDate = prev.startDate;
+                  let durationDays = 0;
+                  if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
+                    const diff = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+                    durationDays = diff >= 0 ? diff + 1 : 0;
+                  }
+                  return { ...prev, endDate, durationDays };
+                })
+              }
               InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              fullWidth
+              type="number"
+              label="Durée (en jours)"
+              value={certificatForm.durationDays}
+              InputProps={{ readOnly: true }}
             />
           </Stack>
         </DialogContent>
@@ -2471,7 +2732,7 @@ export default function DoctorMyConsultationsView() {
             variant="contained"
             onClick={handleSaveCertificat}
             loading={certificatDialog.loading}
-            disabled={!certificatForm.content.trim()}
+            disabled={!certificatForm.startDate || !certificatForm.endDate || certificatForm.durationDays <= 0}
           >
             Ajouter
           </LoadingButton>
@@ -2499,29 +2760,66 @@ export default function DoctorMyConsultationsView() {
             }
             return (
               <Stack spacing={2} sx={{ mt: 1 }}>
-              {analysisResultsDialog.results.map((result, index) => (
-                <Card key={result.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                  <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="subtitle2">{result.parameter}</Typography>
-                      {result.abnormal && <Chip label="Anormal" color="error" size="small" />}
-                    </Box>
-                    <Typography variant="body1">
-                      <strong>Valeur:</strong> {result.value} {result.unit}
-                    </Typography>
-                    {result.referenceValueMin && result.referenceValueMax && (
+              {isHematologyAnalysis(analysisResultsDialog.analysis) || isHematologyResults(analysisResultsDialog.results) ? (
+                <Card sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                  <Stack spacing={1.5}>
+                    <Typography variant="subtitle2">Hématologie</Typography>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Analyse</TableCell>
+                            <TableCell>Résultat</TableCell>
+                            <TableCell>Norme</TableCell>
+                            <TableCell>Statut</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {transformHematologyResults(analysisResultsDialog.results).filter((item) => item.hasValue).map((item) => (
+                            <TableRow key={item.key}>
+                              <TableCell>{item.nameWithUnit}</TableCell>
+                              <TableCell>{item.value}</TableCell>
+                              <TableCell>{item.norme}</TableCell>
+                              <TableCell>
+                                <Typography variant="body2">{getStatusUi(item.status).label}</Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    {transformHematologyResults(analysisResultsDialog.results).filter((item) => item.hasValue).length === 0 && (
                       <Typography variant="body2" color="text.secondary">
-                        <strong>Valeurs de référence:</strong> {result.referenceValueMin} - {result.referenceValueMax} {result.unit}
-                      </Typography>
-                    )}
-                    {result.comment && (
-                      <Typography variant="body2">
-                        <strong>Commentaire:</strong> {result.comment}
+                        Aucun résultat renseigné pour l&apos;hématologie.
                       </Typography>
                     )}
                   </Stack>
                 </Card>
-              ))}
+              ) : (
+                analysisResultsDialog.results.map((result, index) => (
+                  <Card key={result.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                    <Stack spacing={1}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="subtitle2">{result.parameter}</Typography>
+                        {result.abnormal && <Chip label="Anormal" color="error" size="small" />}
+                      </Box>
+                      <Typography variant="body1">
+                        <strong>Valeur:</strong> {result.value} {result.unit}
+                      </Typography>
+                      {result.referenceValueMin && result.referenceValueMax && (
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>Valeurs de référence:</strong> {result.referenceValueMin} - {result.referenceValueMax} {result.unit}
+                        </Typography>
+                      )}
+                      {result.comment && (
+                        <Typography variant="body2">
+                          <strong>Commentaire:</strong> {result.comment}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Card>
+                ))
+              )}
               </Stack>
             );
           })()}

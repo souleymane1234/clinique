@@ -1,4 +1,6 @@
-const base_url = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
+const rawBaseUrl = import.meta.env.VITE_BASE_URL || 'https://api.centremedical.preventic-afric.com/api';
+const normalizedBaseUrl = String(rawBaseUrl || '').replace(/\/+$/, '');
+const base_url = normalizedBaseUrl.endsWith('/api') ? normalizedBaseUrl : `${normalizedBaseUrl}/api`;
 // const base_url = 'http://localhost:3000/api';
 const base_url_asset = import.meta.env.VITE_BASE_URL_ASSET;
 
@@ -128,6 +130,9 @@ export const apiUrl = {
   laboratoryAnalysisReceive: (id) => `${base_url}/laboratory/analyses/${id}/receptionner`,
   laboratoryAnalysisPerform: (id) => `${base_url}/laboratory/analyses/${id}/realiser`,
   laboratoryAnalysisValidate: (id) => `${base_url}/laboratory/analyses/${id}/valider`,
+  actesBiologies: `${base_url}/actes-biologies`,
+  actesBiologiesItems: `${base_url}/actes-biologies-items`,
+  actesBiologiesInputsByActe: (id) => `${base_url}/actes-biologies/${id}/inputs`,
   // Laboratory Results
   laboratoryResultById: (id) => `${base_url}/laboratory/results/${id}`,
   // Laboratory Consommables

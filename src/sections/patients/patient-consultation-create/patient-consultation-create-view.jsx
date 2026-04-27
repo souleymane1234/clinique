@@ -14,7 +14,6 @@ import {
   Button,
   Select,
   Dialog,
-  Switch,
   Divider,
   MenuItem,
   TableRow,
@@ -30,7 +29,6 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
-  FormControlLabel,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
@@ -49,6 +47,11 @@ const CONSULTATION_TYPES = {
   PREMIERE_CONSULTATION: 'Première consultation',
   CONSULTATION_SUIVI: 'Consultation de suivi',
   URGENCE: 'Urgence',
+};
+
+const CONSULTATION_CATEGORIES = {
+  CONSULTATION_NORMALE: 'Consultation normale',
+  CONTROLE_GRATUIT: 'Controle gratuit',
 };
 
 const STATUS_COLORS = {
@@ -94,11 +97,10 @@ export default function PatientConsultationCreateView() {
   const [serviceTariffs, setServiceTariffs] = useState([]);
   const [loadingServiceTariffs, setLoadingServiceTariffs] = useState(false);
   const [paymentValidated, setPaymentValidated] = useState(false);
-  const [hasInsurance, setHasInsurance] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
     patientId: patientId || '',
     type: 'PREMIERE_CONSULTATION',
-    reason: '',
+    category: 'CONSULTATION_NORMALE',
     consultationDate: new Date().toISOString(),
     serviceTariffId: '',
   });
@@ -118,8 +120,6 @@ export default function PatientConsultationCreateView() {
         if (result.success) {
           const patientData = result.data?.patient || result.data;
           setPatient(patientData);
-          const insuranceType = String(patientData?.insuranceType || patientData?.insurance?.type || 'NONE').toUpperCase();
-          setHasInsurance(insuranceType !== 'NONE');
           setConsultationForm((prev) => ({ ...prev, patientId }));
         } else {
           showError('Erreur', 'Impossible de charger les informations du patient');
@@ -275,10 +275,14 @@ export default function PatientConsultationCreateView() {
     const loadServiceTariffs = async () => {
       setLoadingServiceTariffs(true);
       try {
-        const result = await ConsumApi.getPricingServicesActive();
+        const result = await ConsumApi.getPricingServices();
         if (result.success) {
           const list = Array.isArray(result.data) ? result.data : result.data?.data || result.data?.items || [];
-          setServiceTariffs(Array.isArray(list) ? list : []);
+          const consultationTariffs = (Array.isArray(list) ? list : []).filter(
+            (item) => String(item?.category || '').toUpperCase() === 'CONSULTATION'
+          );
+          consultationTariffs.sort((a, b) => Number(Boolean(b?.isActive)) - Number(Boolean(a?.isActive)));
+          setServiceTariffs(consultationTariffs);
         } else {
           setServiceTariffs([]);
         }
@@ -304,8 +308,8 @@ export default function PatientConsultationCreateView() {
   }, [serviceTariffs.length]);
 
   const handleCreateConsultation = async () => {
-    if (!consultationForm.patientId || !consultationForm.reason.trim()) {
-      showError('Erreur', 'Veuillez remplir tous les champs obligatoires (patient, motif)');
+    if (!consultationForm.patientId) {
+      showError('Erreur', 'Veuillez sélectionner un patient');
       return;
     }
     if (!consultationForm.serviceTariffId) {
@@ -334,8 +338,9 @@ export default function PatientConsultationCreateView() {
         medecinId: fallbackMedecinId,
         serviceTariffId: consultationForm.serviceTariffId,
         type: consultationForm.type,
+        category: consultationForm.category,
         consultationDate: consultationForm.consultationDate,
-        reason: consultationForm.reason,
+        reason: '',
         clinicalExamination: '',
         temperature: 0,
         systolicBloodPressure: 0,
@@ -378,8 +383,8 @@ export default function PatientConsultationCreateView() {
             patientId: consultationForm.patientId,
             serviceType: 'ACCUEIL',
             handledByUserId: userId,
-            reason: consultationForm.reason,
-            notes: consultationForm.reason,
+            reason: '',
+            notes: '',
           });
         } catch (e) {
           // tracking non bloquant
@@ -403,7 +408,7 @@ export default function PatientConsultationCreateView() {
         setConsultationForm({
           patientId: patientId || '',
           type: 'PREMIERE_CONSULTATION',
-          reason: '',
+          category: 'CONSULTATION_NORMALE',
           consultationDate: new Date().toISOString(),
           serviceTariffId: serviceTariffs.length > 0 ? serviceTariffs[0].id : '',
         });
@@ -420,7 +425,6 @@ export default function PatientConsultationCreateView() {
   const selectedTariff = serviceTariffs.find((t) => t.id === consultationForm.serviceTariffId) || null;
   const createDisabledReason = (() => {
     if (!consultationForm.patientId) return 'Patient manquant';
-    if (!consultationForm.reason.trim()) return 'Veuillez saisir le motif de consultation';
     if (!consultationForm.serviceTariffId) return 'Veuillez sélectionner le service de consultation';
     if (!paymentValidated) return 'Veuillez valider le paiement avant de créer la consultation';
     return '';
@@ -510,10 +514,11 @@ export default function PatientConsultationCreateView() {
         ...editForm,
         patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
         medecinId: selectedMedecinId,
+        serviceTariffId: selectedConsultation.serviceTariffId || selectedConsultation.serviceTariff?.id,
         type: selectedConsultation.type,
+        category: selectedConsultation.category || 'CONSULTATION_NORMALE',
         status: selectedConsultation.status,
         consultationDate: selectedConsultation.consultationDate,
-        reason: selectedConsultation.reason,
       };
 
       const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
@@ -722,25 +727,6 @@ export default function PatientConsultationCreateView() {
               </Alert>
 
               <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={hasInsurance}
-                        onChange={(e) => setHasInsurance(e.target.checked)}
-                      />
-                    }
-                    label="Le patient a une assurance"
-                  />
-                  {hasInsurance && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                      {patient?.insuranceCompany || patient?.insurance?.company
-                        ? `Assurance: ${patient.insuranceCompany || patient.insurance?.company}`
-                        : 'Assurance sélectionnée'}
-                    </Typography>
-                  )}
-                </Grid>
-
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth required>
                     <InputLabel>Type de consultation</InputLabel>
@@ -750,6 +736,23 @@ export default function PatientConsultationCreateView() {
                       onChange={(e) => setConsultationForm((prev) => ({ ...prev, type: e.target.value }))}
                     >
                       {Object.entries(CONSULTATION_TYPES).map(([value, label]) => (
+                        <MenuItem key={value} value={value}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Catégorie</InputLabel>
+                    <Select
+                      value={consultationForm.category}
+                      label="Catégorie"
+                      onChange={(e) => setConsultationForm((prev) => ({ ...prev, category: e.target.value }))}
+                    >
+                      {Object.entries(CONSULTATION_CATEGORIES).map(([value, label]) => (
                         <MenuItem key={value} value={value}>
                           {label}
                         </MenuItem>
@@ -776,7 +779,7 @@ export default function PatientConsultationCreateView() {
                       </MenuItem>
                       {serviceTariffs.map((t) => (
                         <MenuItem key={t.id} value={t.id}>
-                          {t.name} {t.category ? `— ${t.category}` : ''}
+                          {t.name} {t.dayType ? `— ${t.dayType}` : ''} {!t.isActive ? '— Inactif' : ''}
                         </MenuItem>
                       ))}
                     </Select>
@@ -788,24 +791,11 @@ export default function PatientConsultationCreateView() {
                   )}
                 </Grid>
 
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    required
-                    multiline
-                    rows={3}
-                    label="Motif de consultation"
-                    value={consultationForm.reason}
-                    onChange={(e) => setConsultationForm((prev) => ({ ...prev, reason: e.target.value }))}
-                    placeholder="Décrire le motif de la consultation..."
-                  />
-                </Grid>
-
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     type="datetime-local"
-                    label="Date et heure de consultation"
+                    label="Date et heure de création"
                     value={
                       consultationForm.consultationDate
                         ? new Date(consultationForm.consultationDate).toISOString().slice(0, 16)
@@ -876,7 +866,6 @@ export default function PatientConsultationCreateView() {
                         <TableCell>Médecin</TableCell>
                         <TableCell>Type</TableCell>
                         <TableCell>Date</TableCell>
-                        <TableCell>Motif</TableCell>
                         <TableCell>Statut</TableCell>
                         {canViewConsultationDetails && <TableCell align="right">Actions</TableCell>}
                       </TableRow>
@@ -909,11 +898,6 @@ export default function PatientConsultationCreateView() {
                           <TableCell>
                             <Typography variant="body2">
                               {fDateTime(consultation.consultationDate || consultation.createdAt)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                              {consultation.reason || 'N/A'}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -1121,7 +1105,7 @@ export default function PatientConsultationCreateView() {
                     <TextField
                       fullWidth
                       type="number"
-                      label="Taille (m)"
+                      label="Taille (cm)"
                       value={editForm.height}
                       onChange={(e) => setEditForm({ ...editForm, height: parseFloat(e.target.value) || 0 })}
                       disabled={!detailsDialog.editing}
@@ -1130,6 +1114,8 @@ export default function PatientConsultationCreateView() {
                   </Grid>
                 </Grid>
 
+                {!isInfirmier && (
+                  <>
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
@@ -1256,6 +1242,8 @@ export default function PatientConsultationCreateView() {
                     </Grid>
                   )}
                 </Grid>
+                  </>
+                )}
               </Stack>
             )
           )}

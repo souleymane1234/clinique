@@ -203,6 +203,8 @@ export default class ConsumApi {
         urlLower.includes('/appointments') ||
         urlLower.includes('/appointment') ||
         urlLower.includes('/laboratory') ||
+        urlLower.includes('/actes-biologies') ||
+        urlLower.includes('/actes-biologies-items') ||
         urlLower.includes('/allergy') ||
         urlLower.includes('/allergie') ||
         urlLower.includes('/antecedent') ||
@@ -3019,7 +3021,10 @@ export default class ConsumApi {
       // Contact
       phone: data.phone || data.telephone || '',
       email: data.email || '',
-      address: data.address || data.adresse || '',
+      currentResidenceAddress:
+        data.currentResidenceAddress || data.current_residence_address || data.address || data.adresse || '',
+      permanentResidenceAddress:
+        data.permanentResidenceAddress || data.permanent_residence_address || '',
       city: data.city || data.ville || '',
       country: data.country || data.pays || '',
       
@@ -3798,7 +3803,7 @@ export default class ConsumApi {
   }
 
   static async createConsultation(data) {
-    // Schéma API POST /api/consultations: patientId, medecinId?, serviceTariffId?, type, consultationDate, reason + champs cliniques
+    // Schéma API POST /api/consultations: patientId, medecinId, serviceTariffId, type, category, consultationDate + champs cliniques
     // Ne pas envoyer medecinId/nurseId quand vides (évite 400 si le backend valide en UUID)
     const medecinId = data.medecinId && String(data.medecinId).trim() ? data.medecinId : undefined;
     let nurseId = data.nurseId && String(data.nurseId).trim() ? data.nurseId : undefined;
@@ -3809,6 +3814,7 @@ export default class ConsumApi {
     const normalizedData = {
       patientId: data.patientId || '',
       type: data.type || 'PREMIERE_CONSULTATION',
+      category: data.category || 'CONSULTATION_NORMALE',
       consultationDate: data.consultationDate || new Date().toISOString(),
       reason: data.reason || '',
       clinicalExamination: data.clinicalExamination || '',
@@ -3828,6 +3834,7 @@ export default class ConsumApi {
       hospitalizationRequired: Boolean(data.hospitalizationRequired),
       hospitalizationReason: data.hospitalizationReason || '',
     };
+    if (Array.isArray(data.analysisItems)) normalizedData.analysisItems = data.analysisItems;
     if (data.status) normalizedData.status = data.status;
     if (medecinId) normalizedData.medecinId = medecinId;
     if (nurseId) normalizedData.nurseId = nurseId;
@@ -3849,14 +3856,20 @@ export default class ConsumApi {
     const medecinId = data.medecinId && String(data.medecinId).trim() ? data.medecinId : undefined;
     let nurseId = data.nurseId != null && String(data.nurseId).trim() ? data.nurseId : undefined;
     if (nurseId === undefined && data.infirmierId != null && String(data.infirmierId).trim()) nurseId = data.infirmierId;
+    const serviceTariffId = data.serviceTariffId && String(data.serviceTariffId).trim() ? data.serviceTariffId : undefined;
+    const nextAppointment =
+      data.nextAppointment != null && String(data.nextAppointment).trim() !== ''
+        ? String(data.nextAppointment)
+        : undefined;
     const normalizedData = {
       patientId: data.patientId || '',
       ...(medecinId && { medecinId }),
       ...(nurseId !== undefined && { nurseId }),
+      ...(serviceTariffId && { serviceTariffId }),
       type: data.type || 'PREMIERE_CONSULTATION',
+      category: data.category || 'CONSULTATION_NORMALE',
       status: data.status || 'EN_ATTENTE',
       consultationDate: data.consultationDate || new Date().toISOString(),
-      reason: data.reason || '',
       clinicalExamination: data.clinicalExamination || '',
       temperature: (() => {
         if (data.temperature === null || data.temperature === undefined || data.temperature === '') return 0;
@@ -3911,7 +3924,7 @@ export default class ConsumApi {
       treatment: data.treatment || '',
       recommendations: data.recommendations || '',
       privateNotes: data.privateNotes || '',
-      nextAppointment: data.nextAppointment || null,
+      ...(nextAppointment !== undefined && { nextAppointment }),
       hospitalizationRequired: data.hospitalizationRequired || false,
       hospitalizationReason: data.hospitalizationReason || '',
     };
@@ -4563,7 +4576,7 @@ export default class ConsumApi {
       if (result.success && result.data) {
         return {
           success: true,
-          data: result.data.analysis || result.data,
+          data: result.data.analyse || result.data.analysis || result.data,
           message: result.data.message || 'Analyse créée avec succès',
           errors: [],
         };
@@ -4577,6 +4590,36 @@ export default class ConsumApi {
         message: 'Erreur lors de la création de l\'analyse',
         errors: [error.message],
       };
+    }
+  }
+
+  static async getActesBiologies() {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.actesBiologies);
+    } catch (error) {
+      console.error('Error getActesBiologies:', error);
+      return { success: false, message: 'Erreur lors du chargement des actes biologies', errors: [error?.message] };
+    }
+  }
+
+  static async getActesBiologieItems(acteBiologieId) {
+    try {
+      const params = new URLSearchParams();
+      if (acteBiologieId) params.set('acteBiologieId', acteBiologieId);
+      const url = params.toString() ? `${apiUrl.actesBiologiesItems}?${params.toString()}` : apiUrl.actesBiologiesItems;
+      return await this._authenticatedRequest('GET', url);
+    } catch (error) {
+      console.error('Error getActesBiologieItems:', error);
+      return { success: false, message: 'Erreur lors du chargement des items', errors: [error?.message] };
+    }
+  }
+
+  static async getActesBiologieInputs(acteBiologieId) {
+    try {
+      return await this._authenticatedRequest('GET', apiUrl.actesBiologiesInputsByActe(acteBiologieId));
+    } catch (error) {
+      console.error('Error getActesBiologieInputs:', error);
+      return { success: false, message: 'Erreur lors du chargement des inputs', errors: [error?.message] };
     }
   }
 
