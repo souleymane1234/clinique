@@ -458,9 +458,28 @@ const FacturePdfDocument = ({ facture }) => {
           </View>
 
           {/* Section paiements (uniquement pour factures normales) */}
-          {!isProforma && facture.montantPaye > 0 && (
+          {(isPaymentReceipt || !isProforma) && facture.montantPaye > 0 && (
             <View style={styles.paymentSection}>
               <Text style={styles.infoLabel}>ÉTAT DES PAIEMENTS</Text>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Montant total facture:</Text>
+                <Text style={styles.paymentValue}>{formatNumber(facture.montantTotal || totalHT)} FCFA</Text>
+              </View>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Montant payé par l&apos;assurance:</Text>
+                <Text style={styles.paymentValue}>{formatNumber(facture.montantAssurance || 0)} FCFA</Text>
+              </View>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Montant payé par le patient:</Text>
+                <Text style={styles.paymentValue}>
+                  {formatNumber(
+                    facture.montantPatient !== undefined && facture.montantPatient !== null
+                      ? facture.montantPatient
+                      : facture.montantPaye || 0
+                  )}{' '}
+                  FCFA
+                </Text>
+              </View>
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Montant payé:</Text>
                 <Text style={styles.paymentValue}>{formatNumber(facture.montantPaye || 0)} FCFA</Text>

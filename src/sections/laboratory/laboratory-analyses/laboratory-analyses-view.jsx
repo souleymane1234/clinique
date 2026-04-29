@@ -554,8 +554,7 @@ export default function LaboratoryAnalysesView() {
     }
   };
 
-  const handlePrintResultsDialog = async () => {
-    const { analysisId, results } = resultsDialog;
+  const printAnalysisResults = async (analysisId, results) => {
     if (!analysisId || !Array.isArray(results) || results.length === 0) {
       showError('Erreur', 'Aucun résultat à imprimer');
       return;
@@ -749,6 +748,26 @@ export default function LaboratoryAnalysesView() {
     }, 250);
   };
 
+  const handlePrintResultsDialog = async () => {
+    const { analysisId, results } = resultsDialog;
+    await printAnalysisResults(analysisId, results);
+  };
+
+  const handlePrintResultsFromTable = async (analysisId) => {
+    if (!analysisId) {
+      showError('Erreur', 'Analyse introuvable');
+      return;
+    }
+    try {
+      const result = await ConsumApi.getLaboratoryAnalysisResults(analysisId);
+      const rows = result.success ? result.data || [] : [];
+      await printAnalysisResults(analysisId, rows);
+    } catch (error) {
+      console.error('Error loading analysis results for print:', error);
+      showError('Erreur', 'Impossible de charger les résultats pour impression');
+    }
+  };
+
   const handleCompleteAnalysis = async (analysisId) => {
     try {
       const completeResult = await ConsumApi.completeLaboratoryAnalysis(analysisId);
@@ -866,7 +885,6 @@ export default function LaboratoryAnalysesView() {
                       <TableCell>Numéro</TableCell>
                       <TableCell>Date</TableCell>
                       <TableCell>Patient</TableCell>
-                      <TableCell>Analyse</TableCell>
                       <TableCell>Statut paiement</TableCell>
                       <TableCell>Échantillon</TableCell>
                       <TableCell>Statut</TableCell>
@@ -878,7 +896,7 @@ export default function LaboratoryAnalysesView() {
                       if (loading) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                            <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                               <LoadingButton loading>Chargement...</LoadingButton>
                             </TableCell>
                           </TableRow>
@@ -887,7 +905,7 @@ export default function LaboratoryAnalysesView() {
                       if (analyses.length === 0) {
                         return (
                           <TableRow>
-                            <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                            <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                               <Typography variant="body2" color="text.secondary">
                                 Aucune analyse trouvée
                               </Typography>
@@ -908,7 +926,6 @@ export default function LaboratoryAnalysesView() {
                               return fullName || 'N/A';
                             })()}
                           </TableCell>
-                          <TableCell>{analysis.analysisName || 'N/A'}</TableCell>
                           <TableCell>
                             {(() => {
                               const pay = paymentStatusByAnalysisId[analysis.id]?.paid;
@@ -953,6 +970,16 @@ export default function LaboratoryAnalysesView() {
                                   onClick={() => handleCompleteAnalysis(analysis.id)}
                                 >
                                   Terminer et valider
+                                </Button>
+                              )}
+                              {(analysis.status === 'VALIDE' || analysis.status === 'VALIDEE') && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<Iconify icon="solar:printer-bold" />}
+                                  onClick={() => handlePrintResultsFromTable(analysis.id)}
+                                >
+                                  Imprimer
                                 </Button>
                               )}
                             </Stack>

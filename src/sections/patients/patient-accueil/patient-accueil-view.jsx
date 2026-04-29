@@ -150,6 +150,8 @@ export default function PatientAccueilView() {
   const [billingPaymentForm, setBillingPaymentForm] = useState({
     method: 'ESPECES',
     amount: 0,
+    insuranceAmount: 0,
+    patientAmount: 0,
     reference: '',
     details: '',
   });
@@ -704,9 +706,12 @@ export default function PatientAccueilView() {
   const handleOpenBillingPayment = (invoice) => {
     const total = Number(invoice.totalAmount ?? 0);
     const paid = Number(invoice.paidAmount ?? 0);
+    const due = Math.max(0, total - paid);
     setBillingPaymentForm({
       method: 'ESPECES',
-      amount: Math.max(0, total - paid),
+      amount: due,
+      insuranceAmount: 0,
+      patientAmount: due,
       reference: '',
       details: '',
     });
@@ -718,7 +723,7 @@ export default function PatientAccueilView() {
     setBillingPaymentSubmitting(false);
   };
 
-  const buildBillingFacturePdfData = async (invoice, fallbackAmount = 0) => {
+  const buildBillingFacturePdfData = async (invoice, fallbackAmount = 0, paymentBreakdown = null) => {
     const patientName = invoice?.patient
       ? `${invoice.patient.firstName || ''} ${invoice.patient.lastName || ''}`.trim()
       : 'Patient';
@@ -802,17 +807,24 @@ export default function PatientAccueilView() {
       montantTotal: totalAmount,
       montantPaye: paidAmount,
       montantRestant: remainingAmount,
+      montantAssurance: Number(paymentBreakdown?.insuranceAmount ?? 0),
+      montantPatient: Number(paymentBreakdown?.patientAmount ?? paidAmount),
       status: String(invoice?.status || 'pending').toLowerCase(),
       items: receiptItems,
     };
   };
 
-  const openBillingInvoicePdf = async (invoiceId, fallbackAmount = 0, receiptWindow = null) => {
+  const openBillingInvoicePdf = async (
+    invoiceId,
+    fallbackAmount = 0,
+    receiptWindow = null,
+    paymentBreakdown = null
+  ) => {
     const invoiceRes = await ConsumApi.getBillingInvoiceById(invoiceId);
     if (!invoiceRes?.success || !invoiceRes.data) {
       throw new Error(invoiceRes?.message || 'Impossible de charger la facture pour impression.');
     }
-    const facture = await buildBillingFacturePdfData(invoiceRes.data, fallbackAmount);
+    const facture = await buildBillingFacturePdfData(invoiceRes.data, fallbackAmount, paymentBreakdown);
     const blob = await pdf(<FacturePdfDocument facture={facture} />).toBlob();
     const url = window.URL.createObjectURL(blob);
     if (receiptWindow && !receiptWindow.closed) {
@@ -969,7 +981,23 @@ export default function PatientAccueilView() {
   const handleSubmitBillingPayment = async () => {
     const inv = billingPaymentDialog.invoice;
     if (!inv?.id) return;
-    if (Number(billingPaymentForm.amount) <= 0) {
+    const totalToSettle = Math.max(0, Number(inv.totalAmount ?? 0) - Number(inv.paidAmount ?? 0));
+    const insuranceAmount = Math.max(0, Number(billingPaymentForm.insuranceAmount ?? 0));
+    const patientAmount = Math.max(0, Number(billingPaymentForm.patientAmount ?? 0));
+    const totalEntered = insuranceAmount + patientAmount;
+
+    if (totalToSettle <= 0) {
+      showError('Paiement', 'Cette facture est déjà réglée.');
+      return;
+    }
+    if (Math.abs(totalEntered - totalToSettle) > 0.001) {
+      showError(
+        'Erreur',
+        'Le total saisi est invalide: montant assurance + montant patient doit être égal au montant total à régler.'
+      );
+      return;
+    }
+    if (patientAmount < 0 || insuranceAmount < 0) {
       showError('Erreur', 'Le montant doit être supérieur à 0.');
       return;
     }
@@ -983,9 +1011,14 @@ export default function PatientAccueilView() {
       const payRes = await ConsumApi.createBillingPayment({
         invoiceId: inv.id,
         method: billingPaymentForm.method,
-        amount: Number(billingPaymentForm.amount),
+        amount: totalEntered,
         reference: billingPaymentForm.reference?.trim() || '',
-        details: billingPaymentForm.details?.trim() || '',
+        details: [
+          billingPaymentForm.details?.trim() || '',
+          `Assurance: ${insuranceAmount}; Patient: ${patientAmount}; Total: ${totalEntered}`,
+        ]
+          .filter(Boolean)
+          .join(' | '),
       });
       if (!payRes.success) {
         showApiResponse(payRes, { successTitle: '', errorTitle: 'Paiement' });
@@ -1001,8 +1034,12 @@ export default function PatientAccueilView() {
       try {
         await openBillingInvoicePdf(
           inv.id,
-          Number(inv.totalAmount ?? billingPaymentForm.amount ?? 0),
-          receiptWindow
+          Number(inv.totalAmount ?? totalEntered ?? 0),
+          receiptWindow,
+          {
+            insuranceAmount,
+            patientAmount,
+          }
         );
       } catch (pdfError) {
         console.error('Billing invoice PDF error:', pdfError);
@@ -1276,11 +1313,22 @@ export default function PatientAccueilView() {
         <DialogContent>
           {billingPaymentDialog.invoice && (
             <Stack spacing={2} sx={{ mt: 1 }}>
+              {(() => {
+                const invInsuranceType = String(billingPaymentDialog.invoice?.patient?.insuranceType || '').toUpperCase();
+                const hasInsurance =
+                  invInsuranceType && invInsuranceType !== 'NONE'
+                    ? true
+                    : Boolean(
+                        billingPaymentDialog.invoice?.patient?.insuranceCompany ||
+                          billingPaymentDialog.invoice?.patient?.insuranceNumber
+                      );
+                return (
+                  <>
               <Typography variant="body2" color="text.secondary">
                 Facture{' '}
                 <strong>{billingPaymentDialog.invoice.invoiceNumber || billingPaymentDialog.invoice.id?.slice(0, 8)}</strong>
                 {' — '}
-                Reste à payer :{' '}
+                Montant total à régler :{' '}
                 <strong>
                   {Math.max(
                     0,
@@ -1306,15 +1354,59 @@ export default function PatientAccueilView() {
               <TextField
                 fullWidth
                 type="number"
-                label="Montant"
+                label="Montant total"
                 value={billingPaymentForm.amount}
-                onChange={(e) => setBillingPaymentForm((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: (
+                    <InputAdornment position="end">{billingPaymentDialog.invoice.currency || 'FCFA'}</InputAdornment>
+                  ),
+                }}
+              />
+              {hasInsurance && (
+              <TextField
+                fullWidth
+                type="number"
+                label="Montant pris en charge par l'assurance"
+                value={billingPaymentForm.insuranceAmount}
+                onChange={(e) =>
+                  setBillingPaymentForm((p) => ({
+                    ...p,
+                    insuranceAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                  }))
+                }
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">{billingPaymentDialog.invoice.currency || 'FCFA'}</InputAdornment>
                   ),
                 }}
               />
+              )}
+              <TextField
+                fullWidth
+                type="number"
+                label="Montant payé par le patient"
+                value={billingPaymentForm.patientAmount}
+                onChange={(e) =>
+                  setBillingPaymentForm((p) => ({
+                    ...p,
+                    patientAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                  }))
+                }
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">{billingPaymentDialog.invoice.currency || 'FCFA'}</InputAdornment>
+                  ),
+                }}
+                helperText={`Vérification: ${(
+                  Number(billingPaymentForm.insuranceAmount || 0) + Number(billingPaymentForm.patientAmount || 0)
+                ).toLocaleString('fr-FR')} / ${Number(billingPaymentForm.amount || 0).toLocaleString('fr-FR')} ${
+                  billingPaymentDialog.invoice.currency || 'FCFA'
+                }`}
+              />
+                  </>
+                );
+              })()}
               <TextField
                 fullWidth
                 label="Référence (optionnel)"

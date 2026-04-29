@@ -30,6 +30,7 @@ import {
   DialogContent,
   DialogActions,
   TableContainer,
+  InputAdornment,
 } from '@mui/material';
 
 import { useNotification } from 'src/hooks/useNotification';
@@ -148,7 +149,15 @@ export default function PatientConsultationCreateView() {
   const [paymentValidated, setPaymentValidated] = useState(false);
   const [validatingPayment, setValidatingPayment] = useState(false);
   const [serviceInvoice, setServiceInvoice] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('ESPECES');
+  const [paymentDialog, setPaymentDialog] = useState({ open: false });
+  const [paymentForm, setPaymentForm] = useState({
+    method: 'ESPECES',
+    amount: 0,
+    insuranceAmount: 0,
+    patientAmount: 0,
+    reference: '',
+    details: '',
+  });
   const [invoicePdfLoading, setInvoicePdfLoading] = useState(false);
   const [consultationAnalyses, setConsultationAnalyses] = useState([]);
   const [loadingConsultationAnalyses, setLoadingConsultationAnalyses] = useState(false);
@@ -469,7 +478,14 @@ export default function PatientConsultationCreateView() {
         });
         setPaymentValidated(false);
         setServiceInvoice(null);
-        setPaymentMethod('ESPECES');
+        setPaymentForm({
+          method: 'ESPECES',
+          amount: 0,
+          insuranceAmount: 0,
+          patientAmount: 0,
+          reference: '',
+          details: '',
+        });
       }
     } catch (error) {
       console.error('Error creating consultation:', error);
@@ -483,10 +499,10 @@ export default function PatientConsultationCreateView() {
   const createDisabledReason = (() => {
     if (!consultationForm.patientId) return 'Patient manquant';
     if (!consultationForm.serviceTariffId) return 'Veuillez sélectionner le service de consultation';
-    if (!paymentValidated) return 'Veuillez valider le paiement avant de créer la consultation';
+    if (!paymentValidated) return 'Veuillez payer avant de créer la consultation';
     return '';
   })();
-  const handleValidatePayment = async () => {
+  const handleOpenPaymentDialog = () => {
     if (!consultationForm.serviceTariffId) {
       showError('Erreur', 'Veuillez sélectionner le service de consultation avant le paiement.');
       return;
@@ -506,6 +522,32 @@ export default function PatientConsultationCreateView() {
       showSuccess('Paiement', 'Consultation gratuite: aucune facture requise.');
       return;
     }
+    setPaymentForm((prev) => ({
+      ...prev,
+      amount,
+      insuranceAmount: 0,
+      patientAmount: amount,
+    }));
+    setPaymentDialog({ open: true });
+  };
+
+  const handleClosePaymentDialog = () => {
+    setPaymentDialog({ open: false });
+  };
+
+  const handleValidatePayment = async () => {
+    const amount = Number(paymentForm.amount ?? selectedTariff?.price ?? 0);
+    const insuranceAmount = Math.max(0, Number(paymentForm.insuranceAmount ?? 0));
+    const patientAmount = Math.max(0, Number(paymentForm.patientAmount ?? 0));
+    const splitTotal = insuranceAmount + patientAmount;
+    if (amount <= 0) {
+      showError('Erreur', 'Le montant à payer doit être supérieur à 0.');
+      return;
+    }
+    if (Math.abs(splitTotal - amount) > 0.001) {
+      showError('Erreur', 'Montant assurance + montant patient doit être égal au montant total.');
+      return;
+    }
 
     setValidatingPayment(true);
     try {
@@ -514,8 +556,8 @@ export default function PatientConsultationCreateView() {
         consultationId: null,
         totalAmount: amount,
         insuranceAdjustedAmount: amount,
-        currency: paymentMethod,
-        note: `Facture service consultation - ${selectedTariff?.name || 'Consultation'} - paiement: ${paymentMethod}`,
+        currency: paymentForm.method,
+        note: `Facture service consultation - ${selectedTariff?.name || 'Consultation'} - paiement: ${paymentForm.method}`,
       });
       const processed = showApiResponse(invoiceRes, {
         successTitle: 'Facture générée',
@@ -539,10 +581,16 @@ export default function PatientConsultationCreateView() {
       if (remainingAmount > 0) {
         const payRes = await ConsumApi.createBillingPayment({
           invoiceId: billingInvoiceId,
-          method: paymentMethod,
-          amount: remainingAmount,
-          reference: '',
-          details: `Paiement consultation - ${selectedTariff?.name || 'Consultation'}`,
+          method: paymentForm.method,
+          amount: splitTotal,
+          reference: paymentForm.reference?.trim() || '',
+          details: [
+            paymentForm.details?.trim() || '',
+            `Paiement consultation - ${selectedTariff?.name || 'Consultation'}`,
+            `Assurance: ${insuranceAmount}; Patient: ${patientAmount}; Total: ${splitTotal}`,
+          ]
+            .filter(Boolean)
+            .join(' | '),
         });
         if (!payRes.success) {
           showApiResponse(payRes, { successTitle: '', errorTitle: 'Paiement' });
@@ -568,6 +616,7 @@ export default function PatientConsultationCreateView() {
 
       setServiceInvoice(finalInvoice);
       setPaymentValidated(true);
+      setPaymentDialog({ open: false });
       showSuccess('Paiement', 'Facture générée et paiement enregistré.');
       if (billingInvoiceId) {
         setTimeout(() => {
@@ -592,6 +641,28 @@ export default function PatientConsultationCreateView() {
     const amount = Number(invoice?.totalAmount ?? selectedTariff?.price ?? 0);
     const paid = Number(invoice?.paidAmount ?? 0);
     const paidFlag = isBillingInvoicePaid(invoice);
+    let paymentEntries = [];
+    if (Array.isArray(invoice?.payments)) {
+      paymentEntries = invoice.payments;
+    } else if (Array.isArray(invoice?.paymentHistory)) {
+      paymentEntries = invoice.paymentHistory;
+    }
+    const extractBreakdownFromText = (text) => {
+      if (!text) return null;
+      const insuranceMatch = String(text).match(/Assurance:\s*([0-9]+(?:[.,][0-9]+)?)/i);
+      const patientMatch = String(text).match(/Patient:\s*([0-9]+(?:[.,][0-9]+)?)/i);
+      if (!insuranceMatch && !patientMatch) return null;
+      const insuranceAmount = Number(String(insuranceMatch?.[1] || '0').replace(',', '.')) || 0;
+      const patientAmount = Number(String(patientMatch?.[1] || '0').replace(',', '.')) || 0;
+      return { insuranceAmount, patientAmount };
+    };
+    const lastPaymentWithBreakdown = [...paymentEntries]
+      .reverse()
+      .map((entry) => extractBreakdownFromText(entry?.details || entry?.description || entry?.note || ''))
+      .find(Boolean);
+    const montantAssurance = Number(lastPaymentWithBreakdown?.insuranceAmount ?? 0);
+    const montantPatient = Number(lastPaymentWithBreakdown?.patientAmount ?? paid);
+
     return {
       id: invoice?.id,
       numeroFacture: invoice?.invoiceNumber || invoice?.id?.slice(0, 8),
@@ -604,6 +675,8 @@ export default function PatientConsultationCreateView() {
       consultationId: invoice?.consultation?.id || undefined,
       montantTotal: amount,
       montantPaye: paid,
+      montantAssurance,
+      montantPatient,
       montantRestant: Math.max(0, amount - paid),
       status: paidFlag ? 'paid' : String(invoice?.status || 'pending').toLowerCase(),
       items: [
@@ -920,13 +993,6 @@ export default function PatientConsultationCreateView() {
     return null;
   }
 
-  let validatePaymentButtonLabel = 'Valider le paiement';
-  if (paymentValidated) {
-    validatePaymentButtonLabel = 'Paiement validé';
-  } else if (validatingPayment) {
-    validatePaymentButtonLabel = 'Génération de la facture...';
-  }
-
   return (
     <>
       <Helmet>
@@ -1067,29 +1133,15 @@ export default function PatientConsultationCreateView() {
               </Grid>
 
               <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
-                <FormControl size="small" sx={{ minWidth: 220 }}>
-                  <InputLabel>Moyen de paiement</InputLabel>
-                  <Select
-                    label="Moyen de paiement"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    disabled={paymentValidated || validatingPayment}
-                  >
-                    <MenuItem value="ESPECES">Espèces</MenuItem>
-                    <MenuItem value="MOBILE_MONEY">Mobile Money</MenuItem>
-                    <MenuItem value="CARTE_BANCAIRE">Carte bancaire</MenuItem>
-                    <MenuItem value="VIREMENT">Virement</MenuItem>
-                  </Select>
-                </FormControl>
                 <Button onClick={handleCancel}>Annuler</Button>
                 <LoadingButton
                   variant="outlined"
                   color={paymentValidated ? 'success' : 'primary'}
-                  onClick={handleValidatePayment}
+                  onClick={handleOpenPaymentDialog}
                   loading={validatingPayment}
                   disabled={!consultationForm.serviceTariffId || paymentValidated || validatingPayment}
                 >
-                  {validatePaymentButtonLabel}
+                  {paymentValidated ? 'Paiement validé' : 'Payer'}
                 </LoadingButton>
                 <LoadingButton
                   variant="contained"
@@ -1605,6 +1657,102 @@ export default function PatientConsultationCreateView() {
               Transférer au médecin
             </LoadingButton>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog choix du médecin pour le transfert */}
+      <Dialog open={paymentDialog.open} onClose={handleClosePaymentDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Payer la consultation</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              fullWidth
+              label="Montant à payer"
+              type="number"
+              value={paymentForm.amount}
+              InputProps={{
+                readOnly: true,
+                endAdornment: <InputAdornment position="end">FCFA</InputAdornment>,
+              }}
+            />
+            <TextField
+              fullWidth
+              label="Montant pris en charge par l'assurance"
+              type="number"
+              value={paymentForm.insuranceAmount}
+              onChange={(e) =>
+                setPaymentForm((prev) => {
+                  const totalAmount = Math.max(0, Number(prev.amount || 0));
+                  const insuranceAmount = Math.max(0, parseFloat(e.target.value) || 0);
+                  const normalizedInsurance = Math.min(insuranceAmount, totalAmount);
+                  return {
+                    ...prev,
+                    insuranceAmount: normalizedInsurance,
+                    patientAmount: Math.max(0, totalAmount - normalizedInsurance),
+                  };
+                })
+              }
+              InputProps={{
+                endAdornment: <InputAdornment position="end">FCFA</InputAdornment>,
+              }}
+            />
+            <TextField
+              fullWidth
+              label="Montant payé par le patient"
+              type="number"
+              value={paymentForm.patientAmount}
+              onChange={(e) =>
+                setPaymentForm((prev) => ({
+                  ...prev,
+                  patientAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                }))
+              }
+              InputProps={{
+                endAdornment: <InputAdornment position="end">FCFA</InputAdornment>,
+              }}
+              helperText={`Vérification: ${(
+                Number(paymentForm.insuranceAmount || 0) + Number(paymentForm.patientAmount || 0)
+              ).toLocaleString('fr-FR')} / ${Number(paymentForm.amount || 0).toLocaleString('fr-FR')} FCFA`}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Moyen de paiement</InputLabel>
+              <Select
+                label="Moyen de paiement"
+                value={paymentForm.method}
+                onChange={(e) => setPaymentForm((prev) => ({ ...prev, method: e.target.value }))}
+                disabled={validatingPayment}
+              >
+                <MenuItem value="ESPECES">Espèces</MenuItem>
+                <MenuItem value="MOBILE_MONEY">Mobile Money</MenuItem>
+                <MenuItem value="CARTE_BANCAIRE">Carte bancaire</MenuItem>
+                <MenuItem value="VIREMENT">Virement</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              label="Référence (optionnel)"
+              value={paymentForm.reference}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, reference: e.target.value }))}
+              disabled={validatingPayment}
+            />
+            <TextField
+              fullWidth
+              label="Détails (optionnel)"
+              multiline
+              rows={2}
+              value={paymentForm.details}
+              onChange={(e) => setPaymentForm((prev) => ({ ...prev, details: e.target.value }))}
+              disabled={validatingPayment}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePaymentDialog} disabled={validatingPayment}>
+            Annuler
+          </Button>
+          <LoadingButton variant="contained" onClick={handleValidatePayment} loading={validatingPayment}>
+            Confirmer le paiement
+          </LoadingButton>
         </DialogActions>
       </Dialog>
 
