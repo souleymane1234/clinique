@@ -33,8 +33,8 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDate } from 'src/utils/format-time';
 import { getCurrentStaffDisplayName } from 'src/utils/lab-user';
 import {
-  BILLING_INVOICE_ID_REGEX,
   isBillingInvoicePaid,
+  BILLING_INVOICE_ID_REGEX,
   extractBillingInvoiceIdFromObservations,
 } from 'src/utils/billing-utils';
 
@@ -94,30 +94,6 @@ const HEMATOLOGY_CONFIG = {
   granulocytes: { label: 'Granulocytes', unite: '%', normeMin: 40, normeMax: 74 },
 };
 
-const ACTE_RESULT_MODELS = {
-  HEMATOLOGIE: {
-    label: 'Hématologie',
-    pdfTemplateName: 'Modele HEMATOLOGIE',
-    columns: [
-      { key: 'label', header: 'Parametre' },
-      { key: 'result', header: 'Resultat' },
-      { key: 'reference', header: 'Valeurs de reference' },
-      { key: 'status', header: 'Statut' },
-    ],
-    rows: [],
-  },
-  DEFAULT: {
-    label: 'Modele standard',
-    pdfTemplateName: 'Modele STANDARD',
-    columns: [
-      { key: 'label', header: 'Parametre' },
-      { key: 'result', header: 'Resultat' },
-      { key: 'reference', header: 'Reference' },
-    ],
-    rows: [],
-  },
-};
-
 function sanitizeAnalysisObservations(observations) {
   if (!observations || typeof observations !== 'string') return '';
   return observations.replace(BILLING_INVOICE_ID_REGEX, '').trim();
@@ -146,14 +122,6 @@ function extractResultMap(results) {
     }
   });
   return out;
-}
-
-function getResultModelByActeName(acteName) {
-  const normalized = normalizeToSlug(acteName).toUpperCase();
-  if (normalized.includes('HEMATOLOGIE') || normalized.includes('NFS')) {
-    return ACTE_RESULT_MODELS.HEMATOLOGIE;
-  }
-  return ACTE_RESULT_MODELS.DEFAULT;
 }
 
 function buildActesMapFromAnalysis(analysis, catalog = []) {
@@ -227,15 +195,6 @@ function groupResultsByActe(results, actNamesById = {}) {
   return Object.values(groups);
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 function evaluateRangeStatus(value, min, max) {
   if (Number.isNaN(value)) return 'normal';
   if (value < min) return 'bas';
@@ -247,6 +206,30 @@ function getStatusUi(status) {
   if (status === 'eleve') return { label: 'Élevé', color: 'error' };
   if (status === 'bas') return { label: 'Bas', color: 'warning' };
   return { label: 'Normal', color: 'success' };
+}
+
+function hemRowStatusClass(status) {
+  if (status === 'eleve') return 'status-high';
+  if (status === 'bas') return 'status-low';
+  return 'status-normal';
+}
+
+function resolveActeBiologieItemsList(itemsRes) {
+  if (Array.isArray(itemsRes?.data)) return itemsRes.data;
+  if (Array.isArray(itemsRes?.data?.items)) return itemsRes.data.items;
+  return [];
+}
+
+function resolveActeBiologieInputsList(inputsRes) {
+  if (Array.isArray(inputsRes?.data?.inputs)) return inputsRes.data.inputs;
+  if (Array.isArray(inputsRes?.data)) return inputsRes.data;
+  return [];
+}
+
+function paymentTriStateChipProps(paid) {
+  if (paid === true) return { label: 'Payé', color: 'success' };
+  if (paid === false) return { label: 'Non payé', color: 'warning' };
+  return { label: 'Inconnu', color: 'default' };
 }
 
 function transformHematologyResults(results) {
@@ -272,18 +255,16 @@ function transformHematologyResults(results) {
 function isHematologyResults(results) {
   const knownKeys = new Set(Object.keys(HEMATOLOGY_CONFIG));
   const values = Array.isArray(results) ? results : [];
-  for (const entry of values) {
+  return values.some((entry) => {
     if (Array.isArray(entry?.resultats)) {
-      for (const row of entry.resultats) {
+      return entry.resultats.some((row) => {
         const key = normalizeToSlug(String(row?.input || row?.parameter || row?.name || ''));
-        if (knownKeys.has(key)) return true;
-      }
-      continue;
+        return knownKeys.has(key);
+      });
     }
     const key = normalizeToSlug(String(entry?.input || entry?.parameter || entry?.name || ''));
-    if (knownKeys.has(key)) return true;
-  }
-  return false;
+    return knownKeys.has(key);
+  });
 }
 
 export default function LaboratoryAnalysesView() {
@@ -305,13 +286,13 @@ export default function LaboratoryAnalysesView() {
     paid: null,
     message: '',
   });
+  const [paymentStatusByAnalysisId, setPaymentStatusByAnalysisId] = useState({});
   const [resultsDialog, setResultsDialog] = useState({
     open: false,
     analysisId: null,
     results: [],
     loading: false,
   });
-  const [actesBiologiesCatalog, setActesBiologiesCatalog] = useState([]);
   const [prescribedActes, setPrescribedActes] = useState([]);
   const [inputResults, setInputResults] = useState({});
 
@@ -335,14 +316,35 @@ export default function LaboratoryAnalysesView() {
         const analysesData = result.data || [];
         setAnalyses(analysesData);
         setTotal(result.pagination?.total ?? analysesData.length);
+        const paymentEntries = await Promise.all(
+          analysesData.map(async (analysis) => {
+            const invoiceId = extractBillingInvoiceIdFromObservations(analysis?.observations);
+            if (!invoiceId) {
+              return [analysis.id, { paid: null, invoiceId: null }];
+            }
+            try {
+              const invoiceRes = await ConsumApi.getBillingInvoiceById(invoiceId);
+              if (invoiceRes.success && invoiceRes.data) {
+                return [analysis.id, { paid: isBillingInvoicePaid(invoiceRes.data), invoiceId }];
+              }
+              return [analysis.id, { paid: null, invoiceId }];
+            } catch (error) {
+              console.error('Error checking invoice payment status:', error);
+              return [analysis.id, { paid: null, invoiceId }];
+            }
+          })
+        );
+        setPaymentStatusByAnalysisId(Object.fromEntries(paymentEntries));
       } else {
         setAnalyses([]);
         setTotal(0);
+        setPaymentStatusByAnalysisId({});
       }
     } catch (error) {
       console.error('Error loading analyses:', error);
       setAnalyses([]);
       setTotal(0);
+      setPaymentStatusByAnalysisId({});
     } finally {
       setLoading(false);
     }
@@ -351,20 +353,6 @@ export default function LaboratoryAnalysesView() {
   useEffect(() => {
     loadAnalyses();
   }, [loadAnalyses]);
-
-  useEffect(() => {
-    const loadActesCatalog = async () => {
-      try {
-        const actesResult = await ConsumApi.getActesBiologies();
-        const actesList = Array.isArray(actesResult?.data) ? actesResult.data : [];
-        setActesBiologiesCatalog(actesList);
-      } catch (error) {
-        console.error('Error loading actes biologies catalog:', error);
-        setActesBiologiesCatalog([]);
-      }
-    };
-    loadActesCatalog();
-  }, []);
 
   const handleViewDetails = async (analysis) => {
     setDetailsDialog({ open: true, analysis, loading: true });
@@ -474,16 +462,8 @@ export default function LaboratoryAnalysesView() {
             ConsumApi.getActesBiologieItems(entry.acteBiologieId),
             ConsumApi.getActesBiologieInputs(entry.acteBiologieId),
           ]);
-          const itemsList = Array.isArray(itemsRes?.data)
-            ? itemsRes.data
-            : Array.isArray(itemsRes?.data?.items)
-              ? itemsRes.data.items
-              : [];
-          const inputsList = Array.isArray(inputsRes?.data?.inputs)
-            ? inputsRes.data.inputs
-            : Array.isArray(inputsRes?.data)
-              ? inputsRes.data
-              : [];
+          const itemsList = resolveActeBiologieItemsList(itemsRes);
+          const inputsList = resolveActeBiologieInputsList(inputsRes);
           const selectedItems =
             entry.itemIds.length > 0
               ? entry.itemIds.map((id) => itemsList.find((item) => item?.id === id)).filter(Boolean)
@@ -549,20 +529,25 @@ export default function LaboratoryAnalysesView() {
         return;
       }
 
-      for (const payload of payloads) {
+      const allOk = await payloads.reduce(async (prevOk, payload) => {
+        const stillOk = await prevOk;
+        if (!stillOk) return false;
         const result = await ConsumApi.addLaboratoryAnalysisResult(resultsDialog.analysisId, payload);
         const processed = showApiResponse(result, {
           successTitle: 'Résultat ajouté',
           errorTitle: 'Erreur',
         });
-        if (!processed.success) {
-          return;
-        }
+        return processed.success;
+      }, Promise.resolve(true));
+
+      if (!allOk) {
+        return;
       }
 
       showSuccess('Succès', 'Résultats enregistrés avec succès');
-      await loadAnalyses();
+      // Fermer immédiatement le modal après enregistrement réussi
       handleCloseResults();
+      await loadAnalyses();
     } catch (error) {
       console.error('Error adding result:', error);
       showError('Erreur', 'Erreur lors de l\'ajout du résultat');
@@ -659,7 +644,7 @@ export default function LaboratoryAnalysesView() {
                     ['globules_blancs', 'globules_rouges', 'hemoglobine', 'hematocrite', 'vgm', 'tcmh', 'ccmh', 'plaquettes'].includes(row.key)
                   )
                   .map((row) => {
-                    const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                    const statusClass = hemRowStatusClass(row.status);
                     const statusLabel = getStatusUi(row.status).label;
                     const [norme, unite] = String(row.reference || '').split(' ').reduce(
                       (acc, part, index, arr) => (index < arr.length - 1 ? [`${acc[0]}${index ? ' ' : ''}${part}`, acc[1]] : [acc[0], part]),
@@ -693,7 +678,7 @@ export default function LaboratoryAnalysesView() {
                 ${hemaRows
                   .filter((row) => ['lymphocytes', 'monocytes', 'granulocytes'].includes(row.key))
                   .map((row) => {
-                    const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                    const statusClass = hemRowStatusClass(row.status);
                     const statusLabel = getStatusUi(row.status).label;
                     const [norme, unite] = String(row.reference || '').split(' ').reduce(
                       (acc, part, index, arr) => (index < arr.length - 1 ? [`${acc[0]}${index ? ' ' : ''}${part}`, acc[1]] : [acc[0], part]),
@@ -821,94 +806,6 @@ export default function LaboratoryAnalysesView() {
     return true;
   };
 
-  const handlePrintResultByActe = (analysis, groupedActe) => {
-    if (!groupedActe) return;
-    const model = getResultModelByActeName(groupedActe.acteBiologieName);
-    const resultMap = {};
-    groupedActe.rows.forEach((row) => {
-      if (row?.slug) resultMap[row.slug] = row.result;
-    });
-    const tableRows =
-      model.label === 'Hématologie'
-        ? transformHematologyResults(groupedActe.rows).map((row) => ({
-            label: row.label,
-            result: row.result,
-            reference: row.reference,
-            status: getStatusUi(row.status).label,
-          }))
-        : model.rows.length > 0
-        ? model.rows.map((row) => ({
-            label: row.label,
-            result: resultMap[row.slug] || '—',
-            reference: row.reference || '—',
-          }))
-        : groupedActe.rows.map((row) => ({
-            label: row.label || row.slug || 'Parametre',
-            result: row.result || '—',
-            reference: row.reference || '—',
-          }));
-
-    const printWindow = window.open('', '_blank', 'width=1000,height=800');
-    if (!printWindow) {
-      showError('Erreur', 'Impossible d’ouvrir la fenetre d’impression');
-      return;
-    }
-
-    const patientName = analysis?.patient
-      ? `${analysis.patient.firstName || ''} ${analysis.patient.lastName || ''}`.trim() || 'N/A'
-      : 'N/A';
-
-    const tableHtml = tableRows
-      .map(
-        (row) =>
-          `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.result)}</td><td>${escapeHtml(row.reference)}</td>${
-            model.label === 'Hématologie' ? `<td>${escapeHtml(row.status || '')}</td>` : ''
-          }</tr>`
-      )
-      .join('');
-
-    printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Resultats ${escapeHtml(groupedActe.acteBiologieName)}</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
-    h1, h2, p { margin: 0 0 8px 0; }
-    .meta { margin-bottom: 16px; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }
-    th { background: #f5f5f5; }
-    .template { margin-top: 8px; font-size: 12px; color: #555; }
-  </style>
-</head>
-<body>
-  <h1>Resultats d'analyse</h1>
-  <h2>${escapeHtml(groupedActe.acteBiologieName || 'Acte biologie')}</h2>
-  <div class="meta">
-    <p><strong>Patient:</strong> ${escapeHtml(patientName)}</p>
-    <p><strong>Numero analyse:</strong> ${escapeHtml(analysis?.analyseNumber || 'N/A')}</p>
-    <p><strong>Modele PDF associe:</strong> ${escapeHtml(model.pdfTemplateName)}</p>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>${escapeHtml(model.columns[0].header)}</th>
-        <th>${escapeHtml(model.columns[1].header)}</th>
-        <th>${escapeHtml(model.columns[2].header)}</th>
-        ${model.label === 'Hématologie' ? `<th>${escapeHtml(model.columns[3].header)}</th>` : ''}
-      </tr>
-    </thead>
-    <tbody>${tableHtml}</tbody>
-  </table>
-  <p class="template">Document genere selon le modele: ${escapeHtml(model.pdfTemplateName)}</p>
-</body>
-</html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-  };
-
   return (
     <>
       {contextHolder}
@@ -970,7 +867,7 @@ export default function LaboratoryAnalysesView() {
                       <TableCell>Date</TableCell>
                       <TableCell>Patient</TableCell>
                       <TableCell>Analyse</TableCell>
-                      <TableCell>Type</TableCell>
+                      <TableCell>Statut paiement</TableCell>
                       <TableCell>Échantillon</TableCell>
                       <TableCell>Statut</TableCell>
                       <TableCell align="right">Actions</TableCell>
@@ -1013,11 +910,11 @@ export default function LaboratoryAnalysesView() {
                           </TableCell>
                           <TableCell>{analysis.analysisName || 'N/A'}</TableCell>
                           <TableCell>
-                            <Chip
-                              label={ANALYSIS_TYPES[analysis.analysisType] || analysis.analysisType}
-                              size="small"
-                              color="primary"
-                            />
+                            {(() => {
+                              const pay = paymentStatusByAnalysisId[analysis.id]?.paid;
+                              const chip = paymentTriStateChipProps(pay);
+                              return <Chip label={chip.label} size="small" color={chip.color} />;
+                            })()}
                           </TableCell>
                           <TableCell>{SAMPLE_TYPES[analysis.sampleType] || analysis.sampleType}</TableCell>
                           <TableCell>
@@ -1045,7 +942,7 @@ export default function LaboratoryAnalysesView() {
                                   variant="outlined"
                                   onClick={() => handleViewResults(analysis.id)}
                                 >
-                                  Voir
+                                  Résultats
                                 </Button>
                               )}
                               {analysis.status === 'EN_COURS' && (
@@ -1169,20 +1066,7 @@ export default function LaboratoryAnalysesView() {
                 ) : (
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Chip
-                      label={
-                        paymentStatus.paid === true
-                          ? 'Payé'
-                          : paymentStatus.paid === false
-                            ? 'Non payé'
-                            : 'Inconnu'
-                      }
-                      color={
-                        paymentStatus.paid === true
-                          ? 'success'
-                          : paymentStatus.paid === false
-                            ? 'warning'
-                            : 'default'
-                      }
+                      {...paymentTriStateChipProps(paymentStatus.paid)}
                       size="small"
                     />
                     {paymentStatus.invoiceId && (
@@ -1302,85 +1186,86 @@ export default function LaboratoryAnalysesView() {
             </Typography>
           ) : (
             <Stack spacing={2} sx={{ mt: 1 }}>
-              {resultsDialog.results.length === 0 ? (
+              {resultsDialog.results.length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
                   Aucun résultat
                 </Typography>
-              ) : (
-                isHematologyResults(resultsDialog.results) ? (
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Analyse</TableCell>
-                          <TableCell>Résultat</TableCell>
-                          <TableCell>Norme</TableCell>
-                          <TableCell>Statut</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {transformHematologyResults(resultsDialog.results)
-                          .filter((item) => item.result !== '—')
-                          .map((item) => (
-                            <TableRow key={item.key}>
-                              <TableCell>{item.label}</TableCell>
-                              <TableCell>{item.result}</TableCell>
-                              <TableCell>{item.reference}</TableCell>
-                              <TableCell>{getStatusUi(item.status).label}</TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                ) : (
-                  <Stack spacing={1}>
-                    {resultsDialog.results.map((result, index) => (
-                      <Card key={result.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                        <Stack spacing={1}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="subtitle2">{result.parameter}</Typography>
-                            <Stack direction="row" spacing={1}>
-                              {result.abnormal && <Chip label="Anormal" color="error" size="small" />}
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                color="error"
-                                onClick={async () => {
-                                  if (window.confirm('Êtes-vous sûr de vouloir supprimer ce résultat ?')) {
-                                    const deleteResult = await ConsumApi.deleteLaboratoryResult(result.id);
-                                    const processed = showApiResponse(deleteResult, {
-                                      successTitle: 'Résultat supprimé',
-                                      errorTitle: 'Erreur',
-                                    });
-                                    if (processed.success) {
-                                      showSuccess('Succès', 'Résultat supprimé avec succès');
-                                      await handleViewResults(resultsDialog.analysisId);
-                                    }
+              )}
+              {resultsDialog.results.length > 0 && isHematologyResults(resultsDialog.results) && (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Analyse</TableCell>
+                        <TableCell>Résultat</TableCell>
+                        <TableCell>Norme</TableCell>
+                        <TableCell>Statut</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {transformHematologyResults(resultsDialog.results)
+                        .filter((item) => item.result !== '—')
+                        .map((item) => (
+                          <TableRow key={item.key}>
+                            <TableCell>{item.label}</TableCell>
+                            <TableCell>{item.result}</TableCell>
+                            <TableCell>{item.reference}</TableCell>
+                            <TableCell>{getStatusUi(item.status).label}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+              {resultsDialog.results.length > 0 && !isHematologyResults(resultsDialog.results) && (
+                <Stack spacing={1}>
+                  {resultsDialog.results.map((result, index) => (
+                    <Card key={result.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                      <Stack spacing={1}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle2">{result.parameter}</Typography>
+                          <Stack direction="row" spacing={1}>
+                            {result.abnormal && <Chip label="Anormal" color="error" size="small" />}
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              onClick={async () => {
+                                if (window.confirm('Êtes-vous sûr de vouloir supprimer ce résultat ?')) {
+                                  const deleteResult = await ConsumApi.deleteLaboratoryResult(result.id);
+                                  const processed = showApiResponse(deleteResult, {
+                                    successTitle: 'Résultat supprimé',
+                                    errorTitle: 'Erreur',
+                                  });
+                                  if (processed.success) {
+                                    showSuccess('Succès', 'Résultat supprimé avec succès');
+                                    await handleViewResults(resultsDialog.analysisId);
                                   }
-                                }}
-                              >
-                                Supprimer
-                              </Button>
-                            </Stack>
-                          </Box>
+                                }
+                              }}
+                            >
+                              Supprimer
+                            </Button>
+                          </Stack>
+                        </Box>
+                        <Typography variant="body2">
+                          <strong>Valeur:</strong> {result.value} {result.unit}
+                        </Typography>
+                        {result.referenceValueMin && result.referenceValueMax && (
                           <Typography variant="body2">
-                            <strong>Valeur:</strong> {result.value} {result.unit}
+                            <strong>Référence:</strong> {result.referenceValueMin} - {result.referenceValueMax}{' '}
+                            {result.unit}
                           </Typography>
-                          {result.referenceValueMin && result.referenceValueMax && (
-                            <Typography variant="body2">
-                              <strong>Référence:</strong> {result.referenceValueMin} - {result.referenceValueMax} {result.unit}
-                            </Typography>
-                          )}
-                          {result.comment && (
-                            <Typography variant="body2">
-                              <strong>Commentaire:</strong> {result.comment}
-                            </Typography>
-                          )}
-                        </Stack>
-                      </Card>
-                    ))}
-                  </Stack>
-                )
+                        )}
+                        {result.comment && (
+                          <Typography variant="body2">
+                            <strong>Commentaire:</strong> {result.comment}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Card>
+                  ))}
+                </Stack>
               )}
 
               <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2, mt: 2 }}>

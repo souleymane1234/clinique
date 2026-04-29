@@ -1,3 +1,4 @@
+import { pdf } from '@react-pdf/renderer';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
@@ -36,14 +37,15 @@ import {
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
-import { isBillingInvoicePaid } from 'src/utils/billing-utils';
 import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
+import { isBillingInvoicePaid, extractBillingInvoiceIdFromObservations } from 'src/utils/billing-utils';
 
 import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
+import FacturePdfDocument from 'src/components/generator-facture/facture-pdf-template';
 
 // ----------------------------------------------------------------------
 
@@ -142,6 +144,7 @@ export default function PatientAccueilView() {
 
   const [billingInvoices, setBillingInvoices] = useState([]);
   const [loadingBilling, setLoadingBilling] = useState(false);
+  const [generalReceiptSubmittingId, setGeneralReceiptSubmittingId] = useState(null);
   const [billingPaymentDialog, setBillingPaymentDialog] = useState({ open: false, invoice: null });
   const [billingPaymentSubmitting, setBillingPaymentSubmitting] = useState(false);
   const [billingPaymentForm, setBillingPaymentForm] = useState({
@@ -715,12 +718,265 @@ export default function PatientAccueilView() {
     setBillingPaymentSubmitting(false);
   };
 
+  const buildBillingFacturePdfData = async (invoice, fallbackAmount = 0) => {
+    const patientName = invoice?.patient
+      ? `${invoice.patient.firstName || ''} ${invoice.patient.lastName || ''}`.trim()
+      : 'Patient';
+    const totalAmount = Number(invoice?.totalAmount ?? fallbackAmount ?? 0);
+    const paidAmount = Number(invoice?.paidAmount ?? 0);
+    const remainingAmount = Math.max(0, totalAmount - paidAmount);
+    const label = (invoice?.note || '').trim() || 'Facture analyses et actes';
+    const invoiceId = String(invoice?.id || '');
+    let detailedItems = [];
+
+    try {
+      const analysisFilters = {};
+      if (invoice?.patient?.id) analysisFilters.patientId = invoice.patient.id;
+      if (invoice?.consultation?.id) analysisFilters.consultationId = invoice.consultation.id;
+      const analysesRes = await ConsumApi.getLaboratoryAnalyses(analysisFilters);
+      const analysesList = Array.isArray(analysesRes?.data) ? analysesRes.data : [];
+
+      const linkedAnalyses = analysesList.filter((analysis) => {
+        const linkedInvoiceId = extractBillingInvoiceIdFromObservations(analysis?.observations);
+        return linkedInvoiceId && String(linkedInvoiceId) === invoiceId;
+      });
+
+      const builtRows = [];
+      linkedAnalyses.forEach((analysis) => {
+        const groups = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+        groups.forEach((group, groupIndex) => {
+          const acteName = String(group?.actes_biologies_name || group?.name || `Acte ${groupIndex + 1}`).trim();
+          const groupItems = Array.isArray(group?.actes_biologies_items) ? group.actes_biologies_items : [];
+
+          groupItems.forEach((item, itemIndex) => {
+            const itemName = String(item?.name || item?.label || `Item ${itemIndex + 1}`).trim();
+            const itemPrice = Number(
+              item?.exam_tariff?.calculatedPrice ??
+                item?.exam_tariff?.calculated_price ??
+                item?.examTariff?.calculatedPrice ??
+                item?.examTariff?.calculated_price ??
+                0
+            );
+            builtRows.push({
+              description: `${acteName} - ${itemName}`,
+              quantity: 1,
+              unitPrice: Number.isNaN(itemPrice) ? 0 : itemPrice,
+            });
+          });
+        });
+      });
+
+      const dedup = new Set();
+      detailedItems = builtRows.filter((row) => {
+        const key = `${row.description}::${row.unitPrice}`;
+        if (dedup.has(key)) return false;
+        dedup.add(key);
+        return true;
+      });
+    } catch (error) {
+      console.error('Error loading analysis item details for receipt:', error);
+      detailedItems = [];
+    }
+
+    const receiptItems =
+      detailedItems.length > 0
+        ? detailedItems
+        : [
+            {
+              description: label,
+              quantity: 1,
+              unitPrice: totalAmount,
+            },
+          ];
+
+    return {
+      id: invoice?.id,
+      numeroFacture: invoice?.invoiceNumber || invoice?.id?.slice(0, 8),
+      dateFacture: invoice?.createdAt || new Date().toISOString(),
+      documentType: 'receipt',
+      type: 'proforma',
+      invoiceNature: 'ANALYSE',
+      clientName: patientName || 'Patient',
+      patientId: invoice?.patient?.id,
+      consultationId: invoice?.consultation?.id || undefined,
+      montantTotal: totalAmount,
+      montantPaye: paidAmount,
+      montantRestant: remainingAmount,
+      status: String(invoice?.status || 'pending').toLowerCase(),
+      items: receiptItems,
+    };
+  };
+
+  const openBillingInvoicePdf = async (invoiceId, fallbackAmount = 0, receiptWindow = null) => {
+    const invoiceRes = await ConsumApi.getBillingInvoiceById(invoiceId);
+    if (!invoiceRes?.success || !invoiceRes.data) {
+      throw new Error(invoiceRes?.message || 'Impossible de charger la facture pour impression.');
+    }
+    const facture = await buildBillingFacturePdfData(invoiceRes.data, fallbackAmount);
+    const blob = await pdf(<FacturePdfDocument facture={facture} />).toBlob();
+    const url = window.URL.createObjectURL(blob);
+    if (receiptWindow && !receiptWindow.closed) {
+      receiptWindow.location.href = url;
+    } else {
+      const popup = window.open(url, '_blank');
+      if (!popup) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `recu-${facture.numeroFacture || invoiceId}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    }
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+  };
+
+  const openPatientGeneralReceiptPdf = async (receipt, receiptWindow = null) => {
+    const patientId = receipt?.patientId;
+    if (!patientId) throw new Error('Patient introuvable pour ce recu general.');
+
+    const invoicesRes = await ConsumApi.getBillingInvoices({ patientId });
+    if (!invoicesRes?.success) {
+      throw new Error(invoicesRes?.message || 'Impossible de charger les paiements du patient.');
+    }
+    const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : [];
+    const paidInvoices = invoices.filter((inv) => Number(inv?.paidAmount ?? 0) > 0);
+    if (paidInvoices.length === 0) {
+      throw new Error('Aucun paiement enregistre pour ce patient.');
+    }
+
+    const analysesRes = await ConsumApi.getLaboratoryAnalyses({ patientId });
+    const analyses = Array.isArray(analysesRes?.data) ? analysesRes.data : [];
+    const servicesByInvoiceId = analyses.reduce((acc, analysis) => {
+      const linkedInvoiceId = extractBillingInvoiceIdFromObservations(analysis?.observations);
+      if (!linkedInvoiceId) return acc;
+      const key = String(linkedInvoiceId);
+      if (!acc[key]) acc[key] = new Set();
+
+      const analyseGroups = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+      analyseGroups.forEach((group, index) => {
+        const acteName = String(group?.actes_biologies_name || group?.name || `Acte ${index + 1}`).trim();
+        const items = Array.isArray(group?.actes_biologies_items) ? group.actes_biologies_items : [];
+        if (items.length > 0) {
+          const itemNames = items
+            .map((item) => String(item?.name || item?.label || '').trim())
+            .filter(Boolean)
+            .join(', ');
+          if (itemNames) acc[key].add(`${acteName}: ${itemNames}`);
+          else if (acteName) acc[key].add(acteName);
+        } else if (acteName) {
+          acc[key].add(acteName);
+        }
+      });
+      return acc;
+    }, {});
+
+    const getInvoiceServiceLabel = (invoice) => {
+      const mappedServices = Array.from(servicesByInvoiceId[String(invoice?.id)] || []);
+      if (mappedServices.length > 0) return mappedServices.join(' | ');
+
+      const directItems = Array.isArray(invoice?.items) ? invoice.items : [];
+      const directItemLabels = directItems
+        .map((item) => {
+          const rawLabel = String(item?.description || '').trim();
+          if (!rawLabel) return '';
+          if (/consultation/i.test(rawLabel)) return `Consultation - ${rawLabel}`;
+          return rawLabel;
+        })
+        .filter(Boolean);
+      if (directItemLabels.length > 0) return directItemLabels.join(' | ');
+
+      const note = String(invoice?.note || '').trim();
+      const serviceFromConsultation = note.match(/Facture service consultation\s*-\s*(.*?)\s*-\s*paiement/i);
+      if (serviceFromConsultation?.[1]) return `Consultation - ${serviceFromConsultation[1].trim()}`;
+      const serviceFromNote = note.match(/Facture service consultation\s*-\s*(.*)/i);
+      if (serviceFromNote?.[1]) return `Consultation - ${serviceFromNote[1].trim()}`;
+      if (/consultation/i.test(note)) return 'Consultation';
+      if (/analyse/i.test(note)) return 'Analyses laboratoire';
+      return note || 'Autre service facture';
+    };
+
+    const detailedItems = paidInvoices.map((inv) => {
+      const paid = Number(inv?.paidAmount ?? 0);
+      const total = Number(inv?.totalAmount ?? 0);
+      const serviceLabel = getInvoiceServiceLabel(inv);
+      return {
+        description: serviceLabel,
+        quantity: 1,
+        unitPrice: paid > 0 ? paid : total,
+      };
+    });
+    const paidTotal = detailedItems.reduce((sum, row) => sum + Number(row?.unitPrice || 0), 0);
+    const patientName = paidInvoices[0]?.patient
+      ? `${paidInvoices[0].patient.firstName || ''} ${paidInvoices[0].patient.lastName || ''}`.trim()
+      : receipt?.patientName || 'Patient';
+
+    const facture = {
+      id: `general-${receipt?.consultationId || patientId}`,
+      numeroFacture: `REC-GEN-${String(patientId).slice(0, 8).toUpperCase()}`,
+      dateFacture: new Date().toISOString(),
+      documentType: 'receipt',
+      type: 'proforma',
+      invoiceNature: 'ANALYSE',
+      clientName: patientName || 'Patient',
+      patientId,
+      consultationId: receipt?.consultationId || undefined,
+      montantTotal: paidTotal,
+      montantPaye: paidTotal,
+      montantRestant: 0,
+      status: 'paid',
+      items: detailedItems,
+    };
+
+    const blob = await pdf(<FacturePdfDocument facture={facture} />).toBlob();
+    const url = window.URL.createObjectURL(blob);
+    if (receiptWindow && !receiptWindow.closed) {
+      receiptWindow.location.href = url;
+    } else {
+      const popup = window.open(url, '_blank');
+      if (!popup) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `recu-general-${patientId}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    }
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+  };
+
+  const handleOpenPatientGeneralReceipt = async (receipt) => {
+    const receiptWindow = window.open('', '_blank');
+    if (receiptWindow && !receiptWindow.closed) {
+      receiptWindow.document.title = 'Generation du recu general';
+      receiptWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Generation du recu general en cours...</p>';
+    }
+
+    setGeneralReceiptSubmittingId(receipt?.id || null);
+    try {
+      await openPatientGeneralReceiptPdf(receipt, receiptWindow);
+      showSuccess('Succes', 'Recu general genere avec succes.');
+    } catch (error) {
+      console.error('General receipt generation error:', error);
+      if (receiptWindow && !receiptWindow.closed) receiptWindow.close();
+      showError('Recu general', error?.message || 'Impossible de generer le recu general.');
+    } finally {
+      setGeneralReceiptSubmittingId(null);
+    }
+  };
+
   const handleSubmitBillingPayment = async () => {
     const inv = billingPaymentDialog.invoice;
     if (!inv?.id) return;
     if (Number(billingPaymentForm.amount) <= 0) {
       showError('Erreur', 'Le montant doit être supérieur à 0.');
       return;
+    }
+    const receiptWindow = window.open('', '_blank');
+    if (receiptWindow && !receiptWindow.closed) {
+      receiptWindow.document.title = 'Generation du recu';
+      receiptWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Generation du recu en cours...</p>';
     }
     setBillingPaymentSubmitting(true);
     try {
@@ -742,11 +998,23 @@ export default function PatientAccueilView() {
           showError('Attention', 'Paiement créé mais la validation du statut a échoué. Vérifiez côté serveur.');
         }
       }
-      showSuccess('Succès', 'Paiement enregistré.');
+      try {
+        await openBillingInvoicePdf(
+          inv.id,
+          Number(inv.totalAmount ?? billingPaymentForm.amount ?? 0),
+          receiptWindow
+        );
+      } catch (pdfError) {
+        console.error('Billing invoice PDF error:', pdfError);
+        if (receiptWindow && !receiptWindow.closed) receiptWindow.close();
+        showError('Facture', pdfError?.message || 'Paiement validé, mais impossible d’ouvrir la facture.');
+      }
+      showSuccess('Succès', 'Paiement enregistré et facture générée.');
       handleCloseBillingPayment();
       await loadBillingInvoices();
     } catch (e) {
       console.error('Billing payment error:', e);
+      if (receiptWindow && !receiptWindow.closed) receiptWindow.close();
       showError('Erreur', 'Erreur lors de l’enregistrement du paiement');
     } finally {
       setBillingPaymentSubmitting(false);
@@ -907,7 +1175,7 @@ export default function PatientAccueilView() {
                         <TableCell>Type</TableCell>
                         <TableCell>Date</TableCell>
                         <TableCell>Statut</TableCell>
-                        {canViewConsultationDetails && <TableCell align="right">Actions</TableCell>}
+                        {(canViewConsultationDetails || isSecretary) && <TableCell align="right">Actions</TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -968,6 +1236,27 @@ export default function PatientAccueilView() {
                               >
                                 Voir détails
                               </Button>
+                            </TableCell>
+                          )}
+                          {isSecretary && String(consultation.status || '').toUpperCase() === 'TERMINEE' && (
+                            <TableCell align="right">
+                              <LoadingButton
+                                size="small"
+                                variant="contained"
+                                loading={generalReceiptSubmittingId === consultation.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenPatientGeneralReceipt({
+                                    id: consultation.id,
+                                    patientId: consultation.patientId || consultation.patient?.id,
+                                    consultationId: consultation.id,
+                                    patientName:
+                                      `${consultation.patient?.firstName || ''} ${consultation.patient?.lastName || ''}`.trim() || 'Patient',
+                                  });
+                                }}
+                              >
+                                Imprimer recu
+                              </LoadingButton>
                             </TableCell>
                           )}
                         </TableRow>

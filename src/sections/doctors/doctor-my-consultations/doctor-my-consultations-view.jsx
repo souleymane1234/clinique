@@ -40,6 +40,13 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDateTime } from 'src/utils/format-time';
 import { appendBillingInvoiceTag, BILLING_INVOICE_ID_REGEX } from 'src/utils/billing-utils';
 import { closeActiveTracking, startMedecinServicePassage } from 'src/utils/time-tracking-client';
+import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-laboratory-analysis';
+import {
+  getConsultationIdValue,
+  flattenLaboratoryAnalysisRow,
+  getPatientIdFromConsultation,
+  getPrescribingDoctorIdFromConsultation,
+} from 'src/utils/laboratory-analyses-consultation';
 
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
@@ -68,45 +75,6 @@ const CONSULTATION_TYPES = {
   CONSULTATION_SUIVI: 'Consultation de suivi',
   URGENCE: 'Urgence',
 };
-
-function laboratoryAnalysisConsultationId(analysis) {
-  if (!analysis || typeof analysis !== 'object') return undefined;
-  return (
-    analysis.consultationId ||
-    analysis.consultation_id ||
-    analysis.consultation?.id ||
-    undefined
-  );
-}
-
-function laboratoryAnalysisPatientId(analysis) {
-  if (!analysis || typeof analysis !== 'object') return undefined;
-  return (
-    analysis.patientId ||
-    analysis.patient_id ||
-    analysis.patient?.id ||
-    undefined
-  );
-}
-
-/** N’affiche que les analyses de cette consultation / ce patient (l’API peut ignorer les query params). */
-function filterLaboratoryAnalysesForConsultation(analysesList, { consultationId, patientId, medecinId }) {
-  if (!Array.isArray(analysesList)) return [];
-  return analysesList.filter((analysis) => {
-    if (medecinId) {
-      const docOk =
-        analysis.prescribingDoctor?.id === medecinId || analysis.prescribingDoctorId === medecinId;
-      if (!docOk) return false;
-    }
-    const ap = laboratoryAnalysisPatientId(analysis);
-    if (patientId != null && patientId !== '' && ap != null && ap !== patientId) return false;
-    const ac = laboratoryAnalysisConsultationId(analysis);
-    if (consultationId != null && consultationId !== '' && ac != null && ac !== consultationId) return false;
-    if (consultationId != null && consultationId !== '' && ac === consultationId) return true;
-    if (patientId != null && patientId !== '' && ap === patientId) return true;
-    return false;
-  });
-}
 
 /** Prix unitaire renvoyé par l’API pricing/exams : calculatedPrice, sinon price, sinon baseUnitCost */
 function getPricingExamUnitPrice(ex) {
@@ -236,21 +204,104 @@ function isHematologyAnalysis(analysis) {
   return analyseEntries.some((entry) => String(entry?.name || '').toUpperCase().includes('HEMATOLOGIE'));
 }
 
+function getAnalysisItemCalculatedPrice(item) {
+  const price =
+    item?.exam_tariff?.calculatedPrice ??
+    item?.exam_tariff?.calculated_price ??
+    item?.examTariff?.calculatedPrice ??
+    item?.examTariff?.calculated_price;
+  const numeric = Number(price);
+  return Number.isNaN(numeric) ? 0 : numeric;
+}
+
+function pickEntrySelectedItemIds(entry) {
+  if (Array.isArray(entry?.actes_biologies_items)) return entry.actes_biologies_items;
+  if (Array.isArray(entry?.actesBiologiesItems)) return entry.actesBiologiesItems;
+  return [];
+}
+
+function pickEntryActeBiologiesItems(entry) {
+  if (Array.isArray(entry?.actes_biologies_items)) return entry.actes_biologies_items;
+  if (Array.isArray(entry?.actes_biologies_items_details)) return entry.actes_biologies_items_details;
+  if (Array.isArray(entry?.actesBiologiesItems)) return entry.actesBiologiesItems;
+  if (Array.isArray(entry?.items)) return entry.items;
+  return [];
+}
+
+function itemsFromActeBiologieItemsApiResponse(itemsRes) {
+  const { data } = itemsRes || {};
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
+function hemogramStatusRowClass(status) {
+  if (status === 'eleve') return 'status-high';
+  if (status === 'bas') return 'status-low';
+  return 'status-normal';
+}
+
+function doctorListAnalysisStatusChipLabel(status) {
+  if (status === 'EN_ATTENTE') return 'En attente';
+  if (status === 'EN_COURS') return 'En cours';
+  if (status === 'TERMINE') return 'Terminé';
+  if (status === 'VALIDE') return 'Validé';
+  return status || 'N/A';
+}
+
+function doctorListAnalysisStatusChipColor(status) {
+  if (status === 'EN_ATTENTE') return 'warning';
+  if (status === 'EN_COURS') return 'info';
+  if (status === 'TERMINE' || status === 'VALIDE') return 'success';
+  return 'default';
+}
+
+function extractAnalysisActesDetails(analysis) {
+  const analyseEntries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+  return analyseEntries.map((entry, idx) => {
+    const acteName = String(
+      entry?.actes_biologies_name || entry?.acteBiologieName || entry?.name || `Acte ${idx + 1}`
+    ).trim();
+    const items = pickEntryActeBiologiesItems(entry);
+
+    const normalizedItems = items
+      .map((item) => {
+        if (!item) return null;
+        if (typeof item === 'string') {
+          const name = item.trim();
+          if (!name) return null;
+          return { id: `${acteName}-${name}`, name, calculatedPrice: 0 };
+        }
+        const name = String(item.name || item.label || item.itemName || '').trim();
+        if (!name) return null;
+        return {
+          id: item.id || `${acteName}-${name}`,
+          name,
+          calculatedPrice: getAnalysisItemCalculatedPrice(item),
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      acteName,
+      items: normalizedItems,
+    };
+  });
+}
+
 function isHematologyResults(results) {
   const knownKeys = new Set(Object.keys(HEMATOLOGY_CONFIG));
   const values = Array.isArray(results) ? results : [];
-  for (const entry of values) {
+  return values.some((entry) => {
     if (Array.isArray(entry?.resultats)) {
-      for (const row of entry.resultats) {
+      return entry.resultats.some((row) => {
         const key = normalizeToSlug(String(row?.input || row?.parameter || row?.name || ''));
-        if (knownKeys.has(key)) return true;
-      }
-      continue;
+        return knownKeys.has(key);
+      });
     }
     const key = normalizeToSlug(String(entry?.input || entry?.parameter || entry?.name || ''));
-    if (knownKeys.has(key)) return true;
-  }
-  return false;
+    return knownKeys.has(key);
+  });
 }
 
 const DEFAULT_ARRET_CONTENT = 'Certificat établi pour servir et valoir ce que de droit.';
@@ -457,13 +508,11 @@ export default function DoctorMyConsultationsView() {
         console.log('Number of consultations before filtering:', consultationsData.length);
         
         if (!isAdminOrDirecteur) {
-          // Filtrer aussi par médecin côté client pour être sûr
-          consultationsData = consultationsData.filter(
-            (c) => {
-              const medecinIdMatch = c.medecinId === currentMedecinId || c.medecin?.id === currentMedecinId;
-              return medecinIdMatch;
-            }
-          );
+          // Filtrer aussi par médecin côté client (comparaison en string : uuid vs nombre selon l’API)
+          consultationsData = consultationsData.filter((c) => {
+            const mid = c.medecinId ?? c.medecin_id ?? c.medecin?.id;
+            return String(mid) === String(currentMedecinId);
+          });
           console.log('After medecin filter:', consultationsData.length, 'consultations');
         } else {
           console.log('Admin/Directeur: consultations globales');
@@ -531,6 +580,74 @@ export default function DoctorMyConsultationsView() {
     return undefined;
   }, [loadConsultations, statusFilter, currentMedecinId, isAdminOrDirecteur]);
 
+  const enrichAnalysesWithItemDetails = useCallback(
+    async (analysesList) => {
+      const list = Array.isArray(analysesList) ? analysesList : [];
+      if (list.length === 0) return [];
+
+      const acteIds = new Set();
+      list.forEach((analysis) => {
+        const entries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+        entries.forEach((entry) => {
+          const acteId = entry?.acteBiologieId || entry?.actes_biologies || entry?.acte_biologie_id;
+          const selectedItems = pickEntrySelectedItemIds(entry);
+          if (acteId && selectedItems.length > 0) acteIds.add(String(acteId));
+        });
+      });
+
+      if (acteIds.size === 0) return list;
+
+      const missingActeIds = [...acteIds].filter((acteId) => !Array.isArray(actesBiologiesItemsMap[acteId]));
+      let fetchedMap = {};
+      if (missingActeIds.length > 0) {
+        const fetchedEntries = await Promise.all(
+          missingActeIds.map(async (acteId) => {
+            try {
+              const itemsRes = await ConsumApi.getActesBiologieItems(acteId);
+              const items = itemsFromActeBiologieItemsApiResponse(itemsRes);
+              return [acteId, items];
+            } catch (error) {
+              console.error(`Error loading actes biologie items for ${acteId}:`, error);
+              return [acteId, []];
+            }
+          })
+        );
+        fetchedMap = Object.fromEntries(fetchedEntries);
+        setActesBiologiesItemsMap((prev) => ({ ...prev, ...fetchedMap }));
+      }
+
+      const fullItemsMap = { ...actesBiologiesItemsMap, ...fetchedMap };
+
+      return list.map((analysis) => {
+        const entries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+        const nextEntries = entries.map((entry) => {
+          const acteIdRaw = entry?.acteBiologieId || entry?.actes_biologies || entry?.acte_biologie_id;
+          const acteId = acteIdRaw ? String(acteIdRaw) : null;
+          if (!acteId) return entry;
+
+          const selectedIdsRaw = pickEntrySelectedItemIds(entry);
+          const selectedIds = selectedIdsRaw.map((id) => String(id));
+          if (selectedIds.length === 0) return entry;
+
+          const catalogue = Array.isArray(fullItemsMap[acteId]) ? fullItemsMap[acteId] : [];
+          const details = selectedIds
+            .map((itemId) => catalogue.find((item) => String(item?.id) === itemId))
+            .filter(Boolean);
+
+          if (details.length === 0) return entry;
+
+          return {
+            ...entry,
+            actes_biologies_items_details: details,
+          };
+        });
+
+        return { ...analysis, analyse: nextEntries };
+      });
+    },
+    [actesBiologiesItemsMap]
+  );
+
   const handleViewDetails = async (consultation) => {
     setDetailsDialog({ open: true, consultation, loading: true, editing: false });
     setEditForm(null);
@@ -539,8 +656,13 @@ export default function DoctorMyConsultationsView() {
     setAnalyses([]);
     
     try {
-      // Charger les détails complets de la consultation
-      const result = await ConsumApi.getConsultationById(consultation.id);
+      const rowConsultationId = getConsultationIdValue(consultation);
+      if (!rowConsultationId) {
+        showError('Erreur', 'Consultation sans identifiant.');
+        setDetailsDialog((prev) => ({ ...prev, loading: false }));
+        return;
+      }
+      const result = await ConsumApi.getConsultationById(rowConsultationId);
       if (result.success) {
         const consultationData = result.data?.consultation || result.data;
         setDetailsDialog({ open: true, consultation: consultationData, loading: false, editing: false });
@@ -580,36 +702,26 @@ export default function DoctorMyConsultationsView() {
           hospitalizationReason: consultationData.hospitalizationReason || '',
         });
         
-        // Charger les analyses créées pour cette consultation
-        const patientIdForAnalyses =
-          consultationData.patientId || consultationData.patient?.id || consultation.patientId || consultation.patient?.id;
-        const analysesResult = await ConsumApi.getLaboratoryAnalyses({
-          consultationId: consultation.id,
-          patientId: patientIdForAnalyses,
-          prescribingDoctorId: currentMedecinId,
-        });
-        if (analysesResult.success) {
-          const analysesList = Array.isArray(analysesResult.data) ? analysesResult.data : [];
-          setAnalyses(
-            filterLaboratoryAnalysesForConsultation(analysesList, {
-              consultationId: consultation.id,
-              patientId: patientIdForAnalyses,
-              medecinId: currentMedecinId,
-            })
-          );
-        } else {
-          setAnalyses([]);
-        }
-        
+        const { ok: analysesOk, analyses: analysesList } = await fetchLaboratoryAnalysesForConsultation(
+          consultationData,
+          consultation
+        );
+        const enrichedAnalyses = analysesOk
+          ? await enrichAnalysesWithItemDetails(analysesList)
+          : [];
+        setAnalyses(enrichedAnalyses);
+
+        const detailConsultationId =
+          getConsultationIdValue(consultationData) || getConsultationIdValue(consultation) || rowConsultationId;
         // Charger les prescriptions
-        const prescriptionsResult = await ConsumApi.getConsultationPrescriptions(consultation.id);
+        const prescriptionsResult = await ConsumApi.getConsultationPrescriptions(detailConsultationId);
         if (prescriptionsResult.success) {
           const prescriptionsList = Array.isArray(prescriptionsResult.data) ? prescriptionsResult.data : [];
           setPrescriptions(prescriptionsList);
         }
         
         // Charger les certificats
-        const certificatsResult = await ConsumApi.getConsultationCertificats(consultation.id);
+        const certificatsResult = await ConsumApi.getConsultationCertificats(detailConsultationId);
         if (certificatsResult.success) {
           const certificatsList = Array.isArray(certificatsResult.data) ? certificatsResult.data : [];
           setCertificats(certificatsList);
@@ -662,24 +774,12 @@ export default function DoctorMyConsultationsView() {
           console.error('Time tracking (MEDECIN reception fallback) failed:', e);
         }
 
-        const pidFallback = consultation.patientId || consultation.patient?.id;
-        const analysesFallback = await ConsumApi.getLaboratoryAnalyses({
-          consultationId: consultation.id,
-          patientId: pidFallback,
-          prescribingDoctorId: currentMedecinId,
-        });
-        if (analysesFallback.success) {
-          const list = Array.isArray(analysesFallback.data) ? analysesFallback.data : [];
-          setAnalyses(
-            filterLaboratoryAnalysesForConsultation(list, {
-              consultationId: consultation.id,
-              patientId: pidFallback,
-              medecinId: currentMedecinId,
-            })
-          );
-        } else {
-          setAnalyses([]);
-        }
+        const { ok: analysesOkFb, analyses: analysesFb } =
+          await fetchLaboratoryAnalysesForConsultation(consultation);
+        const enrichedFallbackAnalyses = analysesOkFb
+          ? await enrichAnalysesWithItemDetails(analysesFb)
+          : [];
+        setAnalyses(enrichedFallbackAnalyses);
       }
     } catch (error) {
       console.error('Error loading consultation details:', error);
@@ -760,7 +860,9 @@ export default function DoctorMyConsultationsView() {
         showSuccess('Succès', 'Consultation mise à jour avec succès');
         setDetailsDialog((prev) => ({ ...prev, editing: false }));
         // Recharger les détails
-        await handleViewDetails({ id: detailsDialog.consultation.id });
+        await handleViewDetails({
+          id: getConsultationIdValue(detailsDialog.consultation) || detailsDialog.consultation.id,
+        });
         // Recharger la liste
         loadConsultations();
       }
@@ -854,38 +956,25 @@ export default function DoctorMyConsultationsView() {
     setPrescriptionDialog({ open: true, loading: false, isAnalysis: true });
     try {
       const actesRes = await ConsumApi.getActesBiologies();
-      console.log('=== DEBUG ACTES BIOLOGIES ===');
-      console.log('actesRes:', actesRes);
-      console.log('actesRes.success:', actesRes?.success);
-      console.log('actesRes.message:', actesRes?.message);
-      console.log('actesRes.data:', actesRes?.data);
       if (!actesRes?.success) {
         showError('Actes biologiques', actesRes?.message || 'Impossible de charger les catégories.');
       }
       let actes = [];
       if (Array.isArray(actesRes?.data)) actes = actesRes.data;
       else if (Array.isArray(actesRes?.data?.data)) actes = actesRes.data.data;
-      console.log('actes parsed:', actes);
       setActesBiologies(actes);
 
       const itemsEntries = await Promise.all(
         actes.map(async (acte) => {
           const itemsRes = await ConsumApi.getActesBiologieItems(acte.id);
-          console.log(`=== DEBUG ACTES BIOLOGIES ITEMS [${acte.id}] ===`);
-          console.log('itemsRes:', itemsRes);
-          console.log('itemsRes.success:', itemsRes?.success);
-          console.log('itemsRes.message:', itemsRes?.message);
-          console.log('itemsRes.data:', itemsRes?.data);
           const { data } = itemsRes || {};
           const { items: dataItems } = data || {};
           let items = [];
           if (Array.isArray(data)) items = data;
           else if (Array.isArray(dataItems)) items = dataItems;
-          console.log(`items parsed [${acte.id}]:`, items);
           return [acte.id, items];
         })
       );
-      console.log('actes items map entries:', itemsEntries);
       setActesBiologiesItemsMap(Object.fromEntries(itemsEntries));
     } catch (e) {
       console.error('Error loading analysis data:', e);
@@ -945,11 +1034,6 @@ export default function DoctorMyConsultationsView() {
       return;
     }
 
-    if (!currentMedecinId) {
-      showError('Erreur', 'Médecin non identifié');
-      return;
-    }
-
     if (!Array.isArray(analysisForm.analyse) || analysisForm.analyse.length === 0) {
       showError('Erreur', 'Veuillez sélectionner au moins une catégorie et un examen.');
       return;
@@ -961,11 +1045,25 @@ export default function DoctorMyConsultationsView() {
       return;
     }
 
+    const patientId = getPatientIdFromConsultation(detailsDialog.consultation);
+    const consultationId = getConsultationIdValue(detailsDialog.consultation);
+    const prescribingDoctorId =
+      currentMedecinId ?? getPrescribingDoctorIdFromConsultation(detailsDialog.consultation);
+
+    if (!patientId || !consultationId) {
+      showError('Erreur', 'Patient ou consultation introuvable pour l’analyse.');
+      return;
+    }
+    if (!prescribingDoctorId) {
+      showError(
+        'Erreur',
+        'Médecin prescripteur introuvable. Connectez-vous avec un compte médecin ou vérifiez qu’un médecin est assigné à cette consultation.'
+      );
+      return;
+    }
+
     setPrescriptionDialog({ open: true, loading: true, isAnalysis: true });
     try {
-      const patientId = detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId;
-      const consultationId = detailsDialog.consultation.id;
-
       const invoiceRes = await ConsumApi.createBillingInvoice({
         patientId,
         consultationId,
@@ -988,11 +1086,11 @@ export default function DoctorMyConsultationsView() {
         patientId,
         consultationId,
         prescriptionId: null,
-        prescribingDoctorId: currentMedecinId,
+        prescribingDoctorId,
         analyse: analysisForm.analyse,
-        sampleType: 'SANG',
+        sampleType: analysisForm.sampleType || 'SANG',
         status: 'EN_ATTENTE',
-        urgent: analysisForm.urgent,
+        urgent: Boolean(analysisForm.urgent),
         observations: observationsWithBilling,
         price: amount,
       };
@@ -1007,26 +1105,31 @@ export default function DoctorMyConsultationsView() {
           'Facture pro-forma créée et analyse enregistrée. Le laboratoire effectuera le prélèvement après paiement à l’accueil.'
         );
         handleCloseAnalysisDialog();
-        // Recharger les analyses
-        const patientIdReload =
-          detailsDialog.consultation.patient?.id || detailsDialog.consultation.patientId;
-        const analysesResult = await ConsumApi.getLaboratoryAnalyses({
-          consultationId: detailsDialog.consultation.id,
-          patientId: patientIdReload,
-          prescribingDoctorId: currentMedecinId,
-        });
-        if (analysesResult.success) {
-          const analysesList = Array.isArray(analysesResult.data) ? analysesResult.data : [];
-          setAnalyses(
-            filterLaboratoryAnalysesForConsultation(analysesList, {
-              consultationId: detailsDialog.consultation.id,
-              patientId: patientIdReload,
-              medecinId: currentMedecinId,
-            })
-          );
-        } else {
-          setAnalyses([]);
+        const { ok: reloadOk, analyses: nextAnalyses } = await fetchLaboratoryAnalysesForConsultation(
+          detailsDialog.consultation
+        );
+        let finalList = reloadOk && Array.isArray(nextAnalyses) ? [...nextAnalyses] : [];
+        const createdRaw = result?.data;
+        if (createdRaw && typeof createdRaw === 'object') {
+          const optimisticRow = flattenLaboratoryAnalysisRow({
+            ...createdRaw,
+            patientId,
+            consultationId,
+            status: createdRaw.status || 'EN_ATTENTE',
+            price: createdRaw.price ?? amount,
+          });
+          const rid = optimisticRow?.id;
+          if (rid != null && rid !== '' && !finalList.some((x) => String(x?.id) === String(rid))) {
+            finalList = [optimisticRow, ...finalList];
+          }
         }
+        const enrichedAfterCreate = await enrichAnalysesWithItemDetails(finalList);
+        setAnalyses(enrichedAfterCreate);
+      } else if (invoiceRes?.success && invoiceRes?.data?.id) {
+        showError(
+          'Analyse',
+          'La facture pro-forma a été créée mais l’enregistrement de l’analyse a échoué. Vérifiez le message d’erreur ou contactez l’administrateur.'
+        );
       }
     } catch (error) {
       console.error('Error adding analysis:', error);
@@ -1233,7 +1336,7 @@ export default function DoctorMyConsultationsView() {
               </thead>
               <tbody>
                 ${hemoRows.map((row) => {
-                  const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                  const statusClass = hemogramStatusRowClass(row.status);
                   const statusLabel = getStatusUi(row.status).label;
                   return `<tr>
                     <td>${row.name}</td>
@@ -1261,7 +1364,7 @@ export default function DoctorMyConsultationsView() {
               </thead>
               <tbody>
                 ${leucoRows.map((row) => {
-                  const statusClass = row.status === 'eleve' ? 'status-high' : row.status === 'bas' ? 'status-low' : 'status-normal';
+                  const statusClass = hemogramStatusRowClass(row.status);
                   const statusLabel = getStatusUi(row.status).label;
                   return `<tr>
                     <td>${row.name}</td>
@@ -2302,53 +2405,53 @@ export default function DoctorMyConsultationsView() {
                   </Typography>
                 ) : (
                   <Stack spacing={1}>
-                    {analyses.map((analysis, index) => (
-                      <Card key={analysis.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                        <Stack spacing={1}>
+                    {analyses.map((analysis, index) => {
+                      const acteGroups = extractAnalysisActesDetails(analysis);
+                      return (
+                        <Card key={analysis.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                          <Stack spacing={1}>
                           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                             <Chip
-                              label={
-                                analysis.status === 'EN_ATTENTE'
-                                  ? 'En attente'
-                                  : analysis.status === 'EN_COURS'
-                                    ? 'En cours'
-                                    : analysis.status === 'TERMINE'
-                                      ? 'Terminé'
-                                      : analysis.status === 'VALIDE'
-                                        ? 'Validé'
-                                        : analysis.status || 'N/A'
-                              }
+                              label={doctorListAnalysisStatusChipLabel(analysis.status)}
                               size="small"
-                              color={
-                                analysis.status === 'EN_ATTENTE'
-                                  ? 'warning'
-                                  : analysis.status === 'EN_COURS'
-                                    ? 'info'
-                                    : analysis.status === 'TERMINE' || analysis.status === 'VALIDE'
-                                      ? 'success'
-                                      : 'default'
-                              }
+                              color={doctorListAnalysisStatusChipColor(analysis.status)}
                             />
                           </Box>
-                          {(() => {
-                            const cleanObservations = sanitizeAnalysisObservations(analysis.observations);
-                            if (!cleanObservations) return null;
-                            return (
-                            <Typography variant="body2">
-                              <strong>Observations:</strong> {cleanObservations}
-                            </Typography>
-                            );
-                          })()}
-                          {analysis.price && (
-                            <Typography variant="body2">
-                              <strong>Prix:</strong> {analysis.price} FCFA
-                            </Typography>
+                          {acteGroups.length > 0 && (
+                            <Box>
+                              {acteGroups.map((group, groupIndex) => (
+                                <Box key={`${analysis.id || index}-${group.acteName}-${groupIndex}`} sx={{ mb: 0.75 }}>
+                                  <Typography variant="body2">
+                                    <strong>{group.acteName}</strong>
+                                  </Typography>
+                                  {group.items.map((item) => (
+                                    <Typography key={`${analysis.id || index}-${item.id}`} variant="body2" color="text.secondary">
+                                      - {item.name} ({Number(item.calculatedPrice || 0).toLocaleString('fr-FR')} FCFA)
+                                    </Typography>
+                                  ))}
+                                </Box>
+                              ))}
+                            </Box>
                           )}
                           {analysis.samplingDate && (
                             <Typography variant="body2" color="text.secondary">
                               <strong>Date de prélèvement:</strong> {fDateTime(analysis.samplingDate)}
                             </Typography>
                           )}
+                          {analysis.price && (
+                            <Typography variant="body2">
+                              <strong>Prix:</strong> {analysis.price} FCFA
+                            </Typography>
+                          )}
+                          {(() => {
+                            const cleanObservations = sanitizeAnalysisObservations(analysis.observations);
+                            if (!cleanObservations) return null;
+                            return (
+                              <Typography variant="body2">
+                                <strong>Observations:</strong> {cleanObservations}
+                              </Typography>
+                            );
+                          })()}
                           {(analysis.status === 'TERMINE' || analysis.status === 'VALIDE') && (
                             <Box sx={{ mt: 1 }}>
                               <Button
@@ -2361,9 +2464,10 @@ export default function DoctorMyConsultationsView() {
                               </Button>
                             </Box>
                           )}
-                        </Stack>
-                      </Card>
-                    ))}
+                          </Stack>
+                        </Card>
+                      );
+                    })}
                   </Stack>
                 )}
 
@@ -2683,7 +2787,7 @@ export default function DoctorMyConsultationsView() {
               onChange={(e) =>
                 setCertificatForm((prev) => {
                   const startDate = e.target.value;
-                  const endDate = prev.endDate;
+                  const { endDate } = prev;
                   let durationDays = 0;
                   if (startDate && endDate) {
                     const start = new Date(startDate);
@@ -2704,7 +2808,7 @@ export default function DoctorMyConsultationsView() {
               onChange={(e) =>
                 setCertificatForm((prev) => {
                   const endDate = e.target.value;
-                  const startDate = prev.startDate;
+                  const { startDate } = prev;
                   let durationDays = 0;
                   if (startDate && endDate) {
                     const start = new Date(startDate);

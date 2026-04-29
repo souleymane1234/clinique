@@ -451,9 +451,25 @@ export default class ConsumApi {
     return raw;
   }
 
-  static async createBillingInvoice({ patientId, consultationId, totalAmount, currency = 'FCFA', note = '' }) {
+  static async createBillingInvoice({
+    patientId,
+    consultationId,
+    totalAmount,
+    insuranceAdjustedAmount,
+    currency = 'FCFA',
+    note = '',
+  }) {
     try {
-      const payload = { patientId, consultationId, totalAmount: Number(totalAmount), currency, note };
+      const payload = {
+        patientId: patientId != null ? String(patientId) : patientId,
+        totalAmount: Number(totalAmount),
+        currency,
+        note,
+      };
+      if (consultationId) payload.consultationId = String(consultationId);
+      if (insuranceAdjustedAmount !== undefined && insuranceAdjustedAmount !== null) {
+        payload.insuranceAdjustedAmount = Number(insuranceAdjustedAmount);
+      }
       const result = await this._authenticatedRequest('POST', apiUrl.billingInvoices, payload);
       if (result?.success && result.data) {
         const inv = ConsumApi._normalizeBillingInvoice(result.data);
@@ -4486,7 +4502,17 @@ export default class ConsumApi {
       const url = ConsumApi._urlWithQuery(apiUrl.laboratoryAnalyses, ConsumApi._laboratoryAnalysesQueryFilters(filters));
       const result = await this._authenticatedRequest('GET', url);
       if (result.success && result.data) {
-        const data = Array.isArray(result.data) ? result.data : result.data?.data || [];
+        const raw = result.data;
+        let data = [];
+        if (Array.isArray(raw)) {
+          data = raw;
+        } else {
+          const { data: nestedData, items, results, analyses } = raw || {};
+          if (Array.isArray(nestedData)) data = nestedData;
+          else if (Array.isArray(items)) data = items;
+          else if (Array.isArray(results)) data = results;
+          else if (Array.isArray(analyses)) data = analyses;
+        }
         return {
           success: true,
           data: Array.isArray(data) ? data : [],
@@ -4572,12 +4598,64 @@ export default class ConsumApi {
 
   static async createLaboratoryAnalysis(data) {
     try {
-      const result = await this._authenticatedRequest('POST', apiUrl.laboratoryAnalyses, data);
-      if (result.success && result.data) {
+      const {
+        patientId,
+        consultationId,
+        prescriptionId,
+        prescribingDoctorId,
+        analyse: analyseGroups,
+        sampleType = 'SANG',
+        status = 'EN_ATTENTE',
+        urgent = false,
+        samplingDate,
+        sampledBy,
+        observations = '',
+        price = 0,
+      } = data || {};
+
+      /** Correspond au corps POST /laboratory/analyses (champs optionnels omis s’absents) */
+      const payload = {
+        patientId: patientId != null ? String(patientId) : undefined,
+        consultationId: consultationId != null ? String(consultationId) : undefined,
+        prescribingDoctorId: prescribingDoctorId != null ? String(prescribingDoctorId) : undefined,
+        sampleType: sampleType || 'SANG',
+        status: status || 'EN_ATTENTE',
+        urgent: Boolean(urgent),
+        observations: observations == null ? '' : String(observations),
+        price: Number(price) || 0,
+        analyse: Array.isArray(analyseGroups)
+          ? analyseGroups.map((g) => ({
+              actes_biologies: g.actes_biologies != null ? String(g.actes_biologies) : g.actes_biologies,
+              actes_biologies_items: Array.isArray(g.actes_biologies_items)
+                ? g.actes_biologies_items.map((id) => String(id))
+                : g.actes_biologies_items,
+            }))
+          : [],
+      };
+      if (prescriptionId != null && prescriptionId !== '') {
+        payload.prescriptionId = String(prescriptionId);
+      }
+      if (samplingDate != null && String(samplingDate).trim() !== '') {
+        payload.samplingDate = String(samplingDate);
+      }
+      if (sampledBy != null && String(sampledBy).trim() !== '') {
+        payload.sampledBy = String(sampledBy);
+      }
+
+      const result = await this._authenticatedRequest('POST', apiUrl.laboratoryAnalyses, payload);
+
+      if (result.success && result.data != null) {
+        const raw = result.data;
+        const entity =
+          raw && typeof raw === 'object' && (raw.analyse || raw.analysis)
+            ? raw.analyse || raw.analysis
+            : raw;
+        const msgFromBody =
+          raw && typeof raw === 'object' && typeof raw.message === 'string' ? raw.message : '';
         return {
           success: true,
-          data: result.data.analyse || result.data.analysis || result.data,
-          message: result.data.message || 'Analyse créée avec succès',
+          data: entity,
+          message: msgFromBody || result.message || 'Analyse créée avec succès',
           errors: [],
         };
       }

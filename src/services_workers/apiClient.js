@@ -11,6 +11,7 @@ const api = axios.create({
 class ApiClient {
   static async request(method, url, data = null, requiresAuth = true) {
     try {
+      const methodUpper = (method || 'GET').toUpperCase();
       const config = {};
 
       const token = AdminStorage.getTokenAdmin();
@@ -61,6 +62,37 @@ class ApiClient {
             message: 'Opération réussie',
             errors: [],
           };
+        }
+
+        // 201 Created, ou 200 + POST quand le corps ressemble à une réponse « ressource créée »
+        if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {
+          const raw = response.data;
+          const hasCreateStylePayload =
+            raw.data !== undefined ||
+            raw.analyse !== undefined ||
+            raw.analysis !== undefined;
+          const treatAsCreateSuccess =
+            response.status === 201 ||
+            (methodUpper === 'POST' && response.status === 200 && hasCreateStylePayload);
+          if (
+            treatAsCreateSuccess &&
+            (!('success' in raw) || raw.success === true)
+          ) {
+            let entity = raw;
+            if (raw.data !== undefined && raw.data !== null) {
+              entity = raw.data;
+            } else if (raw.analyse !== undefined) {
+              entity = raw.analyse;
+            } else if (raw.analysis !== undefined) {
+              entity = raw.analysis;
+            }
+            return {
+              success: true,
+              data: entity,
+              message: raw.message || (response.status === 201 ? 'Créé avec succès' : 'Opération réussie'),
+              errors: [],
+            };
+          }
         }
 
         // Si response.data est directement un tableau, c'est une réponse directe

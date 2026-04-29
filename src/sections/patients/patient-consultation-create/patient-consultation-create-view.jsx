@@ -1,5 +1,6 @@
+import { pdf } from '@react-pdf/renderer';
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { LoadingButton } from '@mui/lab';
@@ -34,12 +35,15 @@ import {
 import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
+import { isBillingInvoicePaid } from 'src/utils/billing-utils';
 import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
+import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-laboratory-analysis';
 
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
 import Iconify from 'src/components/iconify';
+import FacturePdfDocument from 'src/components/generator-facture/facture-pdf-template';
 
 // ----------------------------------------------------------------------
 
@@ -70,6 +74,51 @@ const STATUS_LABELS = {
   ANNULEE: 'Annulée',
 };
 
+function consultationAnalysisStatusChipLabel(status) {
+  if (status === 'EN_ATTENTE') return 'En attente';
+  if (status === 'EN_COURS') return 'En cours';
+  if (status === 'TERMINE' || status === 'VALIDE') return 'Terminé';
+  return status || '—';
+}
+
+function consultationAnalysisStatusChipColor(status) {
+  if (status === 'EN_ATTENTE') return 'warning';
+  if (status === 'EN_COURS') return 'info';
+  if (status === 'TERMINE' || status === 'VALIDE') return 'success';
+  return 'default';
+}
+
+const pickNamedItems = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        return String(item.name || item.label || item.itemName || '').trim();
+      }
+      return '';
+    })
+    .filter(Boolean);
+
+const extractBiologyItemNames = (analysis) => {
+  const analyseEntries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+  const names = [];
+
+  analyseEntries.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') return;
+
+    names.push(
+      ...pickNamedItems(entry.actes_biologies_items_details),
+      ...pickNamedItems(entry.actesBiologiesItems),
+      ...pickNamedItems(entry.items),
+      ...pickNamedItems(entry.actes_biologies_items)
+    );
+  });
+
+  names.push(...pickNamedItems(analysis?.actesBiologiesItems), ...pickNamedItems(analysis?.items));
+
+  return Array.from(new Set(names));
+};
+
 // ----------------------------------------------------------------------
 
 export default function PatientConsultationCreateView() {
@@ -97,6 +146,12 @@ export default function PatientConsultationCreateView() {
   const [serviceTariffs, setServiceTariffs] = useState([]);
   const [loadingServiceTariffs, setLoadingServiceTariffs] = useState(false);
   const [paymentValidated, setPaymentValidated] = useState(false);
+  const [validatingPayment, setValidatingPayment] = useState(false);
+  const [serviceInvoice, setServiceInvoice] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('ESPECES');
+  const [invoicePdfLoading, setInvoicePdfLoading] = useState(false);
+  const [consultationAnalyses, setConsultationAnalyses] = useState([]);
+  const [loadingConsultationAnalyses, setLoadingConsultationAnalyses] = useState(false);
   const [consultationForm, setConsultationForm] = useState({
     patientId: patientId || '',
     type: 'PREMIERE_CONSULTATION',
@@ -413,6 +468,8 @@ export default function PatientConsultationCreateView() {
           serviceTariffId: serviceTariffs.length > 0 ? serviceTariffs[0].id : '',
         });
         setPaymentValidated(false);
+        setServiceInvoice(null);
+        setPaymentMethod('ESPECES');
       }
     } catch (error) {
       console.error('Error creating consultation:', error);
@@ -429,13 +486,186 @@ export default function PatientConsultationCreateView() {
     if (!paymentValidated) return 'Veuillez valider le paiement avant de créer la consultation';
     return '';
   })();
-  const handleValidatePayment = () => {
+  const handleValidatePayment = async () => {
     if (!consultationForm.serviceTariffId) {
       showError('Erreur', 'Veuillez sélectionner le service de consultation avant le paiement.');
       return;
     }
-    setPaymentValidated(true);
-    showSuccess('Paiement', 'Paiement validé. Vous pouvez créer la consultation.');
+    if (!consultationForm.patientId) {
+      showError('Erreur', 'Patient introuvable pour la génération de facture.');
+      return;
+    }
+    if (paymentValidated && serviceInvoice?.id) {
+      showSuccess('Paiement', 'Paiement déjà validé pour cette consultation.');
+      return;
+    }
+    const amount = Number(selectedTariff?.price ?? 0);
+    if (amount <= 0 || consultationForm.category === 'CONTROLE_GRATUIT') {
+      setPaymentValidated(true);
+      setServiceInvoice(null);
+      showSuccess('Paiement', 'Consultation gratuite: aucune facture requise.');
+      return;
+    }
+
+    setValidatingPayment(true);
+    try {
+      const invoiceRes = await ConsumApi.createBillingInvoice({
+        patientId: consultationForm.patientId,
+        consultationId: null,
+        totalAmount: amount,
+        insuranceAdjustedAmount: amount,
+        currency: paymentMethod,
+        note: `Facture service consultation - ${selectedTariff?.name || 'Consultation'} - paiement: ${paymentMethod}`,
+      });
+      const processed = showApiResponse(invoiceRes, {
+        successTitle: 'Facture générée',
+        errorTitle: 'Facturation',
+      });
+      if (!processed.success) return;
+
+      const invoiceData = invoiceRes.data;
+      const billingInvoiceId = invoiceData?.id;
+      if (!billingInvoiceId) {
+        showError('Facturation', 'Facture créée sans identifiant.');
+        return;
+      }
+
+      const totalAmount = Number(invoiceData?.totalAmount ?? amount);
+      const alreadyPaid = Number(invoiceData?.paidAmount ?? 0);
+      const remainingAmount = Math.max(0, totalAmount - alreadyPaid);
+
+      let finalInvoice = invoiceData;
+
+      if (remainingAmount > 0) {
+        const payRes = await ConsumApi.createBillingPayment({
+          invoiceId: billingInvoiceId,
+          method: paymentMethod,
+          amount: remainingAmount,
+          reference: '',
+          details: `Paiement consultation - ${selectedTariff?.name || 'Consultation'}`,
+        });
+        if (!payRes.success) {
+          showApiResponse(payRes, { successTitle: '', errorTitle: 'Paiement' });
+          return;
+        }
+        const paymentId = payRes.data?.id;
+        if (paymentId) {
+          const stRes = await ConsumApi.updateBillingPaymentStatus({ paymentId, status: 'VALIDEE' });
+          if (!stRes?.success) {
+            showError('Attention', 'Paiement enregistré mais la validation du statut a échoué. Vérifiez côté serveur.');
+          }
+        }
+        const refreshed = await ConsumApi.getBillingInvoiceById(billingInvoiceId);
+        if (refreshed?.success && refreshed.data) {
+          finalInvoice = refreshed.data;
+        }
+      } else {
+        const refreshed = await ConsumApi.getBillingInvoiceById(billingInvoiceId);
+        if (refreshed?.success && refreshed.data) {
+          finalInvoice = refreshed.data;
+        }
+      }
+
+      setServiceInvoice(finalInvoice);
+      setPaymentValidated(true);
+      showSuccess('Paiement', 'Facture générée et paiement enregistré.');
+      if (billingInvoiceId) {
+        setTimeout(() => {
+          handleOpenServiceInvoicePdf(billingInvoiceId);
+        }, 300);
+      }
+    } catch (error) {
+      console.error('Error validating payment / creating invoice:', error);
+      showError('Erreur', 'Impossible de générer la facture de service');
+    } finally {
+      setValidatingPayment(false);
+    }
+  };
+
+  const buildServiceFacturePdfData = (invoice) => {
+    let patientName = 'Patient';
+    if (invoice?.patient) {
+      patientName = `${invoice.patient.firstName || ''} ${invoice.patient.lastName || ''}`.trim();
+    } else if (patient) {
+      patientName = `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
+    }
+    const amount = Number(invoice?.totalAmount ?? selectedTariff?.price ?? 0);
+    const paid = Number(invoice?.paidAmount ?? 0);
+    const paidFlag = isBillingInvoicePaid(invoice);
+    return {
+      id: invoice?.id,
+      numeroFacture: invoice?.invoiceNumber || invoice?.id?.slice(0, 8),
+      dateFacture: invoice?.createdAt || new Date().toISOString(),
+      documentType: paidFlag ? 'receipt' : undefined,
+      type: 'proforma',
+      invoiceNature: 'SERVICE',
+      clientName: patientName || 'Patient',
+      patientId: invoice?.patient?.id || consultationForm.patientId,
+      consultationId: invoice?.consultation?.id || undefined,
+      montantTotal: amount,
+      montantPaye: paid,
+      montantRestant: Math.max(0, amount - paid),
+      status: paidFlag ? 'paid' : String(invoice?.status || 'pending').toLowerCase(),
+      items: [
+        {
+          description: selectedTariff?.name || 'Service de consultation',
+          quantity: 1,
+          unitPrice: amount,
+        },
+      ],
+    };
+  };
+
+  const generateServiceInvoicePdfBlob = async (invoiceId) => {
+    const invoiceRes = await ConsumApi.getBillingInvoiceById(invoiceId);
+    if (!invoiceRes.success || !invoiceRes.data) {
+      throw new Error(invoiceRes.message || 'Impossible de charger la facture');
+    }
+    const facture = buildServiceFacturePdfData(invoiceRes.data);
+    return pdf(React.createElement(FacturePdfDocument, { facture })).toBlob();
+  };
+
+  const handleOpenServiceInvoicePdf = async (invoiceId = serviceInvoice?.id) => {
+    if (!invoiceId) {
+      showError('Erreur', 'Aucune facture disponible');
+      return;
+    }
+    setInvoicePdfLoading(true);
+    try {
+      const blob = await generateServiceInvoicePdfBlob(invoiceId);
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Error opening service invoice PDF:', error);
+      showError('Erreur', error.message || 'Impossible d’ouvrir la facture');
+    } finally {
+      setInvoicePdfLoading(false);
+    }
+  };
+
+  const handleDownloadServiceInvoicePdf = async (invoiceId = serviceInvoice?.id) => {
+    if (!invoiceId) {
+      showError('Erreur', 'Aucune facture disponible');
+      return;
+    }
+    setInvoicePdfLoading(true);
+    try {
+      const blob = await generateServiceInvoicePdfBlob(invoiceId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `facture-service-${serviceInvoice?.invoiceNumber || invoiceId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading service invoice PDF:', error);
+      showError('Erreur', error.message || 'Impossible de télécharger la facture');
+    } finally {
+      setInvoicePdfLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -447,7 +677,8 @@ export default function PatientConsultationCreateView() {
     setDetailsDialog({ open: true, loading: true, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
-    
+    setConsultationAnalyses([]);
+
     try {
       // Charger les détails complets de la consultation
       const result = await ConsumApi.getConsultationById(consultation.id);
@@ -475,6 +706,20 @@ export default function PatientConsultationCreateView() {
           hospitalizationRequired: consultationData.hospitalizationRequired || false,
           hospitalizationReason: consultationData.hospitalizationReason || '',
         });
+
+        setLoadingConsultationAnalyses(true);
+        try {
+          const { ok: analysesOk, analyses } = await fetchLaboratoryAnalysesForConsultation(
+            consultationData,
+            consultation
+          );
+          setConsultationAnalyses(analysesOk ? analyses : []);
+        } catch (e) {
+          console.error('Error loading consultation analyses:', e);
+          setConsultationAnalyses([]);
+        } finally {
+          setLoadingConsultationAnalyses(false);
+        }
       } else {
         showError('Erreur', 'Impossible de charger les détails de la consultation');
         setDetailsDialog({ open: false, loading: false, editing: false });
@@ -492,6 +737,8 @@ export default function PatientConsultationCreateView() {
     setDetailsDialog({ open: false, loading: false, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
+    setConsultationAnalyses([]);
+    setLoadingConsultationAnalyses(false);
   };
 
   const handleToggleEdit = () => {
@@ -673,6 +920,13 @@ export default function PatientConsultationCreateView() {
     return null;
   }
 
+  let validatePaymentButtonLabel = 'Valider le paiement';
+  if (paymentValidated) {
+    validatePaymentButtonLabel = 'Paiement validé';
+  } else if (validatingPayment) {
+    validatePaymentButtonLabel = 'Génération de la facture...';
+  }
+
   return (
     <>
       <Helmet>
@@ -813,14 +1067,29 @@ export default function PatientConsultationCreateView() {
               </Grid>
 
               <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mt: 3 }}>
+                <FormControl size="small" sx={{ minWidth: 220 }}>
+                  <InputLabel>Moyen de paiement</InputLabel>
+                  <Select
+                    label="Moyen de paiement"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    disabled={paymentValidated || validatingPayment}
+                  >
+                    <MenuItem value="ESPECES">Espèces</MenuItem>
+                    <MenuItem value="MOBILE_MONEY">Mobile Money</MenuItem>
+                    <MenuItem value="CARTE_BANCAIRE">Carte bancaire</MenuItem>
+                    <MenuItem value="VIREMENT">Virement</MenuItem>
+                  </Select>
+                </FormControl>
                 <Button onClick={handleCancel}>Annuler</Button>
                 <LoadingButton
                   variant="outlined"
                   color={paymentValidated ? 'success' : 'primary'}
                   onClick={handleValidatePayment}
-                  disabled={!consultationForm.serviceTariffId || paymentValidated}
+                  loading={validatingPayment}
+                  disabled={!consultationForm.serviceTariffId || paymentValidated || validatingPayment}
                 >
-                  {paymentValidated ? 'Paiement validé' : 'Valider le paiement'}
+                  {validatePaymentButtonLabel}
                 </LoadingButton>
                 <LoadingButton
                   variant="contained"
@@ -835,6 +1104,24 @@ export default function PatientConsultationCreateView() {
                 <Typography variant="caption" color="error" sx={{ display: 'block', textAlign: 'right', mt: 1 }}>
                   {createDisabledReason}
                 </Typography>
+              )}
+              {serviceInvoice?.id && (
+                <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" sx={{ mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Facture générée: {serviceInvoice.invoiceNumber || serviceInvoice.id?.slice(0, 8)}
+                  </Typography>
+                  <Button size="small" variant="text" onClick={() => handleOpenServiceInvoicePdf()}>
+                    Voir facture
+                  </Button>
+                  <LoadingButton
+                    size="small"
+                    variant="outlined"
+                    loading={invoicePdfLoading}
+                    onClick={() => handleDownloadServiceInvoicePdf()}
+                  >
+                    Télécharger
+                  </LoadingButton>
+                </Stack>
               )}
             </Stack>
           </Card>
@@ -1113,6 +1400,58 @@ export default function PatientConsultationCreateView() {
                     />
                   </Grid>
                 </Grid>
+
+                <Divider>Analyses de laboratoire</Divider>
+                {loadingConsultationAnalyses && (
+                  <Box sx={{ py: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Chargement des analyses…
+                    </Typography>
+                  </Box>
+                )}
+                {!loadingConsultationAnalyses && consultationAnalyses.length === 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    Aucune analyse liée à cette consultation.
+                  </Typography>
+                )}
+                {!loadingConsultationAnalyses && consultationAnalyses.length > 0 && (
+                  <Stack spacing={1}>
+                    {consultationAnalyses.map((analysis, index) => {
+                      const biologyItems = extractBiologyItemNames(analysis);
+                      return (
+                        <Card key={analysis.id || index} variant="outlined" sx={{ p: 1.5 }}>
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                            spacing={1}
+                          >
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {analysis.analysisName || "Demande d'analyse laboratoire"}
+                              </Typography>
+                              {Number(analysis.price) > 0 && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {Number(analysis.price).toLocaleString('fr-FR')} FCFA
+                                </Typography>
+                              )}
+                              {biologyItems.length > 0 && (
+                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                  Actes biologiques: {biologyItems.join(', ')}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Chip
+                              size="small"
+                              label={consultationAnalysisStatusChipLabel(analysis.status)}
+                              color={consultationAnalysisStatusChipColor(analysis.status)}
+                            />
+                          </Stack>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                )}
 
                 {!isInfirmier && (
                   <>

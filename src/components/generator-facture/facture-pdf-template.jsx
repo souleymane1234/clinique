@@ -265,6 +265,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     lineHeight: 1.4,
   },
+  footerTextBlue: {
+    fontSize: 7,
+    textAlign: 'center',
+    color: '#0b61c3',
+    marginBottom: 2,
+    lineHeight: 1.4,
+  },
   footerTextBold: {
     fontSize: 7,
     textAlign: 'center',
@@ -294,23 +301,30 @@ const styles = StyleSheet.create({
 const FacturePdfDocument = ({ facture }) => {
   // Déterminer si c'est une proforma (seulement ce cas garde le cachet)
   const isProforma = facture.type === 'proforma' || facture.invoiceType === 'proforma';
+  const isPaymentReceipt = String(facture.documentType || '').toLowerCase() === 'receipt';
+  const isServiceInvoice =
+    String(facture.invoiceNature || facture.category || facture.typeFacture || '').toUpperCase() === 'SERVICE';
   const items = facture.items || [];
-  
+
+  let invoiceTitleText = 'FACTURE';
+  if (isPaymentReceipt) {
+    invoiceTitleText = 'RECU DE PAIEMENT';
+  } else if (isServiceInvoice) {
+    invoiceTitleText = 'FACTURE DE SERVICE';
+  } else if (isProforma) {
+    invoiceTitleText = 'FACTURE PROFORMA';
+  }
+
   // Utiliser les images en base64 si disponibles, sinon utiliser les URLs
-  const headerImageSrc = facture._headerImage || 
+  const headerImageSrc = facture._headerImage ||
     (typeof window !== 'undefined' 
-      ? `${window.location.origin}/document/TETE.jpg`
-      : '/document/TETE.jpg');
+      ? `${window.location.origin}/assets/logo.jpeg`
+      : '/assets/logo.jpeg');
   
-  const watermarkLogo = facture._watermarkLogo || 
+  const watermarkLogo = facture._watermarkLogo ||
     (typeof window !== 'undefined' 
-      ? `${window.location.origin}/document/logo.jpg`
-      : '/document/logo.jpg');
-  
-  const cachetImageSrc = facture._cachetImage || 
-    (typeof window !== 'undefined' 
-      ? `${window.location.origin}/assets/images/cachet.png`
-      : '/assets/images/cachet.png');
+      ? `${window.location.origin}/assets/logo.jpeg`
+      : '/assets/logo.jpeg');
   
   // Calculer les totaux
   const totalHT = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
@@ -341,20 +355,13 @@ const FacturePdfDocument = ({ facture }) => {
         {/* Contenu principal */}
         <View style={styles.content}>
           {/* Titre */}
-          <Text style={styles.invoiceTitle}>
-            {isProforma ? 'FACTURE PROFORMA' : 'REÇU'}
-          </Text>
-          {isProforma && (
-            <Text style={styles.invoiceSubtitle}>
-              (Document à titre informatif - Non valable pour paiement)
-            </Text>
-          )}
+          <Text style={styles.invoiceTitle}>{invoiceTitleText}</Text>
 
           {/* Informations facture et client */}
           <View style={styles.infoSection}>
             {/* Informations facture */}
             <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>FACTURE N°</Text>
+              <Text style={styles.infoLabel}>{isPaymentReceipt ? 'RECU N°' : 'FACTURE N°'}</Text>
               <Text style={styles.infoText}>{facture.numeroFacture || `FAC-${facture.id?.slice(0, 8)}`}</Text>
               
               <Text style={styles.infoLabel}>DATE</Text>
@@ -366,6 +373,12 @@ const FacturePdfDocument = ({ facture }) => {
                 <>
                   <Text style={styles.infoLabel}>DATE D&apos;ÉCHÉANCE</Text>
                   <Text style={styles.infoText}>{fDate(facture.dateEcheance, 'dd/MM/yyyy')}</Text>
+                </>
+              )}
+              {facture.consultationId && (
+                <>
+                  <Text style={styles.infoLabel}>CONSULTATION</Text>
+                  <Text style={styles.infoText}>{String(facture.consultationId).slice(0, 8)}</Text>
                 </>
               )}
             </View>
@@ -423,7 +436,7 @@ const FacturePdfDocument = ({ facture }) => {
             ) : (
               <View style={styles.tableRow}>
                 <Text style={[styles.tableCell, { width: '100%', textAlign: 'center', fontStyle: 'italic', color: '#666666' }]}>
-                  Aucun article
+                  {isServiceInvoice ? 'Service clinique' : 'Aucun article'}
                 </Text>
               </View>
             )}
@@ -471,45 +484,15 @@ const FacturePdfDocument = ({ facture }) => {
           )}
 
           {/* Note pour proforma */}
-          {isProforma && (
-            <View style={styles.proformaNote}>
-              <Text style={styles.proformaNoteText}>
-                Cette facture proforma est établie à titre informatif et ne constitue pas une facture définitive.
-                Aucun paiement ne peut être effectué sur ce document.
-              </Text>
-            </View>
-          )}
 
         </View>
 
-        {/* Cachet en bas à droite (uniquement pour proforma) */}
-        {isProforma && cachetImageSrc && (
-          <View style={styles.cachetContainer}>
-            <Image
-              src={cachetImageSrc}
-              style={styles.cachetImage}
-              cache={false}
-            />
-          </View>
-        )}
-
         {/* Pied de page */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerTextBold}>
-            Riviera palmeraie Lot 09, Ilot 03 Abidjan-Côte d&apos;Ivoire
-          </Text>
-          <Text style={styles.footerText}>
-            +225 05 00 49 58 58 / 07 89 24 47 60 . contact@annour-travel.com
-          </Text>
-          <Text style={styles.footerText}>
-            RCCM : CI-ABJ-03-2023-B13-11981 / NCC : 2304977 U . https://annour-travel.com/
-          </Text>
-          <Text style={styles.footerTextBold}>
-            Orange Money / Wave : 0789244760
-          </Text>
-          <Text style={styles.footerTextBold}>
-            RIB CORIS BANK : 01023   010346524101    14
-          </Text>
+          <Text style={styles.footerTextBold}>CENTRE MEDICAL PREVENTIC AFRIC</Text>
+          <Text style={styles.footerTextBlue}>CONSULTATIONS DE MEDECINE GENERALE ET DE SPECIALISTES - HOSPITALISATIONS - LABORATOIRES D&apos;ANALYSES BIOMEDICALES - SANTE ET SECURITE AU TRAVAIL - ASSISTANCE - FORMATION</Text>
+          <Text style={styles.footerText}>22 BP 1026 Abidjan 22 _ NCC 1800967 B _ RCCM CI-ABJ-2018-8-00195</Text>
+          <Text style={styles.footerTextBlue}>preventic.afric@gmail.com _ Tel: +225 27 21 24 91 37 / 07 07 20 48 45</Text>
         </View>
       </Page>
     </Document>
