@@ -830,8 +830,10 @@ export default function PatientConsultationCreateView() {
 
     setSaving(true);
     try {
+      const editableFields = { ...editForm };
+      delete editableFields.selectedMedecinId;
       const updateData = {
-        ...editForm,
+        ...editableFields,
         patientId: selectedConsultation.patientId || selectedConsultation.patient?.id,
         medecinId: selectedMedecinId,
         serviceTariffId: selectedConsultation.serviceTariffId || selectedConsultation.serviceTariff?.id,
@@ -840,6 +842,18 @@ export default function PatientConsultationCreateView() {
         status: selectedConsultation.status,
         consultationDate: selectedConsultation.consultationDate,
       };
+
+      if (isInfirmier) {
+        updateData.clinicalExamination = selectedConsultation.clinicalExamination ?? '';
+        updateData.diagnostic = selectedConsultation.diagnostic ?? '';
+        updateData.differentialDiagnosis = selectedConsultation.differentialDiagnosis ?? '';
+        updateData.treatment = selectedConsultation.treatment ?? '';
+        updateData.recommendations = selectedConsultation.recommendations ?? '';
+        updateData.privateNotes = selectedConsultation.privateNotes ?? '';
+        updateData.nextAppointment = selectedConsultation.nextAppointment ?? '';
+        updateData.hospitalizationRequired = Boolean(selectedConsultation.hospitalizationRequired);
+        updateData.hospitalizationReason = selectedConsultation.hospitalizationReason ?? '';
+      }
 
       const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
       const processed = showApiResponse(result, {
@@ -1351,21 +1365,6 @@ export default function PatientConsultationCreateView() {
                   )}
                 </Grid>
 
-                <Divider>Examen Clinique</Divider>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={3}
-                      label="Examen clinique"
-                      value={editForm.clinicalExamination}
-                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
-                      disabled={!detailsDialog.editing}
-                    />
-                  </Grid>
-                </Grid>
-
                 <Divider>Signes Vitaux</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={4}>
@@ -1453,6 +1452,22 @@ export default function PatientConsultationCreateView() {
                   </Grid>
                 </Grid>
 
+                <Divider>Examen Clinique</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Examen clinique"
+                      value={editForm.clinicalExamination}
+                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
+                    />
+                  </Grid>
+                </Grid>
+
                 <Divider>Analyses de laboratoire</Divider>
                 {loadingConsultationAnalyses && (
                   <Box sx={{ py: 1 }}>
@@ -1505,8 +1520,6 @@ export default function PatientConsultationCreateView() {
                   </Stack>
                 )}
 
-                {!isInfirmier && (
-                  <>
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
@@ -1514,7 +1527,7 @@ export default function PatientConsultationCreateView() {
                       const hasDoctor =
                         Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
                       let diagnosticHelperText;
-                      if (isInfirmier) diagnosticHelperText = 'Réservé au médecin';
+                      if (isInfirmier) diagnosticHelperText = 'Lecture seule — réservé au médecin';
                       else if (!hasDoctor) diagnosticHelperText = 'Rempli par le médecin après transfert';
 
                       const diagnosticDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
@@ -1541,7 +1554,8 @@ export default function PatientConsultationCreateView() {
                       label="Diagnostic différentiel"
                       value={editForm.differentialDiagnosis}
                       onChange={(e) => setEditForm({ ...editForm, differentialDiagnosis: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -1549,7 +1563,7 @@ export default function PatientConsultationCreateView() {
                       const hasDoctor =
                         Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
                       let treatmentHelperText;
-                      if (isInfirmier) treatmentHelperText = 'Réservé au médecin';
+                      if (isInfirmier) treatmentHelperText = 'Lecture seule — réservé au médecin';
                       else if (!hasDoctor) treatmentHelperText = 'Rempli par le médecin après transfert';
 
                       const treatmentDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
@@ -1576,7 +1590,8 @@ export default function PatientConsultationCreateView() {
                       label="Recommandations"
                       value={editForm.recommendations}
                       onChange={(e) => setEditForm({ ...editForm, recommendations: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -1587,7 +1602,8 @@ export default function PatientConsultationCreateView() {
                       label="Notes privées"
                       value={editForm.privateNotes}
                       onChange={(e) => setEditForm({ ...editForm, privateNotes: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -1597,7 +1613,8 @@ export default function PatientConsultationCreateView() {
                       label="Prochain rendez-vous"
                       value={editForm.nextAppointment ? new Date(editForm.nextAppointment).toISOString().slice(0, 16) : ''}
                       onChange={(e) => setEditForm({ ...editForm, nextAppointment: e.target.value ? new Date(e.target.value).toISOString() : '' })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                       InputLabelProps={{ shrink: true }}
                     />
                   </Grid>
@@ -1606,18 +1623,23 @@ export default function PatientConsultationCreateView() {
                 <Divider>Hospitalisation</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
-                    <FormControl fullWidth>
+                    <FormControl fullWidth disabled={!detailsDialog.editing || isInfirmier}>
                       <InputLabel>Hospitalisation requise</InputLabel>
                       <Select
                         value={editForm.hospitalizationRequired ? 'true' : 'false'}
                         label="Hospitalisation requise"
                         onChange={(e) => setEditForm({ ...editForm, hospitalizationRequired: e.target.value === 'true' })}
-                        disabled={!detailsDialog.editing}
+                        disabled={!detailsDialog.editing || isInfirmier}
                       >
                         <MenuItem value="false">Non</MenuItem>
                         <MenuItem value="true">Oui</MenuItem>
                       </Select>
                     </FormControl>
+                    {isInfirmier && (
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        Lecture seule — réservé au médecin
+                      </Typography>
+                    )}
                   </Grid>
                   {editForm.hospitalizationRequired && (
                     <Grid item xs={12}>
@@ -1628,13 +1650,12 @@ export default function PatientConsultationCreateView() {
                         label="Raison de l'hospitalisation"
                         value={editForm.hospitalizationReason}
                         onChange={(e) => setEditForm({ ...editForm, hospitalizationReason: e.target.value })}
-                        disabled={!detailsDialog.editing}
+                        disabled={!detailsDialog.editing || isInfirmier}
+                        helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                       />
                     </Grid>
                   )}
                 </Grid>
-                  </>
-                )}
               </Stack>
             )
           )}

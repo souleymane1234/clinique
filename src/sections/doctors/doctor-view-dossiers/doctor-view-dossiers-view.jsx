@@ -536,91 +536,108 @@ export default function DoctorViewDossiersView() {
                   </Grid>
                 </Box>
 
-                {/* Examen clinique */}
-                {(detailsDialog.consultation.temperature ||
-                  detailsDialog.consultation.systolicBloodPressure ||
-                  detailsDialog.consultation.heartRate ||
-                  detailsDialog.consultation.weight ||
-                  detailsDialog.consultation.height) && (
-                  <>
-                    <Divider />
-                    <Box>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        Examen Clinique
-                      </Typography>
-                      <Grid container spacing={2}>
-                        {detailsDialog.consultation.temperature && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Température
+                {/* Signes vitaux puis examen clinique (texte) */}
+                {(() => {
+                  const c = detailsDialog.consultation;
+                  const hasSignesVitaux = !!(
+                    c.temperature ||
+                    c.systolicBloodPressure ||
+                    c.diastolicBloodPressure ||
+                    c.heartRate ||
+                    c.respiratoryRate ||
+                    c.weight ||
+                    c.height ||
+                    c.oxygenSaturation
+                  );
+                  const examenCliniqueText =
+                    c.clinicalExamination && String(c.clinicalExamination).trim()
+                      ? String(c.clinicalExamination).trim()
+                      : '';
+                  const hasExamenClinique = !!examenCliniqueText;
+                  if (!hasSignesVitaux && !hasExamenClinique) return null;
+                  return (
+                    <>
+                      <Divider />
+                      <Box>
+                        {hasSignesVitaux && (
+                          <>
+                            <Typography variant="h6" sx={{ mb: 2 }}>
+                              Signes Vitaux
                             </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.temperature} °C</Typography>
-                          </Grid>
+                            <Grid container spacing={2}>
+                              {c.temperature && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Température
+                                  </Typography>
+                                  <Typography variant="body1">{c.temperature} °C</Typography>
+                                </Grid>
+                              )}
+                              {(c.systolicBloodPressure || c.diastolicBloodPressure) && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Tension artérielle
+                                  </Typography>
+                                  <Typography variant="body1">
+                                    {c.systolicBloodPressure || 'N/A'} / {c.diastolicBloodPressure || 'N/A'} mmHg
+                                  </Typography>
+                                </Grid>
+                              )}
+                              {c.heartRate && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Fréquence cardiaque
+                                  </Typography>
+                                  <Typography variant="body1">{c.heartRate} bpm</Typography>
+                                </Grid>
+                              )}
+                              {c.respiratoryRate && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Fréquence respiratoire
+                                  </Typography>
+                                  <Typography variant="body1">{c.respiratoryRate} /min</Typography>
+                                </Grid>
+                              )}
+                              {c.weight && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Poids
+                                  </Typography>
+                                  <Typography variant="body1">{c.weight} kg</Typography>
+                                </Grid>
+                              )}
+                              {c.height && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Taille
+                                  </Typography>
+                                  <Typography variant="body1">{c.height} cm</Typography>
+                                </Grid>
+                              )}
+                              {c.oxygenSaturation && (
+                                <Grid item xs={12} sm={4}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Saturation O2
+                                  </Typography>
+                                  <Typography variant="body1">{c.oxygenSaturation} %</Typography>
+                                </Grid>
+                              )}
+                            </Grid>
+                          </>
                         )}
-                        {(detailsDialog.consultation.systolicBloodPressure ||
-                          detailsDialog.consultation.diastolicBloodPressure) && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Tension artérielle
+                        {hasExamenClinique && (
+                          <Box sx={{ mt: hasSignesVitaux ? 3 : 0 }}>
+                            <Typography variant="h6" sx={{ mb: 2 }}>
+                              Examen Clinique
                             </Typography>
-                            <Typography variant="body1">
-                              {detailsDialog.consultation.systolicBloodPressure || 'N/A'} /{' '}
-                              {detailsDialog.consultation.diastolicBloodPressure || 'N/A'} mmHg
-                            </Typography>
-                          </Grid>
+                            <Typography variant="body1">{examenCliniqueText}</Typography>
+                          </Box>
                         )}
-                        {detailsDialog.consultation.heartRate && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Fréquence cardiaque
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.heartRate} bpm</Typography>
-                          </Grid>
-                        )}
-                        {detailsDialog.consultation.respiratoryRate && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Fréquence respiratoire
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.respiratoryRate} /min</Typography>
-                          </Grid>
-                        )}
-                        {detailsDialog.consultation.weight && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Poids
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.weight} kg</Typography>
-                          </Grid>
-                        )}
-                        {detailsDialog.consultation.height && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Taille
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.height} cm</Typography>
-                          </Grid>
-                        )}
-                        {detailsDialog.consultation.oxygenSaturation && (
-                          <Grid item xs={12} sm={4}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Saturation O2
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.oxygenSaturation} %</Typography>
-                          </Grid>
-                        )}
-                        {detailsDialog.consultation.clinicalExamination && (
-                          <Grid item xs={12}>
-                            <Typography variant="subtitle2" color="text.secondary">
-                              Examen clinique
-                            </Typography>
-                            <Typography variant="body1">{detailsDialog.consultation.clinicalExamination}</Typography>
-                          </Grid>
-                        )}
-                      </Grid>
-                    </Box>
-                  </>
-                )}
+                      </Box>
+                    </>
+                  );
+                })()}
 
                 {/* Diagnostic et traitement */}
                 {(detailsDialog.consultation.diagnostic ||

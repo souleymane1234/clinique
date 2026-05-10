@@ -78,6 +78,21 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     objectFit: 'contain',
   },
+  /** Reçu de paiement : logo aligné à gauche (même retrait que le contenu). */
+  headerReceipt: {
+    width: '100%',
+    marginBottom: 15,
+    alignItems: 'flex-start',
+    paddingLeft: 40,
+  },
+  headerImageReceipt: {
+    width: '48%',
+    maxWidth: 260,
+    height: 'auto',
+    maxHeight: 110,
+    objectFit: 'contain',
+    alignSelf: 'flex-start',
+  },
   // Contenu principal
   content: {
     flex: 1,
@@ -344,10 +359,10 @@ const FacturePdfDocument = ({ facture }) => {
         )}
 
         {/* En-tête avec image */}
-        <View style={styles.header}>
+        <View style={isPaymentReceipt ? styles.headerReceipt : styles.header}>
           <Image
             src={headerImageSrc}
-            style={styles.headerImage}
+            style={isPaymentReceipt ? styles.headerImageReceipt : styles.headerImage}
             cache={false}
           />
         </View>

@@ -4004,25 +4004,55 @@ export default class ConsumApi {
     return result;
   }
 
-  static async addConsultationPrescription(consultationId, data) {
-    const normalizedData = {
+  static _normalizePrescriptionPayloadItem(data) {
+    if (!data || typeof data !== 'object') {
+      return {
+        type: 'MEDICAMENT',
+        label: '',
+        dosage: '',
+        duration: '',
+        quantity: 0,
+        instructions: '',
+        urgent: false,
+        completed: false,
+        completedAt: null,
+      };
+    }
+    const qty = data.quantity != null ? Number(data.quantity) : 0;
+    return {
       type: data.type || 'MEDICAMENT',
       label: data.label || '',
       dosage: data.dosage || '',
       duration: data.duration || '',
-      quantity: data.quantity || 0,
+      quantity: Number.isNaN(qty) ? 0 : qty,
       instructions: data.instructions || '',
-      urgent: data.urgent || false,
-      completed: data.completed || false,
-      completedAt: data.completedAt || null,
+      urgent: Boolean(data.urgent),
+      completed: Boolean(data.completed),
+      completedAt: data.completedAt != null && data.completedAt !== '' ? data.completedAt : null,
     };
-    
-    const result = await this._authenticatedRequest('POST', apiUrl.addConsultationPrescription(consultationId), normalizedData);
-    
-    if (result.success && result.data?.prescription) {
-      result.data.prescription = this._mapPrescriptionFields(result.data.prescription);
+  }
+
+  /** POST body: tableau de lignes (schéma API prescriptions). Accepte aussi un objet unique (enveloppé en tableau). */
+  static async addConsultationPrescription(consultationId, data) {
+    const items = Array.isArray(data) ? data : [data];
+    const normalizedPayload = items.map((item) => this._normalizePrescriptionPayloadItem(item));
+
+    const result = await this._authenticatedRequest(
+      'POST',
+      apiUrl.addConsultationPrescription(consultationId),
+      normalizedPayload
+    );
+
+    if (result.success && result.data != null) {
+      if (Array.isArray(result.data)) {
+        result.data = result.data.map((p) => this._mapPrescriptionFields(p));
+      } else if (Array.isArray(result.data.prescriptions)) {
+        result.data.prescriptions = result.data.prescriptions.map((p) => this._mapPrescriptionFields(p));
+      } else if (result.data.prescription) {
+        result.data.prescription = this._mapPrescriptionFields(result.data.prescription);
+      }
     }
-    
+
     return result;
   }
 

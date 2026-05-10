@@ -38,6 +38,7 @@ import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
 import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
+import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-laboratory-analysis';
 import { isBillingInvoicePaid, extractBillingInvoiceIdFromObservations } from 'src/utils/billing-utils';
 
 import { routesName } from 'src/constants/routes';
@@ -114,6 +115,51 @@ const COUNTRY_OPTIONS = [
   "Tunisie",
 ];
 
+function consultationAnalysisStatusChipLabel(status) {
+  if (status === 'EN_ATTENTE') return 'En attente';
+  if (status === 'EN_COURS') return 'En cours';
+  if (status === 'TERMINE' || status === 'VALIDE') return 'Terminé';
+  return status || '—';
+}
+
+function consultationAnalysisStatusChipColor(status) {
+  if (status === 'EN_ATTENTE') return 'warning';
+  if (status === 'EN_COURS') return 'info';
+  if (status === 'TERMINE' || status === 'VALIDE') return 'success';
+  return 'default';
+}
+
+const pickNamedItems = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        return String(item.name || item.label || item.itemName || '').trim();
+      }
+      return '';
+    })
+    .filter(Boolean);
+
+const extractBiologyItemNames = (analysis) => {
+  const analyseEntries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
+  const names = [];
+
+  analyseEntries.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') return;
+
+    names.push(
+      ...pickNamedItems(entry.actes_biologies_items_details),
+      ...pickNamedItems(entry.actesBiologiesItems),
+      ...pickNamedItems(entry.items),
+      ...pickNamedItems(entry.actes_biologies_items)
+    );
+  });
+
+  names.push(...pickNamedItems(analysis?.actesBiologiesItems), ...pickNamedItems(analysis?.items));
+
+  return Array.from(new Set(names));
+};
+
 // ----------------------------------------------------------------------
 
 
@@ -158,6 +204,8 @@ export default function PatientAccueilView() {
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [detailsDialog, setDetailsDialog] = useState({ open: false, loading: false, editing: false });
   const [editForm, setEditForm] = useState(null);
+  const [consultationAnalyses, setConsultationAnalyses] = useState([]);
+  const [loadingConsultationAnalyses, setLoadingConsultationAnalyses] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [transferDoctorDialog, setTransferDoctorDialog] = useState({ open: false, medecinId: '' });
@@ -496,7 +544,9 @@ export default function PatientAccueilView() {
     setDetailsDialog({ open: true, loading: true, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
-    
+    setConsultationAnalyses([]);
+    setLoadingConsultationAnalyses(false);
+
     try {
       const result = await ConsumApi.getConsultationById(consultation.id);
       if (result.success) {
@@ -523,6 +573,19 @@ export default function PatientAccueilView() {
           hospitalizationReason: consultationData.hospitalizationReason || '',
         });
         loadMedecinsForDetails();
+        setLoadingConsultationAnalyses(true);
+        try {
+          const { ok: analysesOk, analyses } = await fetchLaboratoryAnalysesForConsultation(
+            consultationData,
+            consultation
+          );
+          setConsultationAnalyses(analysesOk ? analyses : []);
+        } catch (e) {
+          console.error('Error loading consultation analyses:', e);
+          setConsultationAnalyses([]);
+        } finally {
+          setLoadingConsultationAnalyses(false);
+        }
       } else {
         showError('Erreur', 'Impossible de charger les détails de la consultation');
         setDetailsDialog({ open: false, loading: false, editing: false });
@@ -540,6 +603,8 @@ export default function PatientAccueilView() {
     setDetailsDialog({ open: false, loading: false, editing: false });
     setSelectedConsultation(null);
     setEditForm(null);
+    setConsultationAnalyses([]);
+    setLoadingConsultationAnalyses(false);
   };
 
   const handleToggleEdit = () => {
@@ -571,6 +636,18 @@ export default function PatientAccueilView() {
         status: selectedConsultation.status,
         consultationDate: selectedConsultation.consultationDate,
       };
+
+      if (isInfirmier) {
+        updateData.clinicalExamination = selectedConsultation.clinicalExamination ?? '';
+        updateData.diagnostic = selectedConsultation.diagnostic ?? '';
+        updateData.differentialDiagnosis = selectedConsultation.differentialDiagnosis ?? '';
+        updateData.treatment = selectedConsultation.treatment ?? '';
+        updateData.recommendations = selectedConsultation.recommendations ?? '';
+        updateData.privateNotes = selectedConsultation.privateNotes ?? '';
+        updateData.nextAppointment = selectedConsultation.nextAppointment ?? '';
+        updateData.hospitalizationRequired = Boolean(selectedConsultation.hospitalizationRequired);
+        updateData.hospitalizationReason = selectedConsultation.hospitalizationReason ?? '';
+      }
 
       const result = await ConsumApi.updateConsultation(selectedConsultation.id, updateData);
       const processed = showApiResponse(result, {
@@ -1892,21 +1969,6 @@ export default function PatientAccueilView() {
                   )}
                 </Grid>
 
-                <Divider>Examen Clinique</Divider>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={3}
-                      label="Examen clinique"
-                      value={editForm.clinicalExamination}
-                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
-                      disabled={!detailsDialog.editing}
-                    />
-                  </Grid>
-                </Grid>
-
                 <Divider>Signes Vitaux</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={4}>
@@ -1994,8 +2056,74 @@ export default function PatientAccueilView() {
                   </Grid>
                 </Grid>
 
-                {!isInfirmier && (
-                  <>
+                <Divider>Examen Clinique</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Examen clinique"
+                      value={editForm.clinicalExamination}
+                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>Analyses de laboratoire</Divider>
+                {loadingConsultationAnalyses && (
+                  <Box sx={{ py: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Chargement des analyses…
+                    </Typography>
+                  </Box>
+                )}
+                {!loadingConsultationAnalyses && consultationAnalyses.length === 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    Aucune analyse liée à cette consultation.
+                  </Typography>
+                )}
+                {!loadingConsultationAnalyses && consultationAnalyses.length > 0 && (
+                  <Stack spacing={1}>
+                    {consultationAnalyses.map((analysis, index) => {
+                      const biologyItems = extractBiologyItemNames(analysis);
+                      return (
+                        <Card key={analysis.id || index} variant="outlined" sx={{ p: 1.5 }}>
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                            spacing={1}
+                          >
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium">
+                                {analysis.analysisName || "Demande d'analyse laboratoire"}
+                              </Typography>
+                              {Number(analysis.price) > 0 && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {Number(analysis.price).toLocaleString('fr-FR')} FCFA
+                                </Typography>
+                              )}
+                              {biologyItems.length > 0 && (
+                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                  Actes biologiques: {biologyItems.join(', ')}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Chip
+                              size="small"
+                              label={consultationAnalysisStatusChipLabel(analysis.status)}
+                              color={consultationAnalysisStatusChipColor(analysis.status)}
+                            />
+                          </Stack>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                )}
+
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
@@ -2003,7 +2131,7 @@ export default function PatientAccueilView() {
                       const hasDoctor =
                         Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
                       let diagnosticHelperText;
-                      if (isInfirmier) diagnosticHelperText = 'Réservé au médecin';
+                      if (isInfirmier) diagnosticHelperText = 'Lecture seule — réservé au médecin';
                       else if (!hasDoctor) diagnosticHelperText = 'Rempli par le médecin après transfert';
 
                       const diagnosticDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
@@ -2030,7 +2158,8 @@ export default function PatientAccueilView() {
                       label="Diagnostic différentiel"
                       value={editForm.differentialDiagnosis}
                       onChange={(e) => setEditForm({ ...editForm, differentialDiagnosis: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -2038,7 +2167,7 @@ export default function PatientAccueilView() {
                       const hasDoctor =
                         Boolean(selectedConsultation.medecinId) || Boolean(selectedConsultation.medecin?.id);
                       let treatmentHelperText;
-                      if (isInfirmier) treatmentHelperText = 'Réservé au médecin';
+                      if (isInfirmier) treatmentHelperText = 'Lecture seule — réservé au médecin';
                       else if (!hasDoctor) treatmentHelperText = 'Rempli par le médecin après transfert';
 
                       const treatmentDisabled = !detailsDialog.editing || isInfirmier || !hasDoctor;
@@ -2065,7 +2194,8 @@ export default function PatientAccueilView() {
                       label="Recommandations"
                       value={editForm.recommendations}
                       onChange={(e) => setEditForm({ ...editForm, recommendations: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12}>
@@ -2076,7 +2206,8 @@ export default function PatientAccueilView() {
                       label="Notes privées"
                       value={editForm.privateNotes}
                       onChange={(e) => setEditForm({ ...editForm, privateNotes: e.target.value })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -2086,7 +2217,8 @@ export default function PatientAccueilView() {
                       label="Prochain rendez-vous"
                       value={editForm.nextAppointment ? new Date(editForm.nextAppointment).toISOString().slice(0, 16) : ''}
                       onChange={(e) => setEditForm({ ...editForm, nextAppointment: e.target.value ? new Date(e.target.value).toISOString() : '' })}
-                      disabled={!detailsDialog.editing}
+                      disabled={!detailsDialog.editing || isInfirmier}
+                      helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                       InputLabelProps={{ shrink: true }}
                     />
                   </Grid>
@@ -2095,18 +2227,23 @@ export default function PatientAccueilView() {
                 <Divider>Hospitalisation</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
-                    <FormControl fullWidth>
+                    <FormControl fullWidth disabled={!detailsDialog.editing || isInfirmier}>
                       <InputLabel>Hospitalisation requise</InputLabel>
                       <Select
                         value={editForm.hospitalizationRequired ? 'true' : 'false'}
                         label="Hospitalisation requise"
                         onChange={(e) => setEditForm({ ...editForm, hospitalizationRequired: e.target.value === 'true' })}
-                        disabled={!detailsDialog.editing}
+                        disabled={!detailsDialog.editing || isInfirmier}
                       >
                         <MenuItem value="false">Non</MenuItem>
                         <MenuItem value="true">Oui</MenuItem>
                       </Select>
                     </FormControl>
+                    {isInfirmier && (
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        Lecture seule — réservé au médecin
+                      </Typography>
+                    )}
                   </Grid>
                   {editForm.hospitalizationRequired && (
                     <Grid item xs={12}>
@@ -2117,13 +2254,12 @@ export default function PatientAccueilView() {
                         label="Raison de l'hospitalisation"
                         value={editForm.hospitalizationReason}
                         onChange={(e) => setEditForm({ ...editForm, hospitalizationReason: e.target.value })}
-                        disabled={!detailsDialog.editing}
+                        disabled={!detailsDialog.editing || isInfirmier}
+                        helperText={isInfirmier ? 'Lecture seule — réservé au médecin' : undefined}
                       />
                     </Grid>
                   )}
                 </Grid>
-                  </>
-                )}
               </Stack>
             )
           )}

@@ -21,6 +21,8 @@ import {
   TableCell,
   TableHead,
   TextField,
+  Accordion,
+  IconButton,
   InputLabel,
   Typography,
   DialogTitle,
@@ -31,6 +33,8 @@ import {
   TableContainer,
   TablePagination,
   FormControlLabel,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 
 import { useRouter } from 'src/routes/hooks';
@@ -91,6 +95,22 @@ function getPricingExamUnitPrice(ex) {
 function sanitizeAnalysisObservations(observations) {
   if (!observations || typeof observations !== 'string') return '';
   return observations.replace(BILLING_INVOICE_ID_REGEX, '').trim();
+}
+
+function createPrescriptionLineDraft() {
+  return {
+    key:
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `rx-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    type: 'MEDICAMENT',
+    label: '',
+    dosage: '',
+    duration: '',
+    quantity: 0,
+    instructions: '',
+    urgent: false,
+  };
 }
 
 const HEMATOLOGY_CONFIG = {
@@ -341,15 +361,7 @@ export default function DoctorMyConsultationsView() {
   });
   const [prescriptionDialog, setPrescriptionDialog] = useState({ open: false, loading: false, isAnalysis: false });
   const [certificatDialog, setCertificatDialog] = useState({ open: false, loading: false });
-  const [prescriptionForm, setPrescriptionForm] = useState({
-    type: 'MEDICAMENT',
-    label: '',
-    dosage: '',
-    duration: '',
-    quantity: 0,
-    instructions: '',
-    urgent: false,
-  });
+  const [prescriptionLines, setPrescriptionLines] = useState(() => [createPrescriptionLineDraft()]);
   const [analysisForm, setAnalysisForm] = useState({
     analysisName: '',
     analysisType: 'HEMATOLOGIE',
@@ -875,15 +887,7 @@ export default function DoctorMyConsultationsView() {
   };
 
   const handleOpenPrescriptionDialog = () => {
-    setPrescriptionForm({
-      type: 'MEDICAMENT',
-      label: '',
-      dosage: '',
-      duration: '',
-      quantity: 0,
-      instructions: '',
-      urgent: false,
-    });
+    setPrescriptionLines([createPrescriptionLineDraft()]);
     setAnalysisForm({
       analysisName: '',
       analysisType: 'HEMATOLOGIE',
@@ -906,25 +910,34 @@ export default function DoctorMyConsultationsView() {
       return;
     }
 
-    // Créer une prescription médicament
-    if (!prescriptionForm.label.trim()) {
-      showError('Erreur', 'Veuillez remplir au moins le nom du médicament');
+    const payload = prescriptionLines
+      .filter((line) => line.label.trim())
+      .map(({ key: _k, ...row }) => ({
+        type: row.type || 'MEDICAMENT',
+        label: row.label.trim(),
+        dosage: row.dosage || '',
+        duration: row.duration || '',
+        quantity: Number(row.quantity) || 0,
+        instructions: row.instructions || '',
+        urgent: Boolean(row.urgent),
+        completed: false,
+      }));
+
+    if (payload.length === 0) {
+      showError('Erreur', 'Veuillez renseigner au moins un médicament (nom obligatoire)');
       return;
     }
 
     setPrescriptionDialog({ open: true, loading: true });
     try {
-      const result = await ConsumApi.addConsultationPrescription(detailsDialog.consultation.id, {
-        ...prescriptionForm,
-        type: 'MEDICAMENT',
-      });
+      const result = await ConsumApi.addConsultationPrescription(detailsDialog.consultation.id, payload);
       const processed = showApiResponse(result, {
-        successTitle: 'Ordonnace ajoutée',
+        successTitle: 'Ordonnance enregistrée',
         errorTitle: 'Erreur d&apos;ajout',
       });
 
       if (processed.success) {
-        showSuccess('Succès', 'Ordonnace ajoutée avec succès');
+        showSuccess('Succès', 'Ordonnance enregistrée avec succès');
         handleClosePrescriptionDialog();
         // Recharger les prescriptions
         const prescriptionsResult = await ConsumApi.getConsultationPrescriptions(detailsDialog.consultation.id);
@@ -1583,17 +1596,36 @@ export default function DoctorMyConsultationsView() {
     }
   };
 
-  const handlePrintPrescription = (prescription) => {
+  const handlePrintPrescriptions = (prescriptionList) => {
+    const list = Array.isArray(prescriptionList) ? prescriptionList : [prescriptionList];
+    if (list.length === 0) return;
+
     const {consultation} = detailsDialog;
     const patient = consultation?.patient;
     const medecin = consultation?.medecin;
-    
+
+    const tableRowsHtml = list
+      .map(
+        (prescription) => `
+                <tr>
+                  <td>
+                    ${prescription.label || '—'}
+                    ${prescription.urgent ? '<div class="urgent">(URGENT)</div>' : ''}
+                  </td>
+                  <td>${prescription.dosage || '—'}</td>
+                  <td>${prescription.duration || '—'}</td>
+                  <td>${prescription.quantity != null && prescription.quantity !== '' ? prescription.quantity : '—'}</td>
+                  <td>${prescription.instructions || '—'}</td>
+                </tr>`
+      )
+      .join('');
+
     const printWindow = window.open('', '_blank');
     const printContent = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Ordonnace Médicale</title>
+          <title>Ordonnance médicale</title>
           <style>
             @media print {
               @page {
@@ -1613,25 +1645,34 @@ export default function DoctorMyConsultationsView() {
               flex-direction: column;
             }
             .header {
-              text-align: center;
+              display: flex;
+              flex-direction: row;
+              align-items: center;
+              gap: 14px;
               border-bottom: 1px solid #000;
-              padding-bottom: 6px;
+              padding-bottom: 8px;
               margin-bottom: 8px;
+              text-align: left;
+            }
+            .header img {
+              max-width: 140px;
+              width: auto;
+              height: auto;
+              display: block;
+              flex-shrink: 0;
+              margin: 0;
+            }
+            .header-title-block {
+              flex: 1;
+              min-width: 0;
             }
             .header h1 {
-              margin: 2px 0 0 0;
+              margin: 0;
               font-size: 20px;
               letter-spacing: 1px;
             }
-            .header img {
-              max-width: 240px;
-              width: 100%;
-              height: auto;
-              margin: 0 auto 4px auto;
-              display: block;
-            }
             .header .subtitle {
-              margin-top: 0;
+              margin-top: 4px;
               font-size: 11px;
               color: #555;
             }
@@ -1714,8 +1755,10 @@ export default function DoctorMyConsultationsView() {
         <body>
           <div class="header">
             <img src="${clinicLogoUrl}" alt="Logo clinique" />
-            <h1>ORDONNACE MÉDICALE</h1>
-            <div class="subtitle">Prévenir - Soigner - Surveiller</div>
+            <div class="header-title-block">
+              <h1>ORDONNANCE MÉDICALE</h1>
+              <div class="subtitle">Prévenir - Soigner - Surveiller</div>
+            </div>
           </div>
           
           <div class="info-section">
@@ -1742,23 +1785,14 @@ export default function DoctorMyConsultationsView() {
               <thead>
                 <tr>
                   <th>Médicament</th>
-                  <th>Dosage</th>
+                  <th>Posologie</th>
                   <th>Durée</th>
                   <th>Quantité</th>
                   <th>Instructions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>
-                    ${prescription.label || '—'}
-                    ${prescription.urgent ? '<div class="urgent">(URGENT)</div>' : ''}
-                  </td>
-                  <td>${prescription.dosage || '—'}</td>
-                  <td>${prescription.duration || '—'}</td>
-                  <td>${prescription.quantity || '—'}</td>
-                  <td>${prescription.instructions || '—'}</td>
-                </tr>
+                ${tableRowsHtml}
               </tbody>
             </table>
             <div class="ord-note">Respecter strictement cette ordonnance selon les indications du médecin.</div>
@@ -2173,21 +2207,6 @@ export default function DoctorMyConsultationsView() {
                   </Grid>
                 </Grid>
 
-                <Divider>Examen Clinique</Divider>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={3}
-                      label="Examen clinique"
-                      value={editForm.clinicalExamination}
-                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
-                      disabled={!detailsDialog.editing}
-                    />
-                  </Grid>
-                </Grid>
-
                 <Divider>Signes Vitaux</Divider>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={4}>
@@ -2282,6 +2301,108 @@ export default function DoctorMyConsultationsView() {
                     />
                   </Grid>
                 </Grid>
+
+                <Divider>Examen Clinique</Divider>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="Examen clinique"
+                      value={editForm.clinicalExamination}
+                      onChange={(e) => setEditForm({ ...editForm, clinicalExamination: e.target.value })}
+                      disabled={!detailsDialog.editing}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Divider>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <Typography>Analyses</Typography>
+                    {!detailsDialog.editing && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<Iconify icon="eva:plus-fill" />}
+                        onClick={handleOpenAnalysisDialog}
+                      >
+                        Ajouter
+                      </Button>
+                    )}
+                  </Box>
+                </Divider>
+                {analyses.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                    Aucune analyse
+                  </Typography>
+                ) : (
+                  <Stack spacing={1}>
+                    {analyses.map((analysis, index) => {
+                      const acteGroups = extractAnalysisActesDetails(analysis);
+                      return (
+                        <Card key={analysis.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                          <Stack spacing={1}>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Chip
+                              label={doctorListAnalysisStatusChipLabel(analysis.status)}
+                              size="small"
+                              color={doctorListAnalysisStatusChipColor(analysis.status)}
+                            />
+                          </Box>
+                          {acteGroups.length > 0 && (
+                            <Box>
+                              {acteGroups.map((group, groupIndex) => (
+                                <Box key={`${analysis.id || index}-${group.acteName}-${groupIndex}`} sx={{ mb: 0.75 }}>
+                                  <Typography variant="body2">
+                                    <strong>{group.acteName}</strong>
+                                  </Typography>
+                                  {group.items.map((item) => (
+                                    <Typography key={`${analysis.id || index}-${item.id}`} variant="body2" color="text.secondary">
+                                      - {item.name} ({Number(item.calculatedPrice || 0).toLocaleString('fr-FR')} FCFA)
+                                    </Typography>
+                                  ))}
+                                </Box>
+                              ))}
+                            </Box>
+                          )}
+                          {analysis.samplingDate && (
+                            <Typography variant="body2" color="text.secondary">
+                              <strong>Date de prélèvement:</strong> {fDateTime(analysis.samplingDate)}
+                            </Typography>
+                          )}
+                          {analysis.price && (
+                            <Typography variant="body2">
+                              <strong>Prix:</strong> {analysis.price} FCFA
+                            </Typography>
+                          )}
+                          {(() => {
+                            const cleanObservations = sanitizeAnalysisObservations(analysis.observations);
+                            if (!cleanObservations) return null;
+                            return (
+                              <Typography variant="body2">
+                                <strong>Observations:</strong> {cleanObservations}
+                              </Typography>
+                            );
+                          })()}
+                          {(analysis.status === 'TERMINE' || analysis.status === 'VALIDE') && (
+                            <Box sx={{ mt: 1 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<Iconify icon="eva:eye-fill" />}
+                                onClick={() => handleViewAnalysisResults(analysis.id)}
+                              >
+                                Voir les résultats
+                              </Button>
+                            </Box>
+                          )}
+                          </Stack>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                )}
 
                 <Divider>Diagnostic et Traitement</Divider>
                 <Grid container spacing={2}>
@@ -2385,110 +2506,35 @@ export default function DoctorMyConsultationsView() {
                 </Grid>
 
                 <Divider>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <Typography>Analyses</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: 1 }}>
+                    <Typography>Ordonnances</Typography>
                     {!detailsDialog.editing && (
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<Iconify icon="eva:plus-fill" />}
-                        onClick={handleOpenAnalysisDialog}
-                      >
-                        Ajouter
-                      </Button>
-                    )}
-                  </Box>
-                </Divider>
-                {analyses.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    Aucune analyse
-                  </Typography>
-                ) : (
-                  <Stack spacing={1}>
-                    {analyses.map((analysis, index) => {
-                      const acteGroups = extractAnalysisActesDetails(analysis);
-                      return (
-                        <Card key={analysis.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                          <Stack spacing={1}>
-                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <Chip
-                              label={doctorListAnalysisStatusChipLabel(analysis.status)}
-                              size="small"
-                              color={doctorListAnalysisStatusChipColor(analysis.status)}
-                            />
-                          </Box>
-                          {acteGroups.length > 0 && (
-                            <Box>
-                              {acteGroups.map((group, groupIndex) => (
-                                <Box key={`${analysis.id || index}-${group.acteName}-${groupIndex}`} sx={{ mb: 0.75 }}>
-                                  <Typography variant="body2">
-                                    <strong>{group.acteName}</strong>
-                                  </Typography>
-                                  {group.items.map((item) => (
-                                    <Typography key={`${analysis.id || index}-${item.id}`} variant="body2" color="text.secondary">
-                                      - {item.name} ({Number(item.calculatedPrice || 0).toLocaleString('fr-FR')} FCFA)
-                                    </Typography>
-                                  ))}
-                                </Box>
-                              ))}
-                            </Box>
-                          )}
-                          {analysis.samplingDate && (
-                            <Typography variant="body2" color="text.secondary">
-                              <strong>Date de prélèvement:</strong> {fDateTime(analysis.samplingDate)}
-                            </Typography>
-                          )}
-                          {analysis.price && (
-                            <Typography variant="body2">
-                              <strong>Prix:</strong> {analysis.price} FCFA
-                            </Typography>
-                          )}
-                          {(() => {
-                            const cleanObservations = sanitizeAnalysisObservations(analysis.observations);
-                            if (!cleanObservations) return null;
-                            return (
-                              <Typography variant="body2">
-                                <strong>Observations:</strong> {cleanObservations}
-                              </Typography>
-                            );
-                          })()}
-                          {(analysis.status === 'TERMINE' || analysis.status === 'VALIDE') && (
-                            <Box sx={{ mt: 1 }}>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<Iconify icon="eva:eye-fill" />}
-                                onClick={() => handleViewAnalysisResults(analysis.id)}
-                              >
-                                Voir les résultats
-                              </Button>
-                            </Box>
-                          )}
-                          </Stack>
-                        </Card>
-                      );
-                    })}
-                  </Stack>
-                )}
-
-                <Divider>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <Typography>Ordonnaces</Typography>
-                    {!detailsDialog.editing && (
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<Iconify icon="eva:plus-fill" />}
-                        onClick={handleOpenPrescriptionDialog}
-                      >
-                        Ajouter
-                      </Button>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        {prescriptions.length > 0 && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<Iconify icon="eva:printer-fill" />}
+                            onClick={() => handlePrintPrescriptions(prescriptions)}
+                          >
+                            Imprimer tout
+                          </Button>
+                        )}
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<Iconify icon="eva:plus-fill" />}
+                          onClick={handleOpenPrescriptionDialog}
+                        >
+                          Ajouter
+                        </Button>
+                      </Box>
                     )}
                   </Box>
                 </Divider>
                 {prescriptions.length === 0 ? (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    Aucune ordonnace
+                    Aucune ordonnance
                   </Typography>
                 ) : (
                   <Stack spacing={1}>
@@ -2499,20 +2545,10 @@ export default function DoctorMyConsultationsView() {
                             <Typography variant="subtitle2">
                               {prescription.label} ({prescription.type})
                             </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                              {prescription.urgent && <Chip label="Urgent" color="error" size="small" />}
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<Iconify icon="eva:printer-fill" />}
-                                onClick={() => handlePrintPrescription(prescription)}
-                              >
-                                Imprimer
-                              </Button>
-                            </Box>
+                            {prescription.urgent && <Chip label="Urgent" color="error" size="small" />}
                           </Box>
                           <Typography variant="body2">
-                            <strong>Dosage:</strong> {prescription.dosage || 'N/A'} | <strong>Durée:</strong> {prescription.duration || 'N/A'}
+                            <strong>Posologie:</strong> {prescription.dosage || 'N/A'} | <strong>Durée:</strong> {prescription.duration || 'N/A'}
                           </Typography>
                           <Typography variant="body2">
                             <strong>Quantité:</strong> {prescription.quantity || 'N/A'} | <strong>Instructions:</strong> {prescription.instructions || 'N/A'}
@@ -2610,7 +2646,7 @@ export default function DoctorMyConsultationsView() {
 
       {/* Analysis Dialog */}
       {prescriptionDialog.isAnalysis && (
-        <Dialog open={prescriptionDialog.open} onClose={handleCloseAnalysisDialog} maxWidth="sm" fullWidth>
+        <Dialog open={prescriptionDialog.open} onClose={handleCloseAnalysisDialog} maxWidth="md" fullWidth>
           <DialogTitle>Créer une Analyse</DialogTitle>
           <DialogContent>
             <Stack spacing={3} sx={{ mt: 1 }}>
@@ -2619,44 +2655,90 @@ export default function DoctorMyConsultationsView() {
               </Alert>
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Catégories et examens
+                  Catégories et examens (déplier chaque acte biologique)
                 </Typography>
                 {actesBiologies.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
                     Aucune catégorie disponible.
                   </Typography>
                 ) : (
-                  <Stack spacing={1.5}>
+                  <Stack spacing={1}>
                     {actesBiologies.map((acte) => {
                       const items = actesBiologiesItemsMap[acte.id] || [];
                       const selectedItems =
                         analysisForm.analyse.find((entry) => entry.actes_biologies === acte.id)?.actes_biologies_items || [];
                       return (
-                        <Card key={acte.id} variant="outlined" sx={{ p: 1.5 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                            {acte.name}
-                          </Typography>
-                          {items.length === 0 ? (
-                            <Typography variant="caption" color="text.secondary">
-                              Aucun examen dans cette catégorie.
-                            </Typography>
-                          ) : (
-                            <Stack spacing={0.5}>
-                              {items.map((item) => (
-                                <FormControlLabel
-                                  key={item.id}
-                                  control={
-                                    <Checkbox
-                                      checked={selectedItems.includes(item.id)}
-                                      onChange={() => handleToggleActeBiologieItem(acte.id, item.id)}
-                                    />
-                                  }
-                                  label={`${item.name || item.id} — ${getPricingExamUnitPrice(item.examTariff).toLocaleString('fr-FR')} FCFA`}
+                        <Accordion
+                          key={acte.id}
+                          variant="outlined"
+                          disableGutters
+                          sx={{
+                            borderRadius: 1,
+                            overflow: 'hidden',
+                            '&:before': { display: 'none' },
+                          }}
+                        >
+                          <AccordionSummary expandIcon={<Iconify icon="eva:arrow-ios-downward-fill" width={20} />}>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%', pr: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1 }}>
+                                {acte.name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                                {items.length} examen{items.length !== 1 ? 's' : ''}
+                              </Typography>
+                              {selectedItems.length > 0 && (
+                                <Chip
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                  label={`${selectedItems.length} sélectionné${selectedItems.length !== 1 ? 's' : ''}`}
+                                  sx={{ flexShrink: 0 }}
                                 />
-                              ))}
+                              )}
                             </Stack>
-                          )}
-                        </Card>
+                          </AccordionSummary>
+                          <AccordionDetails sx={{ pt: 0, bgcolor: 'action.hover' }}>
+                            {items.length === 0 ? (
+                              <Typography variant="caption" color="text.secondary">
+                                Aucun examen dans cette catégorie.
+                              </Typography>
+                            ) : (
+                              <Stack spacing={0.25}>
+                                {items.map((item) => (
+                                  <FormControlLabel
+                                    key={item.id}
+                                    sx={{
+                                      m: 0,
+                                      mx: 0,
+                                      display: 'flex',
+                                      alignItems: 'flex-start',
+                                      gap: 0.5,
+                                      py: 0.25,
+                                      pr: 0.5,
+                                      '& .MuiCheckbox-root': {
+                                        padding: '4px',
+                                        marginTop: '2px',
+                                        alignSelf: 'flex-start',
+                                      },
+                                    }}
+                                    control={
+                                      <Checkbox
+                                        size="small"
+                                        checked={selectedItems.includes(item.id)}
+                                        onChange={() => handleToggleActeBiologieItem(acte.id, item.id)}
+                                      />
+                                    }
+                                    label={
+                                      <Typography variant="body2" component="span" sx={{ lineHeight: 1.5, pt: '2px' }}>
+                                        {`${item.name || item.id} — ${getPricingExamUnitPrice(item.examTariff).toLocaleString('fr-FR')} FCFA`}
+                                      </Typography>
+                                    }
+                                  />
+                                ))}
+                              </Stack>
+                            )}
+                          </AccordionDetails>
+                        </Accordion>
                       );
                     })}
                   </Stack>
@@ -2699,59 +2781,130 @@ export default function DoctorMyConsultationsView() {
         </Dialog>
       )}
 
-      {/* Ordonnace Dialog */}
+      {/* Ordonnance — plusieurs médicaments (POST tableau) */}
       {!prescriptionDialog.isAnalysis && (
-        <Dialog open={prescriptionDialog.open} onClose={handleClosePrescriptionDialog} maxWidth="sm" fullWidth>
+        <Dialog open={prescriptionDialog.open} onClose={handleClosePrescriptionDialog} maxWidth="md" fullWidth>
         <DialogTitle>
-          Ajouter une Ordonnace
+          Nouvelle ordonnance
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
-            <>
-                <TextField
-                  fullWidth
-                  label="Nom du médicament"
-                  value={prescriptionForm.label}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, label: e.target.value })}
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Dosage"
-                  value={prescriptionForm.dosage}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, dosage: e.target.value })}
-                />
-                <TextField
-                  fullWidth
-                  label="Durée"
-                  value={prescriptionForm.duration}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, duration: e.target.value })}
-                />
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Quantité"
-                  value={prescriptionForm.quantity}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, quantity: parseInt(e.target.value, 10) || 0 })}
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Instructions"
-                  value={prescriptionForm.instructions}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, instructions: e.target.value })}
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={prescriptionForm.urgent}
-                      onChange={(e) => setPrescriptionForm({ ...prescriptionForm, urgent: e.target.checked })}
-                    />
-                  }
-                  label="Urgent"
-                />
-            </>
+            {prescriptionLines.map((line, index) => (
+              <Box
+                key={line.key}
+                sx={{
+                  p: 2,
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  position: 'relative',
+                }}
+              >
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">
+                    Médicament {index + 1}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    aria-label="Retirer ce médicament"
+                    disabled={prescriptionLines.length <= 1}
+                    onClick={() =>
+                      setPrescriptionLines((prev) =>
+                        prev.length <= 1 ? prev : prev.filter((l) => l.key !== line.key)
+                      )
+                    }
+                  >
+                    <Iconify icon="eva:trash-2-outline" width={20} />
+                  </IconButton>
+                </Stack>
+                <Stack spacing={2}>
+                  <TextField
+                    fullWidth
+                    label="Nom du médicament"
+                    value={line.label}
+                    onChange={(e) =>
+                      setPrescriptionLines((prev) =>
+                        prev.map((l) => (l.key === line.key ? { ...l, label: e.target.value } : l))
+                      )
+                    }
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Posologie"
+                    value={line.dosage}
+                    onChange={(e) =>
+                      setPrescriptionLines((prev) =>
+                        prev.map((l) => (l.key === line.key ? { ...l, dosage: e.target.value } : l))
+                      )
+                    }
+                  />
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Durée"
+                        value={line.duration}
+                        onChange={(e) =>
+                          setPrescriptionLines((prev) =>
+                            prev.map((l) => (l.key === line.key ? { ...l, duration: e.target.value } : l))
+                          )
+                        }
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label="Quantité"
+                        value={line.quantity}
+                        onChange={(e) =>
+                          setPrescriptionLines((prev) =>
+                            prev.map((l) =>
+                              l.key === line.key
+                                ? { ...l, quantity: parseInt(e.target.value, 10) || 0 }
+                                : l
+                            )
+                          )
+                        }
+                      />
+                    </Grid>
+                  </Grid>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={2}
+                    label="Instructions"
+                    value={line.instructions}
+                    onChange={(e) =>
+                      setPrescriptionLines((prev) =>
+                        prev.map((l) => (l.key === line.key ? { ...l, instructions: e.target.value } : l))
+                      )
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={line.urgent}
+                        onChange={(e) =>
+                          setPrescriptionLines((prev) =>
+                            prev.map((l) => (l.key === line.key ? { ...l, urgent: e.target.checked } : l))
+                          )
+                        }
+                      />
+                    }
+                    label="Urgent"
+                  />
+                </Stack>
+              </Box>
+            ))}
+            <Button
+              variant="outlined"
+              startIcon={<Iconify icon="eva:plus-fill" />}
+              onClick={() => setPrescriptionLines((prev) => [...prev, createPrescriptionLineDraft()])}
+            >
+              Ajouter un médicament
+            </Button>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -2760,9 +2913,9 @@ export default function DoctorMyConsultationsView() {
             variant="contained"
             onClick={handleSavePrescription}
             loading={prescriptionDialog.loading}
-            disabled={!prescriptionForm.label.trim()}
+            disabled={!prescriptionLines.some((l) => l.label.trim())}
           >
-            Ajouter
+            Enregistrer l&apos;ordonnance
           </LoadingButton>
         </DialogActions>
       </Dialog>
