@@ -1,5 +1,6 @@
 import { Helmet } from 'react-helmet-async';
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -46,12 +47,19 @@ import { appendBillingInvoiceTag, BILLING_INVOICE_ID_REGEX } from 'src/utils/bil
 import { closeActiveTracking, startMedecinServicePassage } from 'src/utils/time-tracking-client';
 import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-laboratory-analysis';
 import {
+  buildActesMapFromAnalysis,
+  extractPrescribedActeSummaries,
+  filterLaboratoryResultsForActe,
+  printLaboratoryAnalysisResults,
+} from 'src/utils/laboratory-analysis-print-results';
+import {
   getConsultationIdValue,
   flattenLaboratoryAnalysisRow,
   getPatientIdFromConsultation,
   getPrescribingDoctorIdFromConsultation,
 } from 'src/utils/laboratory-analyses-consultation';
 
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
@@ -113,78 +121,6 @@ function createPrescriptionLineDraft() {
   };
 }
 
-const HEMATOLOGY_CONFIG = {
-  globules_blancs: { label: 'Globules blancs', unite: '10³/mm³', normeMin: 4, normeMax: 10 },
-  globules_rouges: { label: 'Globules rouges', unite: '10⁶/mm³', normeMin: 4.5, normeMax: 6 },
-  hemoglobine: { label: 'Hémoglobine', unite: 'g/dl', normeMin: 13, normeMax: 18 },
-  hematocrite: { label: 'Hématocrite', unite: '%', normeMin: 40, normeMax: 52 },
-  vgm: { label: 'VGM', unite: 'μm³', normeMin: 80, normeMax: 95 },
-  tcmh: { label: 'TCMH', unite: 'pg', normeMin: 27, normeMax: 31 },
-  ccmh: { label: 'CCMH', unite: 'g/dl', normeMin: 32, normeMax: 36 },
-  plaquettes: { label: 'Plaquettes', unite: '10³/mm³', normeMin: 150, normeMax: 400 },
-  lymphocytes: { label: 'Lymphocytes', unite: '%', normeMin: 19, normeMax: 48 },
-  monocytes: { label: 'Monocytes', unite: '%', normeMin: 3.4, normeMax: 9 },
-  granulocytes: { label: 'Granulocytes', unite: '%', normeMin: 40, normeMax: 74 },
-};
-
-function normalizeToSlug(value) {
-  if (!value || typeof value !== 'string') return '';
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
-function extractResultMap(results) {
-  const out = {};
-  if (!Array.isArray(results)) return out;
-  results.forEach((entry) => {
-    if (entry?.input) out[String(entry.input)] = entry.resultat ?? entry.value ?? '';
-    if (entry?.parameter) out[normalizeToSlug(String(entry.parameter))] = entry.value ?? entry.resultat ?? '';
-    if (Array.isArray(entry?.resultats)) {
-      entry.resultats.forEach((r) => {
-        if (r?.input) out[String(r.input)] = r.resultat ?? '';
-      });
-    }
-  });
-  return out;
-}
-
-function evaluateRangeStatus(value, min, max) {
-  if (Number.isNaN(value)) return 'normal';
-  if (value < min) return 'bas';
-  if (value > max) return 'eleve';
-  return 'normal';
-}
-
-function getStatusUi(status) {
-  if (status === 'eleve') return { label: '🔴 Élevé', color: 'error' };
-  if (status === 'bas') return { label: '🟠 Bas', color: 'warning' };
-  return { label: '🟢 Normal', color: 'success' };
-}
-
-function transformHematologyResults(results) {
-  const resultMap = extractResultMap(results);
-  return Object.entries(HEMATOLOGY_CONFIG).map(([input, config]) => {
-    const rawValue = resultMap[input];
-    const parsedValue = Number.parseFloat(rawValue);
-    const hasValue = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '';
-    const status = hasValue ? evaluateRangeStatus(parsedValue, config.normeMin, config.normeMax) : 'normal';
-    return {
-      key: input,
-      name: config.label,
-      nameWithUnit: `${config.label} (${config.unite})`,
-      value: hasValue ? rawValue : '—',
-      unit: config.unite,
-      norme: `${config.normeMin}–${config.normeMax}`,
-      status,
-      hasValue,
-    };
-  });
-}
-
 function normalizeAnalysisEntity(payload) {
   if (!payload || typeof payload !== 'object') return null;
   if (payload?.analyseNumber || payload?.analysisType || payload?.sampleType) return payload;
@@ -192,36 +128,6 @@ function normalizeAnalysisEntity(payload) {
     return payload.analyse;
   }
   return payload;
-}
-
-function flattenResults(results) {
-  const out = [];
-  (Array.isArray(results) ? results : []).forEach((entry) => {
-    if (Array.isArray(entry?.resultats)) {
-      entry.resultats.forEach((row) => {
-        out.push({
-          ...row,
-          acteBiologieId: entry?.acteBiologieId || entry?.actes_biologies || row?.acteBiologieId,
-          parameter: row?.parameter || row?.name || row?.input,
-          value: row?.value ?? row?.resultat ?? '',
-        });
-      });
-      return;
-    }
-    out.push({
-      ...entry,
-      parameter: entry?.parameter || entry?.name || entry?.input,
-      value: entry?.value ?? entry?.resultat ?? '',
-    });
-  });
-  return out;
-}
-
-function isHematologyAnalysis(analysis) {
-  const type = String(analysis?.analysisType || '').toUpperCase();
-  if (type === 'HEMATOLOGIE') return true;
-  const analyseEntries = Array.isArray(analysis?.analyse) ? analysis.analyse : [];
-  return analyseEntries.some((entry) => String(entry?.name || '').toUpperCase().includes('HEMATOLOGIE'));
 }
 
 function getAnalysisItemCalculatedPrice(item) {
@@ -253,12 +159,6 @@ function itemsFromActeBiologieItemsApiResponse(itemsRes) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;
   return [];
-}
-
-function hemogramStatusRowClass(status) {
-  if (status === 'eleve') return 'status-high';
-  if (status === 'bas') return 'status-low';
-  return 'status-normal';
 }
 
 function doctorListAnalysisStatusChipLabel(status) {
@@ -309,25 +209,11 @@ function extractAnalysisActesDetails(analysis) {
   });
 }
 
-function isHematologyResults(results) {
-  const knownKeys = new Set(Object.keys(HEMATOLOGY_CONFIG));
-  const values = Array.isArray(results) ? results : [];
-  return values.some((entry) => {
-    if (Array.isArray(entry?.resultats)) {
-      return entry.resultats.some((row) => {
-        const key = normalizeToSlug(String(row?.input || row?.parameter || row?.name || ''));
-        return knownKeys.has(key);
-      });
-    }
-    const key = normalizeToSlug(String(entry?.input || entry?.parameter || entry?.name || ''));
-    return knownKeys.has(key);
-  });
-}
-
 const DEFAULT_ARRET_CONTENT = 'Certificat établi pour servir et valoir ce que de droit.';
 
 export default function DoctorMyConsultationsView() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { contextHolder, showError, showSuccess, showApiResponse } = useNotification();
   const adminInfo = AdminStorage.getInfoAdmin() || {};
   const normalizedRole = String(adminInfo?.role?.name || adminInfo?.role || adminInfo?.service || '')
@@ -336,11 +222,8 @@ export default function DoctorMyConsultationsView() {
     .replace(/\s+/g, '_');
   const isAdminOrDirecteur = normalizedRole === 'ADMIN' || normalizedRole === 'DIRECTEUR' || normalizedRole === 'ADMINISTRATEUR';
 
-  const [consultations, setConsultations] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(''); // Par défaut, afficher toutes les consultations (EN_ATTENTE et EN_COURS)
   const [detailsDialog, setDetailsDialog] = useState({ open: false, consultation: null, loading: false, editing: false });
@@ -356,7 +239,8 @@ export default function DoctorMyConsultationsView() {
     open: false,
     analysisId: null,
     analysis: null,
-    results: [],
+    resultsRaw: [],
+    exams: [],
     loading: false,
   });
   const [prescriptionDialog, setPrescriptionDialog] = useState({ open: false, loading: false, isAnalysis: false });
@@ -463,134 +347,97 @@ export default function DoctorMyConsultationsView() {
     loadCurrentMedecin();
   }, []);
 
-  const loadConsultations = useCallback(async () => {
-    if (!isAdminOrDirecteur && !currentMedecinId) {
-      console.log('⏳ Waiting for medecin ID...');
-      return;
-    }
+  const listQueryEnabled = isAdminOrDirecteur || Boolean(currentMedecinId);
+  const waitingForMedecin = !isAdminOrDirecteur && !currentMedecinId;
 
-    console.log('=== DEBUG: Loading consultations ===');
-    console.log('Current medecinId:', currentMedecinId);
-    console.log('Status filter:', statusFilter);
-    console.log('Page:', page, 'RowsPerPage:', rowsPerPage);
-
-    setLoading(true);
-    try {
+  const consultationsQuery = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.consultations.doctorMyListRoot,
+      {
+        page,
+        rowsPerPage,
+        statusFilter,
+        search,
+        currentMedecinId,
+        isAdminOrDirecteur,
+      },
+    ],
+    enabled: listQueryEnabled,
+    refetchInterval:
+      listQueryEnabled && (!statusFilter || statusFilter === 'EN_ATTENTE' || statusFilter === 'EN_COURS')
+        ? 30000
+        : false,
+    queryFn: async () => {
       const filters = {
         page: page + 1,
         limit: rowsPerPage,
       };
       if (!isAdminOrDirecteur) {
-        filters.medecinId = currentMedecinId; // Filtrer par médecin connecté
+        filters.medecinId = currentMedecinId;
       }
 
-      // Si un statut est sélectionné, l'ajouter au filtre
       if (statusFilter) {
         filters.status = statusFilter;
       }
 
-      console.log('Filters sent to API:', filters);
-
-      // Essayer d'abord avec le filtre medecinId
       let result = await ConsumApi.getConsultationsPaginated(page + 1, rowsPerPage, filters);
-      
-      console.log('API result with medecinId filter:', result);
 
-      // Si aucun résultat avec le filtre medecinId, essayer sans filtre et filtrer côté client
       if (result.success && (!result.data?.data || result.data.data.length === 0)) {
-        console.log('No results with medecinId filter, trying without filter...');
         const filtersWithoutMedecin = { ...filters };
         delete filtersWithoutMedecin.medecinId;
         if (statusFilter) {
           filtersWithoutMedecin.status = statusFilter;
         }
         result = await ConsumApi.getConsultationsPaginated(page + 1, rowsPerPage, filtersWithoutMedecin);
-        console.log('API result without medecinId filter:', result);
       }
 
-      if (result.success) {
-        let consultationsData = result.data?.data || result.data?.consultations || [];
-        
-        // Si result.data est directement un tableau
-        if (Array.isArray(result.data) && !result.data.data) {
-          consultationsData = result.data;
-        }
-        
-        console.log('Raw consultations data:', consultationsData);
-        console.log('Number of consultations before filtering:', consultationsData.length);
-        
-        if (!isAdminOrDirecteur) {
-          // Filtrer aussi par médecin côté client (comparaison en string : uuid vs nombre selon l’API)
-          consultationsData = consultationsData.filter((c) => {
-            const mid = c.medecinId ?? c.medecin_id ?? c.medecin?.id;
-            return String(mid) === String(currentMedecinId);
-          });
-          console.log('After medecin filter:', consultationsData.length, 'consultations');
-        } else {
-          console.log('Admin/Directeur: consultations globales');
-        }
-        
-        // Si un filtre de statut est sélectionné, appliquer le filtre
-        if (statusFilter) {
-          consultationsData = consultationsData.filter(
-            (c) => c.status === statusFilter
-          );
-          console.log(`After status filter (${statusFilter}):`, consultationsData.length, 'consultations');
-        }
-        // Sinon, afficher toutes les consultations (EN_ATTENTE, EN_COURS, TERMINEE, etc.)
-        
-        // Filtrer par recherche si présente
-        if (search) {
-          const searchLower = search.toLowerCase();
-          consultationsData = consultationsData.filter(
-            (c) =>
-              (c.consultationNumber || '').toLowerCase().includes(searchLower) ||
-              (c.patient?.firstName || '').toLowerCase().includes(searchLower) ||
-              (c.patient?.lastName || '').toLowerCase().includes(searchLower) ||
-              (c.patient?.phone || '').toLowerCase().includes(searchLower) ||
-              (c.reason || '').toLowerCase().includes(searchLower)
-          );
-        }
-        
-        console.log('Final consultations:', consultationsData.length);
-        console.log('Consultations:', consultationsData);
-        
-        setConsultations(consultationsData);
-        setTotal(result.data?.pagination?.total || result.data?.total || consultationsData.length);
-      } else {
-        console.error('Failed to load consultations:', result.message || result.errors);
-        // Ne pas appeler showError ici pour éviter les boucles
-        setConsultations([]);
-        setTotal(0);
+      if (!result.success) {
+        return { consultations: [], total: 0 };
       }
-    } catch (error) {
-      console.error('Error loading consultations:', error);
-      console.error('Error stack:', error.stack);
-      // Ne pas appeler showError ici pour éviter les boucles
-      setConsultations([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, rowsPerPage, statusFilter, search, currentMedecinId, isAdminOrDirecteur]);
 
-  useEffect(() => {
-    if (!isAdminOrDirecteur && !currentMedecinId) return undefined;
-    
-    // Charger une seule fois au montage et quand les dépendances changent
-    loadConsultations();
-    
-    // Recharger toutes les 30 secondes pour les consultations en attente ou en cours
-    // Seulement si le statut n'est pas TERMINEE ou ANNULEE
-    if (!statusFilter || statusFilter === 'EN_ATTENTE' || statusFilter === 'EN_COURS') {
-      const interval = setInterval(() => {
-        loadConsultations();
-      }, 30000);
-      return () => clearInterval(interval);
-    }
-    
-    return undefined;
-  }, [loadConsultations, statusFilter, currentMedecinId, isAdminOrDirecteur]);
+      let consultationsData = result.data?.data || result.data?.consultations || [];
+
+      if (Array.isArray(result.data) && !result.data.data) {
+        consultationsData = result.data;
+      }
+
+      if (!isAdminOrDirecteur) {
+        consultationsData = consultationsData.filter((c) => {
+          const mid = c.medecinId ?? c.medecin_id ?? c.medecin?.id;
+          return String(mid) === String(currentMedecinId);
+        });
+      }
+
+      if (statusFilter) {
+        consultationsData = consultationsData.filter((c) => c.status === statusFilter);
+      }
+
+      if (search) {
+        const searchLower = search.toLowerCase();
+        consultationsData = consultationsData.filter(
+          (c) =>
+            (c.consultationNumber || '').toLowerCase().includes(searchLower) ||
+            (c.patient?.firstName || '').toLowerCase().includes(searchLower) ||
+            (c.patient?.lastName || '').toLowerCase().includes(searchLower) ||
+            (c.patient?.phone || '').toLowerCase().includes(searchLower) ||
+            (c.reason || '').toLowerCase().includes(searchLower)
+        );
+      }
+
+      const totalCount =
+        result.data?.pagination?.total ?? result.data?.total ?? consultationsData.length;
+
+      return { consultations: consultationsData, total: totalCount };
+    },
+  });
+
+  const consultations = consultationsQuery.data?.consultations ?? [];
+  const total = consultationsQuery.data?.total ?? 0;
+  const loading =
+    waitingForMedecin ||
+    (listQueryEnabled &&
+      (consultationsQuery.isPending ||
+        (consultationsQuery.isFetching && consultations.length === 0 && !consultationsQuery.data)));
 
   const enrichAnalysesWithItemDetails = useCallback(
     async (analysesList) => {
@@ -876,7 +723,7 @@ export default function DoctorMyConsultationsView() {
           id: getConsultationIdValue(detailsDialog.consultation) || detailsDialog.consultation.id,
         });
         // Recharger la liste
-        loadConsultations();
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.consultations.doctorMyListRoot });
       }
     } catch (error) {
       console.error('Error updating consultation:', error);
@@ -1153,323 +1000,96 @@ export default function DoctorMyConsultationsView() {
   };
 
   const handleViewAnalysisResults = async (analysisId) => {
-    setAnalysisResultsDialog({ open: true, analysisId, analysis: null, results: [], loading: true });
+    setAnalysisResultsDialog({
+      open: true,
+      analysisId,
+      analysis: null,
+      resultsRaw: [],
+      exams: [],
+      loading: true,
+    });
     try {
-      const [result, complete] = await Promise.all([
+      const [result, complete, actesRes] = await Promise.all([
         ConsumApi.getLaboratoryAnalysisResults(analysisId),
         ConsumApi.getLaboratoryAnalysisComplete(analysisId),
+        ConsumApi.getActesBiologies(),
       ]);
-      const analysisData = complete.success ? normalizeAnalysisEntity(complete.data) : null;
-      const normalizedResults = flattenResults(result.data || []);
-      if (result.success) {
-        setAnalysisResultsDialog({
-          open: true,
-          analysisId,
-          analysis: analysisData,
-          results: normalizedResults,
-          loading: false,
-        });
-      } else {
-        setAnalysisResultsDialog({ open: true, analysisId, analysis: analysisData, results: [], loading: false });
+      const rows = result.success ? result.data || [] : [];
+      const analysisPayload = complete.success ? complete.data : null;
+      const analysisForDisplay = analysisPayload ? normalizeAnalysisEntity(analysisPayload) : null;
+      const catalog = Array.isArray(actesRes?.data) ? actesRes.data : [];
+      const actNamesMap = buildActesMapFromAnalysis(analysisPayload, catalog);
+      let exams = extractPrescribedActeSummaries(analysisPayload, actNamesMap).map((s) => ({
+        ...s,
+        hasResults: filterLaboratoryResultsForActe(rows, s.acteBiologieId).length > 0,
+      }));
+      if (exams.length === 0 && rows.length > 0) {
+        exams = [{ acteBiologieId: null, acteBiologieName: 'Résultats', hasResults: true }];
       }
+      setAnalysisResultsDialog({
+        open: true,
+        analysisId,
+        analysis: analysisForDisplay,
+        resultsRaw: rows,
+        exams,
+        loading: false,
+      });
     } catch (error) {
       console.error('Error loading analysis results:', error);
-      setAnalysisResultsDialog({ open: true, analysisId, analysis: null, results: [], loading: false });
+      setAnalysisResultsDialog({
+        open: true,
+        analysisId,
+        analysis: null,
+        resultsRaw: [],
+        exams: [],
+        loading: false,
+      });
     }
   };
 
-  const handlePrintAnalysisResults = async () => {
-    const { analysisId, results } = analysisResultsDialog;
-    if (!analysisId || results.length === 0) {
+  const handlePrintAnalysisExam = async (exam) => {
+    const { analysisId, resultsRaw } = analysisResultsDialog;
+    if (!analysisId || !Array.isArray(resultsRaw) || resultsRaw.length === 0) {
       showError('Erreur', 'Aucun résultat à imprimer');
       return;
     }
+    const po =
+      exam?.acteBiologieId != null && exam?.acteBiologieId !== ''
+        ? { acteBiologieId: exam.acteBiologieId, acteBiologieName: exam.acteBiologieName }
+        : {};
+    await printLaboratoryAnalysisResults({
+      analysisId,
+      results: resultsRaw,
+      printOptions: po,
+      clinicLogoUrl,
+      showError,
+    });
+  };
 
-    // Récupérer les détails complets de l'analyse
-    let analysisDetails = null;
-    try {
-      const analysisResult = await ConsumApi.getLaboratoryAnalysisComplete(analysisId);
-      if (analysisResult.success) {
-        analysisDetails = analysisResult.data?.analyse || analysisResult.data;
-      }
-    } catch (error) {
-      console.error('Error loading analysis details:', error);
-    }
-
-    const { consultation } = detailsDialog;
-    const patient = consultation?.patient;
-    const medecin = consultation?.medecin;
-    const isHema = isHematologyAnalysis(analysisDetails) || isHematologyResults(results);
-    const transformedHema = transformHematologyResults(results);
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      showError('Erreur', 'Impossible d’ouvrir la fenêtre d’impression');
+  const handlePrintAnalysisFullSheet = async () => {
+    const { analysisId, resultsRaw } = analysisResultsDialog;
+    if (!analysisId || !Array.isArray(resultsRaw) || resultsRaw.length === 0) {
+      showError('Erreur', 'Aucun résultat à imprimer');
       return;
     }
-
-    const hemoRows = transformedHema.filter((row) =>
-      ['globules_blancs', 'globules_rouges', 'hemoglobine', 'hematocrite', 'vgm', 'tcmh', 'ccmh', 'plaquettes'].includes(row.key)
-    ).filter((row) => row.hasValue);
-    const leucoRows = transformedHema.filter((row) =>
-      ['lymphocytes', 'monocytes', 'granulocytes'].includes(row.key)
-    ).filter((row) => row.hasValue);
-
-    const printContent = isHema
-      ? `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hématologie - Résultats</title>
-          <style>
-            @media print {
-              @page {
-                size: A4;
-                margin: 1.2cm;
-              }
-            }
-            body {
-              font-family: Arial, sans-serif;
-              font-size: 12px;
-              line-height: 1.35;
-              max-width: 900px;
-              margin: 0 auto;
-              padding: 10px;
-            }
-            .header {
-              text-align: center;
-              border-bottom: 1px solid #000;
-              padding-bottom: 8px;
-              margin-bottom: 10px;
-            }
-            .header img {
-              max-width: 320px;
-              width: 100%;
-              height: auto;
-              margin: 0 auto 6px auto;
-              display: block;
-            }
-            .header h1 {
-              margin: 2px 0;
-              font-size: 18px;
-              letter-spacing: 0.4px;
-            }
-            .header h2 {
-              margin: 2px 0;
-              font-size: 15px;
-            }
-            .meta-grid {
-              display: flex;
-              justify-content: space-between;
-              flex-wrap: wrap;
-              gap: 6px 24px;
-              margin: 8px 0 10px 0;
-            }
-            .meta-item {
-              min-width: 260px;
-            }
-            .label {
-              font-weight: bold;
-            }
-            .section {
-              margin-top: 10px;
-            }
-            .section-title {
-              font-weight: bold;
-              margin: 6px 0;
-              text-transform: uppercase;
-            }
-            .subtitle {
-              font-weight: bold;
-              margin: 8px 0 4px 0;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-            th, td {
-              border: 1px solid #000;
-              padding: 6px;
-              text-align: left;
-              vertical-align: top;
-            }
-            th {
-              background-color: #f0f0f0;
-              font-weight: bold;
-            }
-            .status-normal {
-              color: #1f7a1f;
-              font-weight: bold;
-            }
-            .status-high {
-              color: #c62828;
-              font-weight: bold;
-            }
-            .status-low {
-              color: #ef6c00;
-              font-weight: bold;
-            }
-            .signature {
-              margin-top: 20px;
-              text-align: right;
-              font-weight: bold;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <img src="${clinicLogoUrl}" alt="Logo clinique" />
-            <div>LABORATOIRE D&apos;ANALYSES MEDICALES - TEL 89 63 26 46 / 40 88 44 00</div>
-            <div>Soigner avec amour</div>
-            <h1>HEMATOLOGIE</h1>
-            <h2>RESULTATS D&apos;ANALYSE</h2>
-          </div>
-
-          <div class="meta-grid">
-            ${patient?.lastName ? `<div class="meta-item"><span class="label">NOM:</span> ${patient.lastName}</div>` : ''}
-            ${patient?.firstName ? `<div class="meta-item"><span class="label">PRENOMS:</span> ${patient.firstName}</div>` : ''}
-            ${patient?.gender ? `<div class="meta-item"><span class="label">SEXE:</span> ${patient.gender}</div>` : ''}
-            ${patient?.dateOfBirth ? `<div class="meta-item"><span class="label">AGE:</span> ${Math.max(0, new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear())} ANS</div>` : ''}
-            ${(medecin?.firstName || medecin?.lastName) ? `<div class="meta-item"><span class="label">PRESCRIPTEUR:</span> DR ${medecin?.firstName || ''} ${medecin?.lastName || ''}</div>` : ''}
-            <div class="meta-item"><span class="label">DATE:</span> ${analysisDetails?.samplingDate ? new Date(analysisDetails.samplingDate).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}</div>
-            ${analysisDetails?.analyseNumber ? `<div class="meta-item"><span class="label">NUMERO DE DOSSIER:</span> ${analysisDetails.analyseNumber}</div>` : ''}
-          </div>
-
-          <div class="section">
-            <div class="subtitle">HEMOGRAMME SUR COMPTEUR MINDRAY BC 30 S</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Analyse</th>
-                  <th>Résultat</th>
-                  <th>Norme</th>
-                  <th>Unité</th>
-                  <th>Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${hemoRows.map((row) => {
-                  const statusClass = hemogramStatusRowClass(row.status);
-                  const statusLabel = getStatusUi(row.status).label;
-                  return `<tr>
-                    <td>${row.name}</td>
-                    <td>${row.value}</td>
-                    <td>${row.norme}</td>
-                    <td>${row.unit || ''}</td>
-                    <td class="${statusClass}">${statusLabel}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section">
-            <div class="subtitle">FORMULE LEUCOCYTAIRE</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Analyse</th>
-                  <th>Résultat</th>
-                  <th>Norme</th>
-                  <th>Unité</th>
-                  <th>Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${leucoRows.map((row) => {
-                  const statusClass = hemogramStatusRowClass(row.status);
-                  const statusLabel = getStatusUi(row.status).label;
-                  return `<tr>
-                    <td>${row.name}</td>
-                    <td>${row.value}</td>
-                    <td>${row.norme}</td>
-                    <td>${row.unit || ''}</td>
-                    <td class="${statusClass}">${statusLabel}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="signature">
-            SIGNATURE BIOLOGISTE
-          </div>
-        </body>
-      </html>
-    `
-      : `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Résultats d&apos;Analyse</title>
-          <style>
-            @media print { @page { size: A4; margin: 2cm; } }
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
-            .header h1 { margin: 0; font-size: 24px; }
-            .header img { max-width: 320px; width: 100%; height: auto; margin: 0 auto 8px auto; display: block; }
-            .info-section { margin-bottom: 30px; }
-            .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-            .info-label { font-weight: bold; }
-            .analysis-details { border: 1px solid #000; padding: 20px; margin: 20px 0; }
-            .results-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            .results-table th, .results-table td { border: 1px solid #000; padding: 10px; text-align: left; }
-            .results-table th { background-color: #f0f0f0; font-weight: bold; }
-            .abnormal { color: red; font-weight: bold; }
-            .footer { margin-top: 50px; text-align: right; }
-            .signature { margin-top: 50px; border-top: 1px solid #000; padding-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="header"><img src="${clinicLogoUrl}" alt="Logo clinique" /><h1>RÉSULTATS D&apos;ANALYSE</h1></div>
-          <div class="info-section">
-            <div class="info-row"><span class="info-label">Date de l&apos;analyse:</span><span>${analysisDetails?.samplingDate ? new Date(analysisDetails.samplingDate).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}</span></div>
-            <div class="info-row"><span class="info-label">Numéro d&apos;analyse:</span><span>${analysisDetails?.analyseNumber || 'N/A'}</span></div>
-            <div class="info-row"><span class="info-label">Patient:</span><span>${patient?.firstName || ''} ${patient?.lastName || ''}</span></div>
-            <div class="info-row"><span class="info-label">Date de naissance:</span><span>${patient?.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('fr-FR') : 'N/A'}</span></div>
-            <div class="info-row"><span class="info-label">Médecin prescripteur:</span><span>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''} - ${medecin?.speciality || ''}</span></div>
-          </div>
-          <div class="analysis-details">
-            <h2>Résultats</h2>
-            <table class="results-table">
-              <thead><tr><th>Paramètre</th><th>Valeur</th><th>Unité</th><th>Valeurs de référence</th><th>Statut</th></tr></thead>
-              <tbody>
-                ${results.map((result) => `
-                  <tr>
-                    <td>${result.parameter || 'N/A'}</td>
-                    <td class="${result.abnormal ? 'abnormal' : ''}">${result.value || 'N/A'}</td>
-                    <td>${result.unit || ''}</td>
-                    <td>${result.referenceValueMin && result.referenceValueMax ? `${result.referenceValueMin} - ${result.referenceValueMax} ${result.unit || ''}` : 'N/A'}</td>
-                    <td class="${result.abnormal ? 'abnormal' : ''}">${result.abnormal ? 'Anormal' : 'Normal'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="footer">
-            <div class="signature">
-              <p>Signature et cachet du médecin</p>
-              <br><br>
-              <p>Dr. ${medecin?.firstName || ''} ${medecin?.lastName || ''}</p>
-              <p>${medecin?.speciality || ''}</p>
-              <p>Date: ${new Date().toLocaleDateString('fr-FR')}</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    await printLaboratoryAnalysisResults({
+      analysisId,
+      results: resultsRaw,
+      printOptions: {},
+      clinicLogoUrl,
+      showError,
+    });
   };
 
   const handleCloseAnalysisResults = () => {
-    setAnalysisResultsDialog({ open: false, analysisId: null, analysis: null, results: [], loading: false });
+    setAnalysisResultsDialog({
+      open: false,
+      analysisId: null,
+      analysis: null,
+      resultsRaw: [],
+      exams: [],
+      loading: false,
+    });
   };
 
   const handleOpenCertificatDialog = () => {
@@ -1542,7 +1162,7 @@ export default function DoctorMyConsultationsView() {
         } catch (e) {
           console.error('Time tracking (MEDECIN on start consultation) failed:', e);
         }
-        loadConsultations();
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.consultations.doctorMyListRoot });
         // Rediriger vers la page de consultation
         router.push(`/doctors/create-consultation?id=${consultationId}`);
       } else {
@@ -1585,7 +1205,7 @@ export default function DoctorMyConsultationsView() {
         // Recharger la liste depuis l'API pour afficher la consultation terminée
         // Utiliser un setTimeout pour éviter les conflits avec les autres états
         setTimeout(() => {
-          loadConsultations();
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.consultations.doctorMyListRoot });
         }, 500);
       }
     } catch (error) {
@@ -2997,7 +2617,7 @@ export default function DoctorMyConsultationsView() {
       </Dialog>
 
       {/* Analysis Results Dialog */}
-      <Dialog open={analysisResultsDialog.open} onClose={handleCloseAnalysisResults} maxWidth="md" fullWidth>
+      <Dialog open={analysisResultsDialog.open} onClose={handleCloseAnalysisResults} maxWidth="sm" fullWidth>
         <DialogTitle>Résultats de l&apos;analyse</DialogTitle>
         <DialogContent>
           {(() => {
@@ -3008,7 +2628,7 @@ export default function DoctorMyConsultationsView() {
                 </Typography>
               );
             }
-            if (analysisResultsDialog.results.length === 0) {
+            if (analysisResultsDialog.resultsRaw.length === 0 && analysisResultsDialog.exams.length === 0) {
               return (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
                   Aucun résultat disponible
@@ -3016,80 +2636,45 @@ export default function DoctorMyConsultationsView() {
               );
             }
             return (
-              <Stack spacing={2} sx={{ mt: 1 }}>
-              {isHematologyAnalysis(analysisResultsDialog.analysis) || isHematologyResults(analysisResultsDialog.results) ? (
-                <Card sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                  <Stack spacing={1.5}>
-                    <Typography variant="subtitle2">Hématologie</Typography>
-                    <TableContainer>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Analyse</TableCell>
-                            <TableCell>Résultat</TableCell>
-                            <TableCell>Norme</TableCell>
-                            <TableCell>Statut</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {transformHematologyResults(analysisResultsDialog.results).filter((item) => item.hasValue).map((item) => (
-                            <TableRow key={item.key}>
-                              <TableCell>{item.nameWithUnit}</TableCell>
-                              <TableCell>{item.value}</TableCell>
-                              <TableCell>{item.norme}</TableCell>
-                              <TableCell>
-                                <Typography variant="body2">{getStatusUi(item.status).label}</Typography>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                    {transformHematologyResults(analysisResultsDialog.results).filter((item) => item.hasValue).length === 0 && (
-                      <Typography variant="body2" color="text.secondary">
-                        Aucun résultat renseigné pour l&apos;hématologie.
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Examens prescrits — utilisez le bouton pour imprimer la fiche correspondante.
+                </Typography>
+                {analysisResultsDialog.exams.map((exam) => (
+                  <Card
+                    key={String(exam.acteBiologieId ?? exam.acteBiologieName)}
+                    variant="outlined"
+                    sx={{ p: 1.5 }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <IconButton
+                        color="primary"
+                        size="small"
+                        disabled={!exam.hasResults}
+                        onClick={() => handlePrintAnalysisExam(exam)}
+                        title="Imprimer"
+                        aria-label={`Imprimer ${exam.acteBiologieName}`}
+                      >
+                        <Iconify icon="solar:printer-bold" />
+                      </IconButton>
+                      <Typography variant="body1" sx={{ flex: 1 }}>
+                        {exam.acteBiologieName}
                       </Typography>
-                    )}
-                  </Stack>
-                </Card>
-              ) : (
-                analysisResultsDialog.results.map((result, index) => (
-                  <Card key={result.id || index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                    <Stack spacing={1}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="subtitle2">{result.parameter}</Typography>
-                        {result.abnormal && <Chip label="Anormal" color="error" size="small" />}
-                      </Box>
-                      <Typography variant="body1">
-                        <strong>Valeur:</strong> {result.value} {result.unit}
-                      </Typography>
-                      {result.referenceValueMin && result.referenceValueMax && (
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>Valeurs de référence:</strong> {result.referenceValueMin} - {result.referenceValueMax} {result.unit}
-                        </Typography>
-                      )}
-                      {result.comment && (
-                        <Typography variant="body2">
-                          <strong>Commentaire:</strong> {result.comment}
-                        </Typography>
+                      {!exam.hasResults && (
+                        <Chip size="small" label="Sans résultat" variant="outlined" color="default" />
                       )}
                     </Stack>
                   </Card>
-                ))
-              )}
+                ))}
               </Stack>
             );
           })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseAnalysisResults}>Fermer</Button>
-          {analysisResultsDialog.results.length > 0 && (
-            <Button
-              variant="contained"
-              startIcon={<Iconify icon="solar:printer-bold" />}
-              onClick={handlePrintAnalysisResults}
-            >
-              Imprimer
+          {analysisResultsDialog.resultsRaw.length > 0 && (
+            <Button variant="outlined" startIcon={<Iconify icon="solar:printer-bold" />} onClick={handlePrintAnalysisFullSheet}>
+              Imprimer la fiche complète
             </Button>
           )}
         </DialogActions>

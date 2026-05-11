@@ -64,7 +64,6 @@ export const routesName = {
   patients: '/patients',
   patientDetails: '/patients/:id',
   patientsAccueil: '/patients/accueil',
-  patientsDossiers: '/patients/dossiers',
   patientsHistory: '/patients/history',
   patientsAntecedents: '/patients/antecedents',
   patientsDocuments: '/patients/documents',

@@ -36,7 +36,6 @@ const navConfig = [
     childrenPath: [
       routesName.patients,
       routesName.patientsAccueil, // Accueil patient (enregistrement, paiement, ticket)
-      routesName.patientsDossiers,
       routesName.patientsHistory,
       routesName.patientsAntecedents,
       routesName.patientsDocuments,

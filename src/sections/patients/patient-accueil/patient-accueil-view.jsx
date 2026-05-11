@@ -2,6 +2,7 @@ import { pdf } from '@react-pdf/renderer';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -42,6 +43,7 @@ import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-l
 import { isBillingInvoicePaid, extractBillingInvoiceIdFromObservations } from 'src/utils/billing-utils';
 
 import { routesName } from 'src/constants/routes';
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
@@ -160,6 +162,70 @@ const extractBiologyItemNames = (analysis) => {
   return Array.from(new Set(names));
 };
 
+async function fetchAccueilPatientsList() {
+  const adminInfo = AdminStorage.getInfoAdmin();
+  const role = ((adminInfo?.role ?? adminInfo?.service) ?? '').toString().toUpperCase().trim();
+  let infirmierId = adminInfo?.infirmierId || adminInfo?.infirmier?.id || null;
+  if (role === 'INFIRMIER' && !infirmierId && adminInfo?.id) {
+    try {
+      const infResult = await ConsumApi.getInfirmiers();
+      if (infResult.success && Array.isArray(infResult.data)) {
+        const me = infResult.data.find((n) => n.user?.id === adminInfo.id || n.userId === adminInfo.id);
+        if (me) infirmierId = me.id;
+      }
+    } catch (_) {
+      /* infirmier id non trouvé */
+    }
+  }
+  const filters = role === 'INFIRMIER' && infirmierId ? { infirmierId } : {};
+  const result = await ConsumApi.getPatients(filters);
+  if (!result.success) return [];
+  let patients = Array.isArray(result.data?.patients) ? result.data.patients : result.data || [];
+  if (!Array.isArray(patients)) patients = [];
+  if (role === 'INFIRMIER' && infirmierId && patients.length > 0) {
+    patients = patients.filter(
+      (p) =>
+        p.infirmierId === infirmierId ||
+        p.nurseId === infirmierId ||
+        p.assignedNurseId === infirmierId ||
+        p.infirmier?.id === infirmierId ||
+        p.nurse?.id === infirmierId
+    );
+  }
+  return patients;
+}
+
+async function fetchAccueilConsultationsList() {
+  const result = await ConsumApi.getConsultations({});
+  if (!result.success) return [];
+  let consultationsList = [];
+  if (Array.isArray(result.data)) {
+    consultationsList = result.data;
+  } else if (result.data && Array.isArray(result.data.data)) {
+    consultationsList = result.data.data;
+  } else if (result.data && typeof result.data === 'object') {
+    consultationsList = result.data.consultations || result.data.items || result.data.results || [];
+  }
+  return consultationsList;
+}
+
+async function fetchBillingInvoicesPending() {
+  const res = await ConsumApi.getBillingInvoices({});
+  if (!res.success || !Array.isArray(res.data)) return [];
+  return res.data.filter((inv) => !isBillingInvoicePaid(inv));
+}
+
+async function fetchInsuranceTypesActiveList() {
+  const res = await ConsumApi.getInsuranceTypesActive();
+  let list = [];
+  if (res?.success) {
+    if (Array.isArray(res.data)) list = res.data;
+    else if (Array.isArray(res.data?.data)) list = res.data.data;
+    else if (Array.isArray(res.data?.items)) list = res.data.items;
+  }
+  return Array.isArray(list) ? list : [];
+}
+
 // ----------------------------------------------------------------------
 
 
@@ -175,21 +241,45 @@ export default function PatientAccueilView() {
   const isInfirmier = currentRole === 'INFIRMIER';
   const canViewConsultationDetails = !isSecretary;
 
+  const queryClient = useQueryClient();
+
+  const patientsQuery = useQuery({
+    queryKey: QUERY_KEYS.patients.accueilAll,
+    queryFn: fetchAccueilPatientsList,
+  });
+
+  const consultationsQuery = useQuery({
+    queryKey: QUERY_KEYS.consultations.accueilAll,
+    queryFn: fetchAccueilConsultationsList,
+  });
+
+  const billingQuery = useQuery({
+    queryKey: QUERY_KEYS.billing.invoicesOpen,
+    queryFn: fetchBillingInvoicesPending,
+    enabled: isSecretary,
+  });
+
+  const insuranceTypesQuery = useQuery({
+    queryKey: QUERY_KEYS.insuranceTypes.active,
+    queryFn: fetchInsuranceTypesActiveList,
+  });
+
+  const allPatients = patientsQuery.data ?? [];
+  const consultations = consultationsQuery.data ?? [];
+  const billingInvoices = billingQuery.data ?? [];
+  const insuranceTypes = insuranceTypesQuery.data ?? [];
+
+  const loadingPatients = patientsQuery.isPending;
+  const loadingConsultations = consultationsQuery.isPending;
+  const loadingBilling = billingQuery.isPending;
+  const loadingInsuranceTypes = insuranceTypesQuery.isPending;
+
   const [activeStep] = useState(0);
 
   // Patient search modal
   const [patientSearchModal, setPatientSearchModal] = useState({ open: false });
   const [patientSearch, setPatientSearch] = useState('');
-  const [allPatients, setAllPatients] = useState([]);
   const [filteredPatients, setFilteredPatients] = useState([]);
-  const [loadingPatients, setLoadingPatients] = useState(false);
-
-  // Consultations
-  const [consultations, setConsultations] = useState([]);
-  const [loadingConsultations, setLoadingConsultations] = useState(false);
-
-  const [billingInvoices, setBillingInvoices] = useState([]);
-  const [loadingBilling, setLoadingBilling] = useState(false);
   const [generalReceiptSubmittingId, setGeneralReceiptSubmittingId] = useState(null);
   const [billingPaymentDialog, setBillingPaymentDialog] = useState({ open: false, invoice: null });
   const [billingPaymentSubmitting, setBillingPaymentSubmitting] = useState(false);
@@ -213,8 +303,6 @@ export default function PatientAccueilView() {
 
   // Create patient dialog
   const [createPatientDialog, setCreatePatientDialog] = useState({ open: false, loading: false });
-  const [insuranceTypes, setInsuranceTypes] = useState([]);
-  const [loadingInsuranceTypes, setLoadingInsuranceTypes] = useState(false);
   const [newPatientForm, setNewPatientForm] = useState({
     firstName: '',
     lastName: '',
@@ -244,126 +332,6 @@ export default function PatientAccueilView() {
     notes: '',
   });
 
-  const loadInsuranceTypes = useCallback(async () => {
-    setLoadingInsuranceTypes(true);
-    try {
-      const res = await ConsumApi.getInsuranceTypesActive();
-      let list = [];
-      if (res?.success) {
-        if (Array.isArray(res.data)) list = res.data;
-        else if (Array.isArray(res.data?.data)) list = res.data.data;
-        else if (Array.isArray(res.data?.items)) list = res.data.items;
-      }
-      setInsuranceTypes(Array.isArray(list) ? list : []);
-    } catch (e) {
-      console.error('Error loading insurance types:', e);
-      setInsuranceTypes([]);
-    } finally {
-      setLoadingInsuranceTypes(false);
-    }
-  }, []);
-
-  const loadAllPatients = useCallback(async () => {
-    setLoadingPatients(true);
-    try {
-      const adminInfo = AdminStorage.getInfoAdmin();
-      const role = ((adminInfo?.role ?? adminInfo?.service) ?? '').toString().toUpperCase().trim();
-      let infirmierId = adminInfo?.infirmierId || adminInfo?.infirmier?.id || null;
-      if (role === 'INFIRMIER' && !infirmierId && adminInfo?.id) {
-        try {
-          const infResult = await ConsumApi.getInfirmiers();
-          if (infResult.success && Array.isArray(infResult.data)) {
-            const me = infResult.data.find((n) => n.user?.id === adminInfo.id || n.userId === adminInfo.id);
-            if (me) infirmierId = me.id;
-          }
-        } catch (_) { /* infirmier id non trouvé */ }
-      }
-      const filters = role === 'INFIRMIER' && infirmierId ? { infirmierId } : {};
-      const result = await ConsumApi.getPatients(filters);
-      if (result.success) {
-        let patients = Array.isArray(result.data?.patients) ? result.data.patients : result.data || [];
-        if (!Array.isArray(patients)) patients = [];
-        if (role === 'INFIRMIER' && infirmierId && patients.length > 0) {
-          patients = patients.filter(
-            (p) =>
-              p.infirmierId === infirmierId ||
-              p.nurseId === infirmierId ||
-              p.assignedNurseId === infirmierId ||
-              p.infirmier?.id === infirmierId ||
-              p.nurse?.id === infirmierId
-          );
-        }
-        setAllPatients(patients);
-        setFilteredPatients(patients);
-      } else {
-        console.warn('Failed to load patients:', result.message);
-        setAllPatients([]);
-        setFilteredPatients([]);
-      }
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      setAllPatients([]);
-      setFilteredPatients([]);
-    } finally {
-      setLoadingPatients(false);
-    }
-  }, []);
-
-  const loadAllConsultations = useCallback(async () => {
-    setLoadingConsultations(true);
-    try {
-      // Les infirmiers doivent voir toutes les consultations : pas de filtre nurseId/infirmierId.
-      const result = await ConsumApi.getConsultations({});
-
-      if (result.success) {
-        let consultationsList = [];
-        if (Array.isArray(result.data)) {
-          consultationsList = result.data;
-        } else if (result.data && Array.isArray(result.data.data)) {
-          consultationsList = result.data.data;
-        } else if (result.data && typeof result.data === 'object') {
-          consultationsList = result.data.consultations || result.data.items || result.data.results || [];
-        }
-        setConsultations(consultationsList);
-      } else {
-        console.warn('Failed to load consultations:', result.message);
-        setConsultations([]);
-      }
-    } catch (error) {
-      console.error('Error loading consultations:', error);
-      setConsultations([]);
-    } finally {
-      setLoadingConsultations(false);
-    }
-  }, []);
-
-  const loadBillingInvoices = useCallback(async () => {
-    if (!isSecretary) return;
-    setLoadingBilling(true);
-    try {
-      const res = await ConsumApi.getBillingInvoices({});
-      if (res.success && Array.isArray(res.data)) {
-        setBillingInvoices(res.data.filter((inv) => !isBillingInvoicePaid(inv)));
-      } else {
-        setBillingInvoices([]);
-      }
-    } catch (e) {
-      console.error('Error loading billing invoices:', e);
-      setBillingInvoices([]);
-    } finally {
-      setLoadingBilling(false);
-    }
-  }, [isSecretary]);
-
-  useEffect(() => {
-    loadAllPatients();
-    loadAllConsultations();
-  }, [loadAllPatients, loadAllConsultations]);
-
-  useEffect(() => {
-    if (isSecretary) loadBillingInvoices();
-  }, [isSecretary, loadBillingInvoices]);
-
   // Filtrer les patients selon la recherche
   useEffect(() => {
     if (!patientSearch.trim()) {
@@ -392,6 +360,10 @@ export default function PatientAccueilView() {
   }, [patientSearch, allPatients]);
 
   const handleOpenCreatePatient = () => {
+    if (isInfirmier) {
+      showError('Accès refusé', 'La création de patient est réservée au personnel d’accueil.');
+      return;
+    }
     setNewPatientForm({
       firstName: '',
       lastName: '',
@@ -420,7 +392,6 @@ export default function PatientAccueilView() {
       emergencyContactRelationship: '',
       notes: '',
     });
-    loadInsuranceTypes();
     setCreatePatientDialog({ open: true, loading: false });
   };
 
@@ -476,7 +447,7 @@ export default function PatientAccueilView() {
         showSuccess('Succès', 'Patient créé avec succès');
         setCreatePatientDialog({ open: false, loading: false });
         // Recharger la liste des patients
-        await loadAllPatients();
+        await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.patients.accueilAll });
         // Fermer le modal de création et ouvrir le modal de recherche
         setCreatePatientDialog({ open: false, loading: false });
         setPatientSearchModal({ open: true });
@@ -533,6 +504,10 @@ export default function PatientAccueilView() {
   };
 
   const handleSelectPatient = (patient) => {
+    if (isInfirmier) {
+      showError('Accès refusé', 'La création de consultation est réservée au personnel d’accueil.');
+      return;
+    }
     // Fermer le modal
     handleClosePatientSearch();
     // Rediriger vers la vue de création de consultation
@@ -679,7 +654,7 @@ export default function PatientAccueilView() {
         // Recharger les détails
         await handleOpenDetails({ id: selectedConsultation.id });
         // Recharger la liste des consultations
-        await loadAllConsultations();
+        await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.consultations.accueilAll });
       }
     } catch (error) {
       console.error('Error updating consultation:', error);
@@ -770,7 +745,7 @@ export default function PatientAccueilView() {
         }
 
         await handleOpenDetails({ id: selectedConsultation.id });
-        await loadAllConsultations();
+        await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.consultations.accueilAll });
       }
     } catch (error) {
       console.error('Error transferring to doctor:', error);
@@ -1125,7 +1100,7 @@ export default function PatientAccueilView() {
       }
       showSuccess('Succès', 'Paiement enregistré et facture générée.');
       handleCloseBillingPayment();
-      await loadBillingInvoices();
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.billing.invoicesOpen });
     } catch (e) {
       console.error('Billing payment error:', e);
       if (receiptWindow && !receiptWindow.closed) receiptWindow.close();
@@ -1157,7 +1132,7 @@ export default function PatientAccueilView() {
               <Stack spacing={2}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="h6">Factures à encaisser (analyses &amp; actes)</Typography>
-                  <Button variant="outlined" size="small" startIcon={<Iconify icon="eva:refresh-fill" />} onClick={() => loadBillingInvoices()}>
+                  <Button variant="outlined" size="small" startIcon={<Iconify icon="eva:refresh-fill" />} onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.billing.invoicesOpen })}>
                     Actualiser
                   </Button>
                 </Box>
@@ -1236,13 +1211,15 @@ export default function PatientAccueilView() {
               <Stack spacing={3}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="h6">Recherche et sélection du patient</Typography>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Iconify icon="eva:plus-fill" />}
-                    onClick={handleOpenCreatePatient}
-                  >
-                    Créer un nouveau patient
-                  </Button>
+                  {!isInfirmier && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<Iconify icon="eva:plus-fill" />}
+                      onClick={handleOpenCreatePatient}
+                    >
+                      Créer un nouveau patient
+                    </Button>
+                  )}
                 </Box>
 
                 <Box sx={{ textAlign: 'center', py: 5 }}>
@@ -1868,9 +1845,11 @@ export default function PatientAccueilView() {
                   <Alert
                     severity="info"
                     action={
-                      <Button color="inherit" size="small" onClick={handleOpenCreatePatient}>
-                        Créer un nouveau patient
-                      </Button>
+                      !isInfirmier ? (
+                        <Button color="inherit" size="small" onClick={handleOpenCreatePatient}>
+                          Créer un nouveau patient
+                        </Button>
+                      ) : undefined
                     }
                   >
                     {patientSearch
@@ -1884,9 +1863,11 @@ export default function PatientAccueilView() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClosePatientSearch}>Fermer</Button>
-          <Button variant="outlined" startIcon={<Iconify icon="eva:plus-fill" />} onClick={handleOpenCreatePatient}>
-            Créer un nouveau patient
-          </Button>
+          {!isInfirmier && (
+            <Button variant="outlined" startIcon={<Iconify icon="eva:plus-fill" />} onClick={handleOpenCreatePatient}>
+              Créer un nouveau patient
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

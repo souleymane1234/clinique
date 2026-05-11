@@ -24,6 +24,7 @@ import { useNotification } from 'src/hooks/useNotification';
 
 import { fDate } from 'src/utils/format-time';
 
+import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
@@ -89,12 +90,12 @@ export default function PatientDetailsView() {
         setPatient(processed.data);
       } else {
         showError('Erreur', 'Impossible de charger le patient');
-        router.push('/patients/dossiers');
+        router.push(routesName.patientsAccueil);
       }
     } catch (error) {
       console.error('Error loading patient:', error);
       showError('Erreur', 'Impossible de charger le patient');
-      router.push('/patients/dossiers');
+      router.push(routesName.patientsAccueil);
     } finally {
       setLoading(false);
     }
@@ -187,7 +188,7 @@ export default function PatientDetailsView() {
         <Stack spacing={3}>
           {/* Header avec bouton retour */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton onClick={() => router.push('/patients/dossiers')} sx={{ mr: 1 }}>
+            <IconButton onClick={() => router.push(routesName.patientsAccueil)} sx={{ mr: 1 }}>
               <Iconify icon="eva:arrow-back-fill" />
             </IconButton>
             <Typography variant="h4">Dossier Patient</Typography>

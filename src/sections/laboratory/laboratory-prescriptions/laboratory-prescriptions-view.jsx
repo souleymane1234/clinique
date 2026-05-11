@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -32,6 +33,7 @@ import { useNotification } from 'src/hooks/useNotification';
 
 import { fDateTime } from 'src/utils/format-time';
 
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
@@ -73,44 +75,37 @@ function doctorLabel(doc) {
 export default function LaboratoryPrescriptionsView() {
   const { contextHolder, showError } = useNotification();
 
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [detailsDialog, setDetailsDialog] = useState({ open: false, item: null, loading: false });
 
-  const loadRows = useCallback(async () => {
-    setLoading(true);
-    try {
+  const rowsQuery = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.laboratory.prescriptionsPaginated,
+      { page, rowsPerPage, search, statusFilter },
+    ],
+    queryFn: async () => {
       const filters = {};
       if (statusFilter) filters.status = statusFilter;
       if (search.trim()) filters.search = search.trim();
 
       const res = await ConsumApi.getLaboratoryAnalysesPaginated(page + 1, rowsPerPage, filters);
       if (!res.success) {
-        setRows([]);
-        setTotal(0);
         showError('Erreur', res.message || 'Chargement impossible');
-        return;
+        return { rows: [], total: 0 };
       }
       const data = res.data || [];
-      setRows(data);
-      setTotal(res.pagination?.total ?? data.length);
-    } catch (e) {
-      setRows([]);
-      setTotal(0);
-      showError('Erreur', e?.message || 'Erreur réseau');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, rowsPerPage, search, statusFilter, showError]);
+      return { rows: data, total: res.pagination?.total ?? data.length };
+    },
+  });
 
-  useEffect(() => {
-    loadRows();
-  }, [loadRows]);
+  const rows = rowsQuery.data?.rows ?? [];
+  const total = rowsQuery.data?.total ?? 0;
+  const loading =
+    rowsQuery.isPending ||
+    (rowsQuery.isFetching && rows.length === 0 && !rowsQuery.data);
 
   const handleViewDetails = async (item) => {
     setDetailsDialog({ open: true, item: null, loading: true });

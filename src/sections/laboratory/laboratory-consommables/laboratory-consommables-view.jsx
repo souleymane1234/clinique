@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -37,6 +38,7 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDate } from 'src/utils/format-time';
 import { getCurrentStaffDisplayName } from 'src/utils/lab-user';
 
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
@@ -59,14 +61,50 @@ const emptyForm = () => ({
 
 export default function LaboratoryConsommablesView() {
   const { contextHolder, showError, showApiResponse } = useNotification();
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState(0);
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+
+  const listQuery = useQuery({
+    queryKey: [...QUERY_KEYS.laboratory.consommables, { tab, page, rowsPerPage, search }],
+    queryFn: async () => {
+      if (tab === 0) {
+        const filters = {};
+        if (search.trim()) filters.search = search.trim();
+        const res = await ConsumApi.getLaboratoryConsommablesPaginated(page + 1, rowsPerPage, filters);
+        if (res.success) {
+          return {
+            list: res.data || [],
+            total: res.pagination?.total ?? (res.data || []).length,
+          };
+        }
+        showError('Erreur', res.message || 'Chargement impossible');
+        return { list: [], total: 0 };
+      }
+      if (tab === 1) {
+        const res = await ConsumApi.getLaboratoryConsommablesRupture();
+        if (res.success) {
+          const data = Array.isArray(res.data) ? res.data : [];
+          return { list: data, total: data.length };
+        }
+        return { list: [], total: 0 };
+      }
+      const res = await ConsumApi.getLaboratoryConsommablesPerimes();
+      if (res.success) {
+        const data = Array.isArray(res.data) ? res.data : [];
+        return { list: data, total: data.length };
+      }
+      return { list: [], total: 0 };
+    },
+  });
+
+  const list = listQuery.data?.list ?? [];
+  const total = listQuery.data?.total ?? 0;
+  const loading =
+    listQuery.isPending || (listQuery.isFetching && list.length === 0 && !listQuery.data);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -82,55 +120,6 @@ export default function LaboratoryConsommablesView() {
     analyseId: '',
   });
   const [mouvSaving, setMouvSaving] = useState(false);
-
-  const loadMainList = async () => {
-    setLoading(true);
-    try {
-      if (tab === 0) {
-        const filters = {};
-        if (search.trim()) filters.search = search.trim();
-        const res = await ConsumApi.getLaboratoryConsommablesPaginated(page + 1, rowsPerPage, filters);
-        if (res.success) {
-          setList(res.data || []);
-          setTotal(res.pagination?.total ?? (res.data || []).length);
-        } else {
-          setList([]);
-          setTotal(0);
-          showError('Erreur', res.message || 'Chargement impossible');
-        }
-      } else if (tab === 1) {
-        const res = await ConsumApi.getLaboratoryConsommablesRupture();
-        if (res.success) {
-          const data = Array.isArray(res.data) ? res.data : [];
-          setList(data);
-          setTotal(data.length);
-        } else {
-          setList([]);
-          setTotal(0);
-        }
-      } else {
-        const res = await ConsumApi.getLaboratoryConsommablesPerimes();
-        if (res.success) {
-          const data = Array.isArray(res.data) ? res.data : [];
-          setList(data);
-          setTotal(data.length);
-        } else {
-          setList([]);
-          setTotal(0);
-        }
-      }
-    } catch (e) {
-      showError('Erreur', e?.message || 'Erreur réseau');
-      setList([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMainList();
-  }, [tab, page, rowsPerPage, search]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -177,7 +166,7 @@ export default function LaboratoryConsommablesView() {
       });
       if (ok.success) {
         setEditOpen(false);
-        loadMainList();
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.laboratory.consommables });
       }
     } catch (e) {
       showError('Erreur', e?.message);
@@ -191,7 +180,7 @@ export default function LaboratoryConsommablesView() {
     const result = await ConsumApi.deleteLaboratoryConsommable(id);
     const ok = showApiResponse(result, { successTitle: 'Supprimé', errorTitle: 'Erreur' });
     if (ok.success) {
-      loadMainList();
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.laboratory.consommables });
     }
   };
 
@@ -217,7 +206,7 @@ export default function LaboratoryConsommablesView() {
       const ok = showApiResponse(result, { successTitle: 'Mouvement enregistré', errorTitle: 'Erreur' });
       if (ok.success) {
         setMouvOpen(false);
-        loadMainList();
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.laboratory.consommables });
       }
     } catch (e) {
       showError('Erreur', e?.message);

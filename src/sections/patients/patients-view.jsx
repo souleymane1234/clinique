@@ -8,7 +8,6 @@ import PatientQueueView from './patient-queue/patient-queue-view';
 import PatientAccueilView from './patient-accueil/patient-accueil-view';
 import PatientHistoryView from './patient-history/patient-history-view';
 // Import des vues
-import PatientDossiersView from './patient-dossiers/patient-dossiers-view';
 import PatientDocumentsView from './patient-documents/patient-documents-view';
 import PatientAntecedentsView from './patient-antecedents/patient-antecedents-view';
 import PatientAppointmentsView from './patient-appointments/patient-appointments-view';
@@ -47,9 +46,6 @@ export default function PatientsView() {
     }
     if (pathname.includes('/patients/queue') || pathname.includes('/patients/file-attente')) {
       return <PatientQueueView />;
-    }
-    if (pathname.includes('/patients/dossiers')) {
-      return <PatientDossiersView />;
     }
     
     // Par défaut (pour /patients), afficher la vue d'accueil

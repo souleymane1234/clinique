@@ -1,7 +1,7 @@
 import { pdf } from '@react-pdf/renderer';
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Navigate, useParams, useNavigate } from 'react-router-dom';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -40,6 +40,7 @@ import { isBillingInvoicePaid } from 'src/utils/billing-utils';
 import { transitionService, closeCurrentPassageOnly } from 'src/utils/time-tracking-client';
 import { fetchLaboratoryAnalysesForConsultation } from 'src/utils/consultation-laboratory-analysis';
 
+import { routesName } from 'src/constants/routes';
 import ConsumApi from 'src/services_workers/consum_api';
 import { AdminStorage } from 'src/storages/admins_storage';
 
@@ -128,8 +129,11 @@ export default function PatientConsultationCreateView() {
   const { contextHolder, showSuccess, showError, showApiResponse } = useNotification();
 
   const admin = AdminStorage.getInfoAdmin();
-  const currentRole = ((admin?.role ?? admin?.service) ?? '').toString().toUpperCase().trim();
-  const canViewConsultationDetails = currentRole !== 'SECRETAIRE';
+  const rawRole = admin?.role ?? admin?.service;
+  const roleStr =
+    typeof rawRole === 'object' && rawRole !== null ? (rawRole.name || rawRole.slug || rawRole.label || '') : String(rawRole || '');
+  const currentRole = roleStr.trim().toUpperCase().replace(/\s+/g, '_');
+  const canViewConsultationDetails = currentRole !== 'SECRETAIRE' && currentRole !== 'SECRÉTAIRE';
   const isInfirmier = currentRole === 'INFIRMIER';
 
   const [loading, setLoading] = useState(false);
@@ -171,6 +175,8 @@ export default function PatientConsultationCreateView() {
   const [transferDoctorDialog, setTransferDoctorDialog] = useState({ open: false, medecinId: '' });
 
   useEffect(() => {
+    if (isInfirmier) return;
+
     const loadPatient = async () => {
       if (!patientId) {
         showError('Erreur', 'Aucun patient sélectionné');
@@ -362,7 +368,7 @@ export default function PatientConsultationCreateView() {
     loadMedecins();
     loadServiceTariffs();
     loadConsultations();
-  }, [patientId]);
+  }, [patientId, isInfirmier]);
 
   // Initialiser le tarif de service par défaut
   useEffect(() => {
@@ -987,6 +993,10 @@ export default function PatientConsultationCreateView() {
       setTransferring(false);
     }
   };
+
+  if (isInfirmier) {
+    return <Navigate to={routesName.patientsAccueil} replace />;
+  }
 
   if (loadingPatient) {
     return (

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import {
@@ -33,7 +34,9 @@ import { useNotification } from 'src/hooks/useNotification';
 import { fDate } from 'src/utils/format-time';
 import { getCurrentStaffDisplayName } from 'src/utils/lab-user';
 
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
+import { invalidateLaboratoryAnalysisLists } from 'src/libs/laboratory-query';
 
 import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
@@ -66,12 +69,10 @@ function patientLabel(p) {
 
 export default function LaboratoryResultatsView() {
   const { contextHolder, showError, showApiResponse } = useNotification();
+  const queryClient = useQueryClient();
 
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('TERMINE');
 
@@ -79,33 +80,28 @@ export default function LaboratoryResultatsView() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState(null);
 
-  const loadRows = async () => {
-    setLoading(true);
-    try {
+  const rowsQuery = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.laboratory.resultatsPaginated,
+      { page, rowsPerPage, search, statusFilter },
+    ],
+    queryFn: async () => {
       const filters = {};
       if (statusFilter) filters.status = statusFilter;
       if (search.trim()) filters.search = search.trim();
       const res = await ConsumApi.getLaboratoryAnalysesPaginated(page + 1, rowsPerPage, filters);
-      if (res.success) {
-        setRows(res.data || []);
-        setTotal(res.pagination?.total ?? (res.data || []).length);
-      } else {
-        setRows([]);
-        setTotal(0);
+      if (!res.success) {
         showError('Erreur', res.message || 'Chargement impossible');
+        return { rows: [], total: 0 };
       }
-    } catch (e) {
-      setRows([]);
-      setTotal(0);
-      showError('Erreur', e?.message || 'Erreur réseau');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { rows: res.data || [], total: res.pagination?.total ?? (res.data || []).length };
+    },
+  });
 
-  useEffect(() => {
-    loadRows();
-  }, [page, rowsPerPage, search, statusFilter]);
+  const rows = rowsQuery.data?.rows ?? [];
+  const total = rowsQuery.data?.total ?? 0;
+  const loading =
+    rowsQuery.isPending || (rowsQuery.isFetching && rows.length === 0 && !rowsQuery.data);
 
   const openDetail = async (analysis) => {
     setDetailOpen(true);
@@ -133,7 +129,7 @@ export default function LaboratoryResultatsView() {
     const ok = showApiResponse(result, { successTitle: 'Validé', errorTitle: 'Erreur' });
     if (ok.success) {
       setDetailOpen(false);
-      loadRows();
+      await invalidateLaboratoryAnalysisLists(queryClient);
     }
   };
 

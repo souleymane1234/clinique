@@ -1,5 +1,5 @@
 import { Helmet } from 'react-helmet-async';
-import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LoadingButton } from '@mui/lab';
 import { alpha } from '@mui/material/styles';
@@ -15,6 +15,7 @@ import {
 
 import { useNotification } from 'src/hooks/useNotification';
 
+import { QUERY_KEYS } from 'src/constants/query-keys';
 import ConsumApi from 'src/services_workers/consum_api';
 
 import Iconify from 'src/components/iconify';
@@ -32,30 +33,24 @@ const STAT_CONFIG = [
 
 export default function LaboratoryStatistiquesView() {
   const { contextHolder, showError } = useNotification();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const loadStats = async () => {
-    setLoading(true);
-    try {
+  const statsQuery = useQuery({
+    queryKey: QUERY_KEYS.laboratory.statistics,
+    queryFn: async () => {
       const result = await ConsumApi.getLaboratoryAnalysesStatistics();
-      if (result.success && result.data) {
-        setStats(result.data);
-      } else {
-        setStats(null);
+      if (!result.success || !result.data) {
         showError('Erreur', result.message || 'Impossible de charger les statistiques');
+        return null;
       }
-    } catch (e) {
-      setStats(null);
-      showError('Erreur', e?.message || 'Erreur réseau');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return result.data;
+    },
+  });
 
-  useEffect(() => {
-    loadStats();
-  }, []);
+  const stats = statsQuery.data ?? null;
+  const loading = statsQuery.isPending;
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.laboratory.statistics });
 
   return (
     <>
@@ -74,7 +69,7 @@ export default function LaboratoryStatistiquesView() {
           <Button
             variant="outlined"
             startIcon={<Iconify icon="solar:refresh-bold" />}
-            onClick={loadStats}
+            onClick={refresh}
             disabled={loading}
           >
             Actualiser
@@ -119,7 +114,7 @@ export default function LaboratoryStatistiquesView() {
         {!loading && !stats && (
           <Card sx={{ p: 3 }}>
             <Typography color="text.secondary">Aucune donnée disponible.</Typography>
-            <LoadingButton sx={{ mt: 2 }} variant="contained" onClick={loadStats}>
+            <LoadingButton sx={{ mt: 2 }} variant="contained" onClick={refresh}>
               Réessayer
             </LoadingButton>
           </Card>

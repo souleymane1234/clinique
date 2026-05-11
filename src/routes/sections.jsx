@@ -175,10 +175,10 @@ export default function Router() {
         { path: routesName.adminMultiClinics, element: <AdministrationView /> },
         
         // Gestion des Patients (Module 4.2)
+        { path: '/patients/dossiers', element: <Navigate to={routesName.patientsAccueil} replace /> },
         { path: routesName.patientDetails, element: <PatientDetailsView /> },
         { path: routesName.patients, element: <PatientsView /> },
         { path: routesName.patientsAccueil, element: <PatientsView /> },
-        { path: routesName.patientsDossiers, element: <PatientsView /> },
         { path: routesName.patientsHistory, element: <PatientsView /> },
         { path: routesName.patientsAntecedents, element: <PatientsView /> },
         { path: routesName.patientsDocuments, element: <PatientsView /> },

@@ -258,11 +258,6 @@ const SUB_MENUS = {
       icon: 'solar:user-plus-bold' 
     },
     { 
-      title: 'Dossiers patients', 
-      path: '/patients/dossiers', 
-      icon: 'solar:user-id-bold' 
-    },
-    { 
       title: 'Rendez-vous', 
       path: '/patients/appointments', 
       icon: 'solar:calendar-bold' 

@@ -3,11 +3,12 @@ import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import App from './app';
+import { createAppQueryClient } from './libs/react-query';
 
-const queryClient = new QueryClient();
+const queryClient = createAppQueryClient();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
